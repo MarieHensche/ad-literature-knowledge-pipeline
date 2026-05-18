@@ -1,0 +1,224 @@
+name: early_detection_knowledge
+version: 0.1.0
+layer: knowledge
+scope_file: docs/early_detection_scope.md
+
+description: >
+  Controlled knowledge fields for the early-detection pilot. These fields
+  describe what early AD/MCI/dementia-related condition or signal a paper
+  identifies. They do not describe model architecture, preprocessing, training,
+  feature selection, or other know-how workflow steps.
+
+fields:
+  paper_id:
+    type: string
+    required: true
+
+  title:
+    type: string
+    required: true
+
+  year:
+    type: integer
+    required: false
+
+  doi:
+    type: string
+    required: false
+
+  early_detection_question:
+    type: string
+    required: false
+    description: Free-text statement of the early detection problem.
+
+  primary_clinical_target:
+    type: categorical
+    required: false
+    values:
+      - ad
+      - mci
+      - dementia
+      - cognitive_impairment
+      - prodromal_ad
+      - preclinical_ad
+      - mixed_or_unclear
+      - unclear
+
+  early_detection_subtype:
+    type: categorical
+    required: false
+    values:
+      - early_ad_detection
+      - mci_detection
+      - mci_ad_detection
+      - dementia_screening
+      - prodromal_detection
+      - preclinical_detection
+      - conversion_or_deterioration_detection
+      - mixed_or_unclear
+
+  population_scope:
+    type: categorical
+    required: false
+    values:
+      - ad_vs_control
+      - mci_vs_control
+      - ad_vs_mci
+      - ad_vs_mci_vs_control
+      - dementia_vs_control
+      - cognitive_impairment_vs_control
+      - mci_conversion
+      - multi_stage_early_disease
+      - mixed_clinical
+      - unclear
+
+  population_detail:
+    type: string
+    required: false
+
+  baseline_phase:
+    type: categorical
+    required: false
+    values:
+      - healthy_or_control
+      - subjective_complaint
+      - mci
+      - early_ad
+      - mixed_early
+      - not_phase_specific
+      - not_reported
+      - unclear
+
+  comparison_group_category:
+    type: categorical
+    required: false
+    values:
+      - binary
+      - multiclass
+      - ordered_stage
+      - conversion_prediction
+      - screening_score
+      - unclear
+
+  comparison_group_detail:
+    type: string
+    required: false
+
+  class_count:
+    type: string
+    required: false
+
+  representation_type:
+    type: categorical
+    required: false
+    values:
+      - categorical
+      - continuum
+      - both
+      - unclear
+
+  evidence_modality_family:
+    type: categorical
+    required: false
+    values:
+      - neuroimaging
+      - speech_language
+      - cognitive_assessment
+      - clinical_tabular
+      - fluid_biomarker
+      - genetics_or_omics
+      - sensor_behavior
+      - eye_tracking
+      - retinal_imaging
+      - gait_motor
+      - drawing_handwriting
+      - eeg_or_signal
+      - multimodal
+      - unclear
+
+  evidence_modality_detail:
+    type: string
+    required: false
+
+  signal_category:
+    type: categorical
+    required: false
+    values:
+      - brain_structure
+      - brain_function
+      - brain_connectivity
+      - pathology_biomarker
+      - cognitive_profile
+      - speech_language_pattern
+      - clinical_demographic_profile
+      - motor_behavior
+      - digital_behavior
+      - visuospatial_drawing_pattern
+      - retinal_structure
+      - genetic_molecular_profile
+      - multimodal_biomarker_profile
+      - unclear
+
+  signal_detail:
+    type: string
+    required: false
+
+  dataset_source_type:
+    type: categorical
+    required: false
+    values:
+      - public_named_dataset
+      - private_or_local_clinical_dataset
+      - challenge_dataset
+      - simulated_or_synthetic
+      - literature_or_secondary_data
+      - not_reported
+      - unclear
+
+  dataset_names:
+    type: string
+    required: false
+
+  main_knowledge_claim:
+    type: string
+    required: false
+
+  evidence_text:
+    type: string
+    required: false
+
+  extraction_basis:
+    type: categorical
+    required: false
+    values:
+      - title_only
+      - abstract
+      - abstract_and_metadata
+      - full_text
+      - unclear
+
+  knowledge_confidence:
+    type: categorical
+    required: false
+    values:
+      - high
+      - medium
+      - low
+      - very_low
+      - conflict
+
+  review_status:
+    type: categorical
+    required: true
+    values:
+      - todo
+      - abstract_reviewed
+      - full_text_needed
+      - pdf_requested
+      - full_text_reviewed
+      - needs_decision
+      - excluded_from_early_detection_pilot
+
+  notes:
+    type: string
+    required: false
