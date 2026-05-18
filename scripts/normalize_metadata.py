@@ -11,13 +11,24 @@ from pathlib import Path
 
 REQUIRED_COLUMNS = ["paper_id", "title", "year", "doi", "abstract"]
 
+OPTIONAL_COLUMNS = [
+    "authors",
+    "venue",
+    "url",
+    "source",
+    "full_text_path",
+    "notes",
+]
+
 OUTPUT_COLUMNS = [
     "paper_id",
     "title",
     "year",
     "doi",
     "abstract",
+    *OPTIONAL_COLUMNS,
     "abstract_available",
+    "full_text_available",
     "metadata_notes",
 ]
 
@@ -40,6 +51,13 @@ def normalize_year(value: str) -> str:
     return match.group(0) if match else ""
 
 
+def normalize_optional_fields(row: dict[str, str]) -> dict[str, str]:
+    return {
+        column: clean_whitespace(row.get(column, ""))
+        for column in OPTIONAL_COLUMNS
+    }
+
+
 def make_paper_id(title: str, year: str, row_number: int) -> str:
     words = re.findall(r"[A-Za-z0-9]+", title.lower())
     stem = "_".join(words[:6]) if words else f"paper_{row_number:04d}"
@@ -60,6 +78,7 @@ def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
     year = normalize_year(row.get("year", ""))
     doi = normalize_doi(row.get("doi", ""))
     abstract = clean_whitespace(row.get("abstract", ""))
+    optional_fields = normalize_optional_fields(row)
     paper_id = clean_whitespace(row.get("paper_id", "")) or make_paper_id(title, year, row_number)
 
     notes = []
@@ -69,6 +88,8 @@ def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
         notes.append("missing_year")
     if not abstract:
         notes.append("missing_abstract")
+    if not optional_fields.get("full_text_path"):
+        notes.append("missing_full_text_path")
 
     return {
         "paper_id": paper_id,
@@ -76,7 +97,9 @@ def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
         "year": year,
         "doi": doi,
         "abstract": abstract,
+        **optional_fields,
         "abstract_available": "yes" if abstract else "no",
+        "full_text_available": "yes" if optional_fields.get("full_text_path") else "no",
         "metadata_notes": "; ".join(notes),
     }
 
