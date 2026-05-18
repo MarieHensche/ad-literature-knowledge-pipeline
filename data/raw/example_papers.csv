@@ -1,0 +1,4 @@
+paper_id,title,year,doi,abstract
+example_001,Intelligent Diagnosis of Alzheimer's Disease Based on Machine Learning,2024,10.1145/3644116.3644192,"This study is based on the Alzheimer's Disease Neuroimaging Initiative dataset and explores early detection and disease progression in Alzheimer's disease using clinical, biomarker, and brain-structure variables."
+example_002,Automatic Speech Classifier for Mild Cognitive Impairment and Early Dementia,2021,,"This paper studies speech-based classification for mild cognitive impairment and early dementia using linguistic and acoustic signals."
+example_003,Drug Repurposing for Alzheimer's Disease Treatment,2023,,"This paper identifies candidate drugs for Alzheimer's disease treatment using computational screening."
