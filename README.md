@@ -81,14 +81,12 @@ python scripts/run_pipeline.py prepare \
   --collection example
 ```
 
-This creates:
+This creates the extraction file for review:
 ```text
-data/processed/example_papers_normalized.csv
-data/processed/example_scope_screened.csv
-data/processed/ex
+data/processed/example_extraction_template.csv
 ```
 
-Fill/review the extraction table, then save the filled file as:
+Fill/review that file, then save the completed version as:
 ```text
 data/processed/example_extraction_filled.csv
 ```
@@ -98,13 +96,12 @@ Run finalize:
 python scripts/run_pipeline.py finalize --collection example
 ```
 
-This creates: 
+This creates the final Mantis upload file:
 ```text
-data/processed/example_extraction_audit.csv
 data/processed/example_mantis_ready.csv
 ```
 
-Generated example outputs are ignored by git.
+Generated intermediate files and example outputs are ignored by git.
 
 ## Current status
 
