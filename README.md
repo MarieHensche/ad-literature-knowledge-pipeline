@@ -51,7 +51,6 @@ For now, the pipeline starts from a canonical CSV. Later, Zotero exports, Semant
 
 ## Conceptual Flow
 
-```text
 canonical paper CSV
 → metadata normalization
 → scope screening
@@ -59,12 +58,11 @@ canonical paper CSV
 → manual/assisted knowledge extraction
 → extraction audit
 → Mantis-ready CSV
-```
+
 
 ## Quick Start
 
 Create and activate a virtual environment:
-
 ```text
 python3 -m venv .venv
 source .venv/bin/activate
@@ -72,12 +70,11 @@ python -m pip install -r requirements.txt
 ```
 
 Validate the schema: 
-
 ```text
 python scripts/validate_schema.py
 ```
-Run the prepare stage:
 
+Run the prepare stage:
 ```text
 python scripts/run_pipeline.py prepare \
   --input data/raw/example_papers.csv \
@@ -127,4 +124,3 @@ Current capabilities:
 ## Notes
 
 The current implementation is intentionally small and testable. The next major step is to test the pipeline on a small real set of early-detection papers, then improve the schema and extraction fields based on what breaks or feels scientifically weak.
-```
