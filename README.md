@@ -59,6 +59,7 @@ canonical paper CSV
 → manual/assisted knowledge extraction
 → extraction audit
 → Mantis-ready CSV
+```
 
 ## Quick Start
 
@@ -68,37 +69,43 @@ Create and activate a virtual environment:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+```
 
 Validate the schema: 
 
 ```text
 python scripts/validate_schema.py
-
+```
 Run the prepare stage:
 
 ```text
 python scripts/run_pipeline.py prepare \
   --input data/raw/example_papers.csv \
   --collection example
+```
 
 This creates:
 ```text
 data/processed/example_papers_normalized.csv
 data/processed/example_scope_screened.csv
 data/processed/ex
+```
 
 Fill/review the extraction table, then save the filled file as:
 ```text
 data/processed/example_extraction_filled.csv
+```
 
 Run finalize:
 ```text
 python scripts/run_pipeline.py finalize --collection example
+```
 
 This creates: 
 ```text
 data/processed/example_extraction_audit.csv
 data/processed/example_mantis_ready.csv
+```
 
 Generated example outputs are ignored by git.
 
