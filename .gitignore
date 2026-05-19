@@ -42,6 +42,7 @@ inputs/full_text/
 # Generated outputs
 outputs/
 reports/generated/
+data/processed/example_*.csv
 
 # Logs and temp
 *.log
