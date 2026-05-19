@@ -51,13 +51,13 @@ For now, the pipeline starts from a canonical CSV. Later, Zotero exports, Semant
 
 ## Conceptual Flow
 
-canonical paper CSV
-→ metadata normalization
-→ scope screening
-→ extraction template
-→ manual/assisted knowledge extraction
-→ extraction audit
-→ Mantis-ready CSV
+canonical paper CSV  
+→ metadata normalization  
+→ scope screening  
+→ extraction template  
+→ manual/assisted knowledge extraction  
+→ extraction audit  
+→ Mantis-ready CSV  
 
 
 ## Quick Start
