@@ -21,31 +21,103 @@ The goal is to turn a collection of research papers into structured, Mantis-proc
 
 Input:
 
-- Zotero collection export
-- paper metadata
-- abstracts
-- optional full text / PDF text
+- canonical paper metadata CSV
 - topic scope definition
 - knowledge schema
+- optional full text / PDF text path
 
 Output:
 
-- cleaned paper table
-- structured knowledge tags
-- main knowledge claim per paper
-- evidence text
-- review status and confidence
+- normalized paper table
+- scope-screened paper table
+- extraction template for manual/assisted knowledge review
+- audited extraction table
 - Mantis-ready CSV
-- schema audit and summary reports
+
+For now, the pipeline starts from a canonical CSV. Later, Zotero exports, Semantic Scholar/OpenAlex APIs, or digital-library searches can be added as importer steps before this CSV input.
+
+## Pipeline Steps
+
+1. Define topic scope
+2. Define knowledge schema
+3. Validate schema
+4. Ingest canonical paper CSV
+5. Normalize metadata
+6. Screen papers against the topic scope
+7. Create extraction table
+8. Fill/review knowledge extraction
+9. Audit extraction quality
+10. Export Mantis-ready output
 
 ## Conceptual Flow
 
 ```text
-Zotero collection
+canonical paper CSV
 → metadata normalization
-→ scope filtering
-→ full-text availability check
-→ knowledge extraction
-→ schema validation
-→ Mantis-ready table
-→ summary / audit outputs
+→ scope screening
+→ extraction template
+→ manual/assisted knowledge extraction
+→ extraction audit
+→ Mantis-ready CSV
+
+## Quick Start
+
+Create and activate a virtual environment:
+
+```text
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+
+Validate the schema: 
+
+```text
+python scripts/validate_schema.py
+
+Run the prepare stage:
+
+```text
+python scripts/run_pipeline.py prepare \
+  --input data/raw/example_papers.csv \
+  --collection example
+
+This creates:
+```text
+data/processed/example_papers_normalized.csv
+data/processed/example_scope_screened.csv
+data/processed/ex
+
+Fill/review the extraction table, then save the filled file as:
+```text
+data/processed/example_extraction_filled.csv
+
+Run finalize:
+```text
+python scripts/run_pipeline.py finalize --collection example
+
+This creates: 
+```text
+data/processed/example_extraction_audit.csv
+data/processed/example_mantis_ready.csv
+
+Generated example outputs are ignored by git.
+
+## Current status
+
+The pipeline skeleton is working end-to-end on the example collection.
+
+Current capabilities:
+
+- schema validation
+- metadata normalization
+- scope screening
+- extraction-template creation
+- manual/assisted knowledge extraction workflow
+- extraction audit
+- Mantis-ready export
+- managed prepare/finalize pipeline runner
+
+## Notes
+
+The current implementation is intentionally small and testable. The next major step is to test the pipeline on a small real set of early-detection papers, then improve the schema and extraction fields based on what breaks or feels scientifically weak.
+```
