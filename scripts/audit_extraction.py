@@ -1,44 +1,23 @@
 #!/usr/bin/env python3
-"""Audit a filled knowledge extraction table against the schema."""
+"""Audit filled knowledge extraction against tagging config and fixed rules."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import json
 from collections import Counter
 from pathlib import Path
 
-import yaml
 
+def load_json(path: Path) -> dict[str, object]:
+    with path.open(encoding="utf-8") as handle:
+        data = json.load(handle)
 
-AUDIT_COLUMNS = [
-    "paper_id",
-    "field",
-    "value",
-    "issue",
-]
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected JSON object: {path}")
 
-
-SUMMARY_FIELDS = [
-    "review_status",
-    "knowledge_confidence",
-    "evidence_modality_family",
-    "primary_clinical_target",
-    "early_detection_subtype",
-    "population_scope",
-    "representation_type",
-    "dataset_source_type",
-]
-
-
-def load_schema(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as handle:
-        schema = yaml.safe_load(handle)
-
-    if not isinstance(schema, dict) or "fields" not in schema:
-        raise ValueError("Schema must contain a top-level 'fields' mapping.")
-
-    return schema
+    return data
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
@@ -46,91 +25,160 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def audit_rows(rows: list[dict[str, str]], schema: dict) -> list[dict[str, str]]:
+def categories_from_config(config: dict[str, object]) -> list[dict[str, object]]:
+    categories = config.get("categories")
+    if not isinstance(categories, list):
+        raise ValueError("Normalized tagging config must contain categories list.")
+    return categories
+
+
+def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]:
+    allowed = {}
+    for category in categories_from_config(config):
+        category_id = category["category_id"]
+        allowed[category_id] = {
+            value["value"] for value in category.get("allowed_values", [])
+        }
+    return allowed
+
+
+def rules_by_category(rules: dict[str, object]) -> dict[str, dict[str, object]]:
+    rule_list = rules.get("rules")
+    if not isinstance(rule_list, list):
+        raise ValueError("Tagging rules must contain rules list.")
+    return {rule["category_id"]: rule for rule in rule_list}
+
+
+def split_values(value: str) -> list[str]:
+    return [part.strip() for part in (value or "").split(";") if part.strip()]
+
+
+def audit_row(
+    row: dict[str, str],
+    allowed: dict[str, set[str]],
+    rules: dict[str, dict[str, object]],
+) -> list[dict[str, str]]:
     issues = []
-    fields = schema["fields"]
+    paper_id = row.get("paper_id", "")
 
-    for row in rows:
-        paper_id = row.get("paper_id", "")
+    for category_id, allowed_values in allowed.items():
+        values = split_values(row.get(category_id, ""))
+        rule = rules[category_id]
 
-        for field_name, field_spec in fields.items():
-            value = (row.get(field_name) or "").strip()
+        if rule.get("required") and not values:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": category_id,
+                    "value": "",
+                    "issue": "required_missing",
+                }
+            )
 
-            if field_spec.get("required") and not value:
-                issues.append(
-                    {
-                        "paper_id": paper_id,
-                        "field": field_name,
-                        "value": value,
-                        "issue": "missing_required_value",
-                    }
-                )
+        if not values:
+            continue
 
-            if field_spec.get("type") == "categorical" and value:
-                allowed_values = set(field_spec.get("values", []))
-                if value not in allowed_values:
-                    issues.append(
-                        {
-                            "paper_id": paper_id,
-                            "field": field_name,
-                            "value": value,
-                            "issue": "invalid_categorical_value",
-                        }
-                    )
+        invalid_values = [value for value in values if value not in allowed_values]
+        for value in invalid_values:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": category_id,
+                    "value": value,
+                    "issue": "invalid_value",
+                }
+            )
+
+        if rule.get("selection") == "single" and len(values) != 1:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": category_id,
+                    "value": "; ".join(values),
+                    "issue": "single_selection_has_multiple_values",
+                }
+            )
 
     return issues
 
 
-def write_audit(path: Path, issues: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def summarize(rows: list[dict[str, str]], config: dict[str, object]) -> None:
+    print(f"Rows audited: {len(rows)}")
 
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS)
+    for category in categories_from_config(config):
+        category_id = category["category_id"]
+        counter: Counter[str] = Counter()
+
+        for row in rows:
+            for value in split_values(row.get(category_id, "")):
+                counter[value] += 1
+
+        if counter:
+            print()
+            print(category_id)
+            for value, count in counter.most_common():
+                print(f"  {value}: {count}")
+
+
+def write_issues(output_path: Path, issues: list[dict[str, str]]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["paper_id", "field", "value", "issue"],
+        )
         writer.writeheader()
         writer.writerows(issues)
 
 
-def print_summary(rows: list[dict[str, str]]) -> None:
-    print(f"Rows audited: {len(rows)}")
-
-    for field in SUMMARY_FIELDS:
-        counts = Counter((row.get(field) or "").strip() or "<blank>" for row in rows)
-        print()
-        print(field)
-        for value, count in counts.most_common():
-            print(f"  {value}: {count}")
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Audit a filled extraction table.")
+    parser = argparse.ArgumentParser(description="Audit filled extraction table.")
     parser.add_argument(
         "--input",
         default="data/processed/example_extraction_filled.csv",
         help="Filled extraction CSV.",
     )
     parser.add_argument(
-        "--schema",
-        default="schemas/early_detection_knowledge_schema.yaml",
-        help="Knowledge schema YAML.",
+        "--config",
+        default="data/processed/example_tagging_config_normalized.json",
+        help="Normalized tagging config JSON.",
+    )
+    parser.add_argument(
+        "--rules",
+        default="data/processed/example_tagging_rules.json",
+        help="Fixed tagging rules JSON.",
     )
     parser.add_argument(
         "--output",
         default="data/processed/example_extraction_audit.csv",
-        help="Audit output CSV.",
+        help="Audit issue output CSV.",
     )
     args = parser.parse_args()
 
-    rows = read_rows(Path(args.input))
-    schema = load_schema(Path(args.schema))
-    issues = audit_rows(rows, schema)
-    write_audit(Path(args.output), issues)
+    input_path = Path(args.input)
+    config_path = Path(args.config)
+    rules_path = Path(args.rules)
+    output_path = Path(args.output)
 
-    print_summary(rows)
+    rows = read_rows(input_path)
+    config = load_json(config_path)
+    rules = load_json(rules_path)
+
+    allowed = allowed_values_by_category(config)
+    rule_map = rules_by_category(rules)
+
+    issues = []
+    for row in rows:
+        issues.extend(audit_row(row, allowed, rule_map))
+
+    summarize(rows, config)
     print()
     print(f"Issues found: {len(issues)}")
-    print(f"Wrote {args.output}")
+
+    write_issues(output_path, issues)
+    print(f"Wrote {output_path}")
 
 
 if __name__ == "__main__":
     main()
-    
