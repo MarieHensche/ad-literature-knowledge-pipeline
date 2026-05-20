@@ -114,7 +114,6 @@ For each category, decide:
 - selection: "single" if exactly one value should usually be chosen, or "multi" if more than one value may be valid.
 - required: true if the category should be filled for every included paper, otherwise false.
 - fallback_value: one allowed value from that category to use when the paper is unclear or not enough information is available.
-- reason: short explanation for the rule.
 
 Rules:
 - Return exactly one rule per category.
@@ -122,6 +121,7 @@ Rules:
 - fallback_value must be one of the allowed values for that exact category.
 - Never use "unclear" as fallback_value unless "unclear" is explicitly listed as an allowed value for that category.
 - If "unclear" is allowed, prefer it as the fallback_value.
+- If "mixed_or_unclear" is allowed and "unclear" is not allowed, use "mixed_or_unclear" as the fallback_value.
 - If "not_reported" is allowed, use it when missing information is the likely issue.
 - For knowledge_confidence, use "very_low" as the fallback_value.
 - For review_status, use "needs_decision" as the fallback_value unless a better allowed value clearly applies.
