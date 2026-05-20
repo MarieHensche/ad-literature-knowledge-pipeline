@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Run the knowledge pipeline in managed stages."""
+"""Run the literature knowledge pipeline."""
 
 from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from pathlib import Path
-
-
-PYTHON = "python"
 
 
 def run_command(command: list[str]) -> None:
@@ -18,123 +16,135 @@ def run_command(command: list[str]) -> None:
 
 
 def processed_path(collection: str, suffix: str) -> str:
-    return str(Path("data/processed") / f"{collection}_{suffix}.csv")
+    return str(Path("data/processed") / f"{collection}_{suffix}")
 
 
-def run_prepare(input_path: str, collection: str) -> None:
-    normalized = processed_path(collection, "papers_normalized")
-    screened = processed_path(collection, "scope_screened")
-    template = processed_path(collection, "extraction_template")
+def run_full_pipeline(args: argparse.Namespace) -> None:
+    normalized_papers = processed_path(args.collection, "papers_normalized.csv")
+    scope_screened = processed_path(args.collection, "scope_screened.csv")
+    normalized_config = processed_path(args.collection, "tagging_config_normalized.json")
+    tagging_rules = processed_path(args.collection, "tagging_rules.json")
+    extraction_filled = processed_path(args.collection, "extraction_filled.csv")
+    extraction_audit = processed_path(args.collection, "extraction_audit.csv")
+    mantis_ready = processed_path(args.collection, "mantis_ready.csv")
 
     run_command(
         [
-            PYTHON,
+            sys.executable,
             "scripts/normalize_metadata.py",
             "--input",
-            input_path,
+            args.papers,
             "--output",
-            normalized,
+            normalized_papers,
         ]
     )
 
     run_command(
         [
-            PYTHON,
+            sys.executable,
             "scripts/screen_scope.py",
             "--input",
-            normalized,
+            normalized_papers,
             "--output",
-            screened,
+            scope_screened,
         ]
     )
 
     run_command(
         [
-            PYTHON,
-            "scripts/create_extraction_template.py",
-            "--screened",
-            screened,
+            sys.executable,
+            "scripts/normalize_tagging_config.py",
+            "--config",
+            args.tagging_config,
             "--output",
-            template,
+            normalized_config,
         ]
     )
 
-    print()
-    print("Prepare complete.")
-    print(f"Extraction template: {template}")
-    print("Next: fill/review the extraction template before running finalize.")
-
-
-def run_finalize(collection: str) -> None:
-    filled = processed_path(collection, "extraction_filled")
-    audit = processed_path(collection, "extraction_audit")
-    mantis_ready = processed_path(collection, "mantis_ready")
-
-    if not Path(filled).exists():
-        raise SystemExit(
-            f"Missing filled extraction file: {filled}\n"
-            "Create this file before running finalize."
-        )
+    run_command(
+        [
+            sys.executable,
+            "scripts/generate_tagging_rules.py",
+            "--config",
+            normalized_config,
+            "--output",
+            tagging_rules,
+        ]
+    )
 
     run_command(
         [
-            PYTHON,
+            sys.executable,
+            "scripts/tag_papers_with_llm.py",
+            "--papers",
+            scope_screened,
+            "--config",
+            normalized_config,
+            "--rules",
+            tagging_rules,
+            "--output",
+            extraction_filled,
+        ]
+    )
+
+    run_command(
+        [
+            sys.executable,
             "scripts/audit_extraction.py",
             "--input",
-            filled,
+            extraction_filled,
+            "--config",
+            normalized_config,
+            "--rules",
+            tagging_rules,
             "--output",
-            audit,
+            extraction_audit,
         ]
     )
 
     run_command(
         [
-            PYTHON,
+            sys.executable,
             "scripts/export_mantis_ready.py",
             "--input",
-            filled,
+            extraction_filled,
             "--output",
             mantis_ready,
         ]
     )
 
     print()
-    print("Finalize complete.")
-    print(f"Audit: {audit}")
+    print("Pipeline complete.")
     print(f"Mantis-ready CSV: {mantis_ready}")
+    print(f"Audit file: {extraction_audit}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the knowledge pipeline.")
+    parser = argparse.ArgumentParser(description="Run the literature knowledge pipeline.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    prepare = subparsers.add_parser("prepare", help="Normalize, screen, and create extraction template.")
-    prepare.add_argument(
-        "--input",
+    run_parser = subparsers.add_parser("run", help="Run the full LLM tagging pipeline.")
+    run_parser.add_argument(
+        "--papers",
         required=True,
-        help="Raw input CSV.",
+        help="Input paper metadata CSV.",
     )
-    prepare.add_argument(
+    run_parser.add_argument(
+        "--tagging-config",
+        required=True,
+        help="Input YAML file with research topic and tag categories.",
+    )
+    run_parser.add_argument(
         "--collection",
         required=True,
-        help="Collection name used for output file prefixes.",
-    )
-
-    finalize = subparsers.add_parser("finalize", help="Audit filled extraction and export Mantis-ready CSV.")
-    finalize.add_argument(
-        "--collection",
-        required=True,
-        help="Collection name used for output file prefixes.",
+        help="Collection name used to prefix generated outputs.",
     )
 
     args = parser.parse_args()
 
-    if args.command == "prepare":
-        run_prepare(input_path=args.input, collection=args.collection)
-    elif args.command == "finalize":
-        run_finalize(collection=args.collection)
+    if args.command == "run":
+        run_full_pipeline(args)
 
 
 if __name__ == "__main__":
     main()
-    
