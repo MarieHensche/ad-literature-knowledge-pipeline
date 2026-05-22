@@ -1,0 +1,25 @@
+TY  - CONF
+TI  - Machine Learning for Early Detection of Alzheimer's Disease
+AU  - Example Author
+PY  - 2024
+DO  - 10.0000/ris-example1
+T2  - Example Conference
+UR  - https://example.com/ris-paper1
+AB  - This paper studies early detection of Alzheimer's disease using machine learning and neuroimaging data.
+ER  -
+
+TY  - JOUR
+TI  - Speech Classification for Mild Cognitive Impairment
+AU  - Second Author
+PY  - 2022
+JO  - Example Journal
+AB  - This paper studies speech-based classification for mild cognitive impairment screening.
+ER  -
+
+TY  - JOUR
+TI  - Drug Discovery for Alzheimer's Disease
+AU  - Third Author
+PY  - 2023
+JO  - Example Journal
+AB  - This paper studies computational drug discovery for Alzheimer's disease treatment.
+ER  -
