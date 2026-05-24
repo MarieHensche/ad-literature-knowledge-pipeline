@@ -26,6 +26,7 @@ env/
 # IDE/editor
 .vscode/
 .idea/
+.Rhistory
 
 # Data / full text not committed
 data/full_text/
