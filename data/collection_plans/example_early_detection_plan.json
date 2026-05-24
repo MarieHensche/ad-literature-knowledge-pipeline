@@ -1,0 +1,42 @@
+{
+  "topic_description": "Computational papers about early detection of Alzheimer's disease, mild cognitive impairment, dementia, or dementia-related cognitive impairment from the years 2018 to 2024.",
+  "recommended_provider": "openalex",
+  "provider_reason": "Broad scholarly search across disciplines; good default provider for the specified topic.",
+  "search_goal": "To identify approximately 100 relevant scholarly papers focusing on computational approaches to the early detection of Alzheimer’s disease and related cognitive impairments.",
+  "main_search_string": "early detection Alzheimer's disease mild cognitive impairment dementia computational",
+  "alternate_search_strings": [
+    "Alzheimer's early detection algorithms",
+    "mild cognitive impairment computational analysis",
+    "dementia detection using AI",
+    "cognitive impairment prediction models"
+  ],
+  "filters": {
+    "year_from": 2018,
+    "year_to": 2024,
+    "publication_types": [],
+    "open_access_only": null,
+    "has_abstract": null,
+    "has_full_text": null,
+    "language": null,
+    "venue_or_source": [],
+    "field_or_domain": []
+  },
+  "provider_specific_plan": {
+    "provider": "openalex",
+    "query": "early detection Alzheimer's disease mild cognitive impairment dementia computational",
+    "filters": [
+      {
+        "name": "publication_year",
+        "value": "2018-2024",
+        "reason": "Specifying the range of years for relevant papers."
+      }
+    ],
+    "sort": null,
+    "max_results_recommendation": 100
+  },
+  "screening_notes": "Focus on computational papers; ensure the relevance of studies to early detection methodologies.",
+  "risks_or_ambiguities": [
+    "Potential overlap in terminology across different cognitive impairment types.",
+    "Variability in the focus on computational methods versus general discussions in the field."
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "topic_description": "All papers from the year 2018 about machine learning for early detection of Alzheimer's disease.",
+  "recommended_provider": "semantic_scholar",
+  "provider_reason": "Semantic Scholar is well-suited for computer science, AI, and machine learning topics, providing citation-rich metadata which is relevant for this research area.",
+  "search_goal": "Identify around 50 scholarly papers from 2018 focusing on machine learning techniques applied to the early detection of Alzheimer's disease.",
+  "main_search_string": "machine learning early detection Alzheimer's disease",
+  "alternate_search_strings": [
+    "machine learning Alzheimer's diagnosis",
+    "early detection Alzheimer's ML",
+    "machine learning for Alzheimer's identification"
+  ],
+  "filters": {
+    "year_from": 2018,
+    "year_to": 2018,
+    "publication_types": [],
+    "open_access_only": null,
+    "has_abstract": null,
+    "has_full_text": null,
+    "language": null,
+    "venue_or_source": [],
+    "field_or_domain": []
+  },
+  "provider_specific_plan": {
+    "provider": "semantic_scholar",
+    "query": "machine learning early detection Alzheimer's disease",
+    "filters": [
+      {
+        "name": "year",
+        "value": "2018",
+        "reason": "Restricting to the year of interest."
+      },
+      {
+        "name": "publicationTypes",
+        "value": "",
+        "reason": "No specific types mentioned, leaving it open."
+      }
+    ],
+    "sort": null,
+    "max_results_recommendation": 50
+  },
+  "screening_notes": "Focus on papers that combine machine learning algorithms with Alzheimer's disease diagnostics. Consider the relevance and the citation count while selecting candidates.",
+  "risks_or_ambiguities": [
+    "Papers may not explicitly mention 'early detection' but could still focus on relevant methods or studies.",
+    "Potential for varying definitions of 'machine learning' in different papers."
+  ]
+}
