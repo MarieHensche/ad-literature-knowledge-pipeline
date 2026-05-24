@@ -196,7 +196,13 @@ def validate_tagged_row(
             raise ValueError(f"{category_id} has invalid value(s): {invalid}")
 
         if rule_map[category_id]["selection"] == "single" and len(values) != 1:
-            raise ValueError(f"{category_id} must have exactly one selected value.")
+            fallback_value = rule_map[category_id].get("fallback_value")
+            if len(values) > 1:
+                tagged[category_id] = [values[0]]
+            elif fallback_value in allowed_values:
+                tagged[category_id] = [fallback_value]
+            else:
+                raise ValueError(f"{category_id} must have exactly one selected value.")
 
 
 def output_columns(config: dict[str, object]) -> list[str]:
