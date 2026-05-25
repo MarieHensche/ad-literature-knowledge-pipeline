@@ -14,38 +14,6 @@ Included papers are expected to use computational or data-driven methods for det
 
 See [docs/early_detection_scope.md](docs/early_detection_scope.md) for the inclusion and exclusion rules.
 
-## Repository Structure
-
-```text
-configs/
-  early_detection_tagging_config.yaml   # LLM-facing research topic and tag categories
-
-data/
-  raw/
-    example_papers.csv                  # Example canonical paper metadata input
-  processed/
-    example_*                           # Example normalized, tagged, audited, and Mantis-ready outputs
-
-docs/
-  early_detection_scope.md              # Current pilot scope
-  input_format.md                       # Canonical input CSV format
-
-schemas/
-  early_detection_knowledge_schema.yaml # Manual extraction schema for the knowledge layer
-
-scripts/
-  import_bibtex.py                      # Convert BibTeX exports to canonical CSV
-  run_pipeline.py                       # Full pipeline runner
-  normalize_metadata.py                 # Clean and standardize paper metadata
-  screen_scope.py                       # Rule-based scope screening
-  normalize_tagging_config.py           # Convert YAML tag config to normalized JSON
-  generate_tagging_rules.py             # Use OpenAI to create fixed category rules
-  tag_papers_with_llm.py                # Use OpenAI to tag included papers
-  audit_extraction.py                   # Validate tags against allowed values and rules
-  export_mantis_ready.py                # Convert tagged rows to Mantis-ready CSV
-  create_extraction_template.py         # Optional manual extraction template generator
-  validate_schema.py                    # Validate the YAML knowledge schema
-```
 
 ## Inputs
 
@@ -80,18 +48,6 @@ See [docs/input_format.md](docs/input_format.md) for the input format.
 
 ## Outputs
 
-For a collection named `example`, the full runner writes:
-
-```text
-data/processed/example_papers_normalized.csv
-data/processed/example_scope_screened.csv
-data/processed/example_tagging_config_normalized.json
-data/processed/example_tagging_rules.json
-data/processed/example_extraction_filled.csv
-data/processed/example_extraction_audit.csv
-data/processed/example_mantis_ready.csv
-```
-
 The final file, `*_mantis_ready.csv`, contains Mantis-oriented `title`, `categoric`, and `semantic` fields plus paper identifiers and all generated knowledge tags.
 
 ## Setup
@@ -110,35 +66,50 @@ Create a local `.env` file from the example and add an OpenAI API key:
 cp .env.example .env
 ```
 
-The LLM steps use:
+Add your OpenAI key:
 
 ```text
-OPENAI_API_KEY
-OPENAI_MODEL
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-`OPENAI_MODEL` defaults to `gpt-4o-mini` if it is not set.
 
-## Usage
+# Workflow 1: Pipeline With Paper Input
 
-Run the commands below from the repository root, the folder that contains
-`scripts/`, `configs/`, `data/`, and `.venv`.
+Use this workflow when you already have papers.
 
-Validate the manual knowledge schema:
+The main pipeline expects a **canonical CSV**.
 
-```bash
-python scripts/validate_schema.py
+## Canonical CSV Format
+
+Required columns:
+
+```text
+paper_id
+title
+year
+doi
+abstract
 ```
 
-Convert a BibTeX export into the canonical CSV format:
+Recommended optional columns:
 
-```bash
-python scripts/import_bibtex.py \
-  --input data/raw/example_papers.bib \
-  --output data/raw/example_papers_from_bib.csv
+```text
+authors
+venue
+url
+source
+full_text_path
+notes
 ```
 
-Run the full current pipeline on the example collection:
+Example:
+
+```text
+data/raw/example_papers.csv
+```
+
+Run the main pipeline:
 
 ```bash
 python scripts/run_pipeline.py run \
@@ -147,7 +118,29 @@ python scripts/run_pipeline.py run \
   --collection example
 ```
 
-Or run it on a CSV created from BibTeX:
+Final output:
+
+```text
+data/processed/example_mantis_ready.csv
+```
+
+Audit output:
+
+```text
+data/processed/example_extraction_audit.csv
+```
+
+## Paper Input Option A: BibTeX
+
+Convert BibTeX to canonical CSV:
+
+```bash
+python scripts/import_bibtex.py \
+  --input data/raw/example_papers.bib \
+  --output data/raw/example_papers_from_bib.csv
+```
+
+Run the pipeline:
 
 ```bash
 python scripts/run_pipeline.py run \
@@ -156,87 +149,372 @@ python scripts/run_pipeline.py run \
   --collection example_bib
 ```
 
+Final output:
 
 
-This performs metadata normalization, rule-based scope screening, tagging-config normalization, LLM generation of fixed tagging rules, LLM paper tagging, extraction audit, and Mantis export.
-
-## Running Individual Steps
-
-Each pipeline step can also be run directly. This is useful while developing or debugging one stage:
-
-```bash
-python scripts/normalize_metadata.py \
-  --input data/raw/example_papers.csv \
-  --output data/processed/example_papers_normalized.csv
-
-python scripts/screen_scope.py \
-  --input data/processed/example_papers_normalized.csv \
-  --output data/processed/example_scope_screened.csv
-
-python scripts/normalize_tagging_config.py \
-  --config configs/early_detection_tagging_config.yaml \
-  --output data/processed/example_tagging_config_normalized.json
-
-python scripts/generate_tagging_rules.py \
-  --config data/processed/example_tagging_config_normalized.json \
-  --output data/processed/example_tagging_rules.json
-
-python scripts/tag_papers_with_llm.py \
-  --papers data/processed/example_scope_screened.csv \
-  --config data/processed/example_tagging_config_normalized.json \
-  --rules data/processed/example_tagging_rules.json \
-  --output data/processed/example_extraction_filled.csv
-
-python scripts/audit_extraction.py \
-  --input data/processed/example_extraction_filled.csv \
-  --config data/processed/example_tagging_config_normalized.json \
-  --rules data/processed/example_tagging_rules.json \
-  --output data/processed/example_extraction_audit.csv
-
-python scripts/export_mantis_ready.py \
-  --input data/processed/example_extraction_filled.csv \
-  --output data/processed/example_mantis_ready.csv
+```text
+data/processed/example_bib_mantis_ready.csv
 ```
 
-## Optional Manual Extraction Template
+## Paper Input Option B: JSON / JSONL Metadata
 
-The repository also contains an earlier manual-review path:
+Convert JSONL to canonical CSV:
 
 ```bash
-python scripts/create_extraction_template.py \
-  --screened data/processed/example_scope_screened.csv \
-  --schema schemas/early_detection_knowledge_schema.yaml \
-  --output data/processed/example_extraction_template.csv
+python scripts/import_json_metadata.py \
+  --input data/raw/example_papers.jsonl \
+  --output data/raw/example_papers_from_json.csv
 ```
 
-This creates a blank extraction table for papers screened as `include`. It is useful for human review or assisted extraction experiments, but it is not currently called by `scripts/run_pipeline.py`.
+Check the generated CSV:
 
-## Current Status
+```bash
+head -5 data/raw/example_papers_from_json.csv
+```
 
-The repository is a working pilot rather than a production data system. It can run end to end on the included example data and produce a Mantis-ready CSV.
+Run the pipeline:
 
-Current capabilities:
+```bash
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers_from_json.csv \
+  --tagging-config configs/early_detection_tagging_config.yaml \
+  --collection example_json
+```
 
-- BibTeX-to-canonical-CSV import
-- canonical CSV metadata normalization
-- rule-based early-detection scope screening
-- YAML-to-JSON tagging configuration normalization
-- LLM-generated fixed tagging rules
-- LLM tagging of included papers using controlled values
-- extraction audit for missing, invalid, or inconsistent tag values
-- Mantis-ready CSV export
-- optional manual extraction template generation
+Final output:
 
-Important limitations:
+```text
+data/processed/example_json_mantis_ready.csv
+```
 
-- Scope screening is currently keyword-based and should be reviewed before use on a real corpus.
-- LLM tagging depends on abstracts and metadata unless richer text is provided upstream.
-- The pipeline currently models knowledge tags only, not methodological know-how.
-- Example data and example outputs are toy pilot artifacts.
-- Direct importers for Zotero, Semantic Scholar, OpenAlex, PDFs, and full text are not implemented yet.
+## Paper Input Option C: RIS
 
-## Development Notes
+Convert RIS to canonical CSV:
 
-Generated local outputs under `data/processed/example_*` are ignored by git, although example artifacts are present in this repository for reference. Full text, PDFs, secrets, virtual environments, logs, and temporary files are also ignored.
+```bash
+python scripts/import_ris.py \
+  --input data/raw/example_papers.ris \
+  --output data/raw/example_papers_from_ris.csv
+```
 
-The next useful development step is to run the pipeline on a small real early-detection paper set, inspect the audit output and Mantis visualization, and refine the ontology values based on actual tagging failures.
+Check the generated CSV:
+
+```bash
+head -5 data/raw/example_papers_from_ris.csv
+```
+
+Run the pipeline:
+
+```bash
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers_from_ris.csv \
+  --tagging-config configs/early_detection_tagging_config.yaml \
+  --collection example_ris
+```
+
+Final output:
+
+```text
+data/processed/example_ris_mantis_ready.csv
+```
+
+# Workflow 2: Pipeline Without Paper Input
+
+Use this workflow when you do **not** already have a paper collection.
+
+You provide:
+
+1. A topic description text file
+2. A tagging config YAML file
+
+The system then collects papers automatically.
+
+Current automated collection implementation:
+
+```text
+topic description
+-> AI search planner
+-> provider-specific fetcher
+-> deduplication
+-> AI relevance screening
+-> canonical CSV export
+-> existing knowledge pipeline
+-> Mantis-ready CSV
+```
+
+Important note:
+
+```text
+The AI planner can recommend different providers.
+Currently, only the OpenAlex fetcher is implemented.
+```
+
+So the current automated workflow works when the planner selects OpenAlex.
+
+## Input File 1: Topic Description
+
+Recommended location:
+
+```text
+configs/topics/ad_early_detection_test_topic.txt
+```
+
+Example content:
+
+```text
+Computational papers about early detection of Alzheimer's disease, mild cognitive impairment, dementia, or dementia-related cognitive impairment from the years 2018 to 2024.
+
+Focus on papers that use machine learning, deep learning, statistical modeling, digital biomarkers, neuroimaging, speech or language analysis, cognitive testing, sensor data, eye tracking, or multimodal computational methods for detection, diagnosis, screening, classification, or prediction.
+
+Exclude papers mainly about treatment, drug discovery, care support, disease biology or mechanism discovery without detection, general clinical guidelines, or unrelated neurological diseases.
+```
+
+If you have the file somewhere on your Mac, copy it into the project:
+
+```bash
+mkdir -p configs/topics
+
+cp "/FULL/PATH/FROM/FINDER/your_topic_file.txt" \
+  configs/topics/ad_early_detection_test_topic.txt
+```
+
+## Input File 2: Tagging Config YAML
+
+Recommended location:
+
+```text
+configs/ad_early_detection_test_tagging_config.yaml
+```
+
+Example structure:
+
+```yaml
+research_topic:
+  title: Computational early detection of Alzheimer's disease and related cognitive impairment
+  description: >
+    Computational and data-driven papers about early detection, diagnosis,
+    screening, classification, or prediction of Alzheimer's disease, mild cognitive
+    impairment, dementia, or dementia-related cognitive impairment.
+
+categories:
+  primary_clinical_target:
+    values:
+      - ad
+      - mci
+      - dementia
+      - cognitive_impairment
+      - mixed_or_unclear
+      - unclear
+
+  early_detection_subtype:
+    values:
+      - early_ad_detection
+      - mci_detection
+      - mci_ad_detection
+      - dementia_screening
+      - conversion_or_deterioration_detection
+      - preclinical_or_prodromal_detection
+      - mixed_or_unclear
+         - unclear
+
+  computational_method_family:
+    values:
+      - machine_learning
+      - deep_learning
+      - statistical_modeling
+      - signal_processing
+      - natural_language_processing
+      - computer_vision
+      - digital_biomarker_modeling
+      - multimodal_fusion
+      - unclear
+
+  evidence_modality_family:
+    values:
+      - neuroimaging
+      - speech_language
+      - cognitive_assessment
+      - clinical_tabular
+      - sensor_behavior
+      - eye_tracking
+      - genetics_or_omics
+      - fluid_biomarker
+      - multimodal
+      - unclear
+
+  dataset_source_type:
+    values:
+      - public_named_dataset
+      - private_or_local_clinical_dataset
+      - challenge_dataset
+      - simulated_or_synthetic
+      - not_reported
+      - unclear
+
+  extraction_basis:
+    values:
+      - title_only
+      - abstract
+      - abstract_and_metadata
+      - full_text
+      - unclear
+
+
+
+  knowledge_confidence:
+    values:
+      - high
+      - medium
+      - low
+      - very_low
+      - conflict
+
+  review_status:
+    required: true
+    values:
+      - ai_tagged
+      - human_reviewed
+      - needs_decision
+      - full_text_needed
+      - excluded_from_scope
+```
+
+If you have the YAML file somewhere on your Mac, copy it into the project:
+
+```bash
+cp "/FULL/PATH/FROM/FINDER/your_tagging_config.yaml" \
+  configs/ad_early_detection_test_tagging_config.yaml
+```
+
+## Step 1: Run Automated Collection
+
+Load the topic text:
+
+```bash
+TOPIC="$(cat configs/topics/ad_early_detection_test_topic.txt)"
+```
+
+Run collection:
+
+```bash
+python scripts/run_collection.py run \
+  --topic "$TOPIC" \
+  --collection ad_early_detection_test \
+  --max-results 25 \
+  --model gpt-4o-mini
+```
+
+
+This creates:
+
+```text
+data/collection_plans/ad_early_detection_test_plan.json
+data/raw/ad_early_detection_test_openalex_candidates.jsonl
+data/raw/ad_early_detection_test_openalex_candidates_deduped.jsonl
+data/raw/ad_early_detection_test_candidate_screening.csv
+data/raw/ad_early_detection_test_papers.csv
+```
+
+The most important file is:
+
+```text
+data/raw/ad_early_detection_test_papers.csv
+```
+
+That is the canonical CSV created from automatically collected papers.
+
+Check it:
+
+```bash
+head -5 data/raw/ad_early_detection_test_papers.csv
+wc -l data/raw/ad_early_detection_test_papers.csv
+```
+
+## Step 2: Run Main Knowledge Pipeline
+
+Run the normal pipeline on the collected paper CSV:
+
+```bash
+python scripts/run_pipeline.py run \
+  --papers data/raw/ad_early_detection_test_papers.csv \
+  --tagging-config configs/ad_early_detection_test_tagging_config.yaml \
+  --collection ad_early_detection_test
+```
+
+Final Mantis-ready output:
+
+```text
+data/processed/ad_early_detection_test_mantis_ready.csv
+```
+
+Audit output:
+
+```text
+data/processed/ad_early_detection_test_extraction_audit.csv
+```
+
+# Important Generated Files
+
+These files are generated outputs and usually should **not** be committed:
+
+```text
+data/raw/*_openalex_candidates.jsonl
+data/raw/*_openalex_candidates_deduped.jsonl
+data/raw/*_candidate_screening.csv
+data/raw/*_papers.csv
+data/raw/*_from_bib.csv
+data/raw/*_from_json.csv
+data/raw/*_from_ris.csv
+data/processed/*
+```
+
+Reusable files that can be committed:
+
+```text
+scripts/*.py
+configs/*.yaml
+configs/topics/*.txt
+data/raw/example_papers.csv
+data/raw/example_papers.bib
+data/raw/example_papers.jsonl
+data/raw/example_papers.ris
+```
+
+# Common Commands
+
+
+Check git status:
+
+```bash
+git status
+```
+
+Commit reusable config/input files:
+
+```bash
+git add configs/topics/ad_early_detection_test_topic.txt \
+  configs/ad_early_detection_test_tagging_config.yaml
+
+git commit -m "Add early detection test inputs"
+git push
+```
+
+Clean generated collection files for a collection:
+
+```bash
+rm -f data/collection_plans/ad_early_detection_test_plan.json
+rm -f data/raw/ad_early_detection_test_openalex_candidates.jsonl
+rm -f data/raw/ad_early_detection_test_openalex_candidates_deduped.jsonl
+rm -f data/raw/ad_early_detection_test_candidate_screening.csv
+rm -f data/raw/ad_early_detection_test_papers.csv
+rm -f data/processed/ad_early_detection_test_*
+```
+
+# Current Limitations
+
+- Automated paper collection currently has only one implemented provider adapter: OpenAlex.
+- The AI planner may recommend Semantic Scholar, Europe PMC, or Crossref, but those fetchers are not implemented yet.
+- Candidate screening uses abstracts and metadata only.
+- Ambiguous candidates are excluded during automated collection.
+- The existing keyword-based `screen_scope.py` still runs inside the main pipeline, so collected papers may be screened twice.
+- Tagging rules are regenerated for each collection run, even when the tagging config has not changed.
