@@ -58,7 +58,7 @@ Main config files:
 
 ```text
 configs/early_detection_tagging_config.yaml
-configs/topics/*.txt
+configs/topics/early_detection_ad.yaml
 ```
 
 Main input/output locations:
@@ -81,7 +81,7 @@ Run the pipeline when you already have a paper CSV:
 ```bash
 python scripts/run_pipeline.py run \
   --papers data/raw/example_papers.csv \
-  --tagging-config configs/early_detection_tagging_config.yaml \
+  --topic-contract configs/topics/early_detection_ad.yaml \
   --collection example
 ```
 
@@ -94,7 +94,8 @@ python scripts/run_collection.py run \
   --topic "$TOPIC" \
   --collection ad_early_detection_test \
   --max-results 25 \
-  --model gpt-4o-mini
+  --model gpt-4o-mini \
+  --topic-contract configs/topics/early_detection_ad.yaml
 ```
 
 Run the tagging pipeline on automatically collected papers:
@@ -102,8 +103,27 @@ Run the tagging pipeline on automatically collected papers:
 ```bash
 python scripts/run_pipeline.py run \
   --papers data/raw/ad_early_detection_test_papers.csv \
-  --tagging-config configs/ad_early_detection_test_tagging_config.yaml \
+  --topic-contract configs/topics/early_detection_ad.yaml \
   --collection ad_early_detection_test
+```
+
+Explain the pipeline, run one step, or resume from a failed step:
+
+```bash
+python scripts/run_pipeline.py explain --collection example
+
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example \
+  --only-step normalize_metadata
+
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example \
+  --run-id 20260525T120000Z-example \
+  --resume
 ```
 
 Check the final Mantis-ready output:
@@ -129,7 +149,10 @@ Current automated paper collection uses OpenAlex. Other providers can be added l
 ## Important Notes
 
 - Topic descriptions define what papers should be collected.
-- Tagging configs define what labels should be assigned.
+- Topic contracts define scope, screening policy, allowed providers, and tagging categories.
+- The legacy `--tagging-config` option still works for the main pipeline.
+- Each pipeline run writes a manifest under `runs/<run_id>/manifest.json`.
+- LLM steps can write prompt/response traces with `--trace-dir`; orchestrated runs default to `runs/<run_id>/traces`.
 - Generated files should usually not be committed.
 - Reusable scripts, configs, and topic files can be committed.
 

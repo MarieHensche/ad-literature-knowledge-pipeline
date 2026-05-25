@@ -1,0 +1,198 @@
+topic_id: early_detection_ad
+
+research_topic:
+  title: Early detection of Alzheimer's disease and related impairment
+  description: >
+    Computational papers about early detection of Alzheimer's disease,
+    mild cognitive impairment, dementia, or dementia-related cognitive impairment.
+    The focus is on what early disease state, impairment, or signal is identified.
+
+scope:
+  include_criteria:
+    - detecting Alzheimer's disease or dementia
+    - detecting MCI or cognitive impairment
+    - distinguishing AD, MCI, dementia, or controls
+    - identifying early, prodromal, or preclinical AD
+    - predicting or detecting MCI-to-AD conversion when framed as early detection
+    - screening dementia-related impairment from clinical, behavioral, imaging, omics, sensor, speech, retinal, EEG, or multimodal evidence
+  exclude_criteria:
+    - drug discovery or treatment response
+    - care support without a detection or screening task
+    - disease mechanism discovery without a diagnostic or early-detection task
+    - subtype discovery without an early-detection framing
+    - later-stage prognosis only
+    - non-computational clinical reporting
+    - review or background paper only
+  boundary_rules:
+    - If a paper says early diagnosis but only performs AD-vs-control classification, keep it in scope but tag the comparison structure accurately.
+
+rule_based_screening:
+  include_terms:
+    - early detection
+    - early diagnosis
+    - early dementia
+    - mild cognitive impairment
+    - mci
+    - screening
+    - classification
+    - diagnosis
+    - detecting
+    - detection
+  exclude_terms:
+    - drug repurposing
+    - drug discovery
+    - treatment
+    - treatment response
+    - care support
+  exclude_wins: true
+
+candidate_screening:
+  missing_abstract_policy: exclude
+  borderline_policy: exclude
+  human_review_policy: exclude
+  review_policy: include reviews only when the topic does not ask for primary studies only
+
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: true
+    prefer_mixed_or_unclear_when_unclear_missing: true
+    missing_information_value: not_reported
+    knowledge_confidence: very_low
+    review_status: needs_decision
+  categories:
+    primary_clinical_target:
+      values:
+        - ad
+        - mci
+        - dementia
+        - cognitive_impairment
+        - prodromal_ad
+        - preclinical_ad
+        - mixed_or_unclear
+        - unclear
+
+    early_detection_subtype:
+      values:
+        - early_ad_detection
+        - mci_detection
+        - mci_ad_detection
+        - dementia_screening
+        - prodromal_detection
+        - preclinical_detection
+        - conversion_or_deterioration_detection
+        - mixed_or_unclear
+
+    population_scope:
+      values:
+        - ad_vs_control
+        - mci_vs_control
+        - ad_vs_mci
+        - ad_vs_mci_vs_control
+        - dementia_vs_control
+        - cognitive_impairment_vs_control
+        - mci_conversion
+        - multi_stage_early_disease
+        - mixed_clinical
+        - unclear
+
+    baseline_phase:
+      values:
+        - healthy_or_control
+        - subjective_complaint
+        - mci
+        - early_ad
+        - mixed_early
+        - not_phase_specific
+        - not_reported
+        - unclear
+
+    comparison_group_category:
+      values:
+        - binary
+        - multiclass
+        - ordered_stage
+        - conversion_prediction
+        - screening_score
+        - unclear
+
+    representation_type:
+      values:
+        - categorical
+        - continuum
+        - both
+        - unclear
+
+    evidence_modality_family:
+      values:
+        - neuroimaging
+        - speech_language
+        - cognitive_assessment
+        - clinical_tabular
+        - fluid_biomarker
+        - genetics_or_omics
+        - sensor_behavior
+        - eye_tracking
+        - retinal_imaging
+        - gait_motor
+        - drawing_handwriting
+        - eeg_or_signal
+        - multimodal
+        - unclear
+
+    signal_category:
+      values:
+        - brain_structure
+        - brain_function
+        - brain_connectivity
+        - pathology_biomarker
+        - cognitive_profile
+        - speech_language_pattern
+        - clinical_demographic_profile
+        - motor_behavior
+        - digital_behavior
+        - visuospatial_drawing_pattern
+        - retinal_structure
+        - genetic_molecular_profile
+        - multimodal_biomarker_profile
+        - unclear
+
+    dataset_source_type:
+      values:
+        - public_named_dataset
+        - private_or_local_clinical_dataset
+        - challenge_dataset
+        - simulated_or_synthetic
+        - literature_or_secondary_data
+        - not_reported
+        - unclear
+
+    extraction_basis:
+      values:
+        - title_only
+        - abstract
+        - abstract_and_metadata
+        - full_text
+        - unclear
+
+    knowledge_confidence:
+      values:
+        - high
+        - medium
+        - low
+        - very_low
+        - conflict
+
+    review_status:
+      required: true
+      values:
+        - ai_tagged
+        - human_reviewed
+        - needs_decision
+        - full_text_needed
+        - excluded_from_scope
+
+collection:
+  allowed_providers:
+    - openalex
+  preferred_provider: openalex
+  max_results_default: 25
