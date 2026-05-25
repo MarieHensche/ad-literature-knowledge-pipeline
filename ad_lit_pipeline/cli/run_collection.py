@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from ad_lit_pipeline.core.artifacts import collection_artifacts
+from ad_lit_pipeline.core.env import load_dotenv
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
 from ad_lit_pipeline.core.registry import COLLECTION_PIPELINE
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
@@ -64,6 +65,8 @@ def build_step_functions(
 
 
 def run_collection(args: argparse.Namespace) -> None:
+    load_dotenv()
+
     if args.resume:
         if not args.run_id:
             raise ValueError("--resume requires --run-id")

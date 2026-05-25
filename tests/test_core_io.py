@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from ad_lit_pipeline.core.artifacts import (
@@ -7,6 +8,7 @@ from ad_lit_pipeline.core.artifacts import (
     main_pipeline_artifacts,
 )
 from ad_lit_pipeline.core.context import RunContext
+from ad_lit_pipeline.core.env import load_dotenv
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.io.csv_io import read_csv_rows, write_csv_rows
 from ad_lit_pipeline.io.json_io import read_json_object, write_json
@@ -53,3 +55,21 @@ def test_shared_io_helpers_round_trip(tmp_path: Path) -> None:
     assert read_json_object(json_path) == {"id": 1}
     assert read_jsonl_objects(jsonl_path) == [{"id": 1}, {"id": 2}]
     assert read_yaml_object(yaml_path) == {"id": 1}
+
+
+def test_load_dotenv_does_not_override_existing_values(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "NEW_VALUE=from_file\nEXISTING_VALUE=from_file\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("NEW_VALUE", raising=False)
+    monkeypatch.setenv("EXISTING_VALUE", "from_env")
+
+    load_dotenv(env_path)
+
+    assert os.environ["NEW_VALUE"] == "from_file"
+    assert os.environ["EXISTING_VALUE"] == "from_env"

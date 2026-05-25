@@ -98,6 +98,13 @@ def active_filters_from_plan(plan: dict[str, object]) -> dict[str, str]:
     if isinstance(language, str) and language:
         openalex_filters.append(f"language:{language}")
 
+    has_abstract = filters.get("has_abstract")
+    if isinstance(has_abstract, bool):
+        openalex_filters.append(f"has_abstract:{str(has_abstract).lower()}")
+
+    if filters.get("exclude_reviews") is True:
+        openalex_filters.append("type:!review")
+
     if not openalex_filters:
         return {}
 

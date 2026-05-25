@@ -68,6 +68,69 @@ def required_by_category(config: dict[str, object]) -> dict[str, bool]:
     }
 
 
+def ordered_category_ids(config: dict[str, object]) -> list[str]:
+    categories = config.get("categories")
+    if not isinstance(categories, list):
+        raise ValueError("Normalized config must contain a categories list.")
+    return [str(category["category_id"]) for category in categories]
+
+
+def fallback_policy(topic_contract: dict[str, object] | None) -> dict[str, object]:
+    if topic_contract is None:
+        return {}
+    tagging = topic_contract.get("tagging")
+    if not isinstance(tagging, dict):
+        return {}
+    policy = tagging.get("fallback_policy")
+    return policy if isinstance(policy, dict) else {}
+
+
+def recommended_fallback_value(
+    category_id: str,
+    allowed_values: set[str],
+    topic_contract: dict[str, object] | None = None,
+) -> str:
+    """Pick a deterministic legal fallback value for a category."""
+    policy = fallback_policy(topic_contract)
+
+    explicit = policy.get(category_id)
+    if isinstance(explicit, str) and explicit in allowed_values:
+        return explicit
+
+    if policy.get("prefer_unclear_when_allowed", True) and "unclear" in allowed_values:
+        return "unclear"
+
+    if (
+        policy.get("prefer_mixed_or_unclear_when_unclear_missing", True)
+        and "mixed_or_unclear" in allowed_values
+    ):
+        return "mixed_or_unclear"
+
+    missing_value = policy.get("missing_information_value")
+    if isinstance(missing_value, str) and missing_value in allowed_values:
+        return missing_value
+
+    if not allowed_values:
+        raise ValueError(f"Category has no allowed fallback values: {category_id}")
+
+    return sorted(allowed_values)[0]
+
+
+def fallback_recommendations(
+    config: dict[str, object],
+    topic_contract: dict[str, object] | None = None,
+) -> dict[str, str]:
+    allowed = allowed_values_by_category(config)
+    return {
+        category_id: recommended_fallback_value(
+            category_id,
+            allowed_values,
+            topic_contract,
+        )
+        for category_id, allowed_values in allowed.items()
+    }
+
+
 def call_llm(
     config: dict[str, object],
     model: str,
@@ -75,7 +138,11 @@ def call_llm(
     topic_contract: dict[str, object] | None = None,
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, object], list[Path]]:
-    prompt = render_generate_tagging_rules_prompt(config, topic_contract)
+    prompt = render_generate_tagging_rules_prompt(
+        config,
+        topic_contract,
+        fallback_recommendations(config, topic_contract),
+    )
     result = client.create_json(
         model=model,
         system_message=SYSTEM_MESSAGE,
@@ -88,6 +155,73 @@ def call_llm(
     )
     trace_paths = result.trace_paths.as_list() if result.trace_paths else []
     return result.parsed, trace_paths
+
+
+def repair_rules(
+    config: dict[str, object],
+    result: dict[str, object],
+    topic_contract: dict[str, object] | None = None,
+) -> tuple[dict[str, object], list[str]]:
+    """Repair semantically invalid LLM rules using deterministic config policy."""
+    allowed = allowed_values_by_category(config)
+    required_flags = required_by_category(config)
+    recommended = fallback_recommendations(config, topic_contract)
+    rule_list = result.get("rules")
+    if not isinstance(rule_list, list):
+        raise ValueError("LLM response must contain a rules list.")
+
+    rules_by_id: dict[str, dict[str, object]] = {}
+    warnings = []
+    for rule in rule_list:
+        if not isinstance(rule, dict):
+            warnings.append("Skipped non-object rule.")
+            continue
+
+        category_id = str(rule.get("category_id") or "")
+        if category_id not in allowed:
+            warnings.append(f"Skipped unknown category rule: {category_id}")
+            continue
+
+        if category_id in rules_by_id:
+            warnings.append(f"Skipped duplicate rule for category: {category_id}")
+            continue
+
+        rules_by_id[category_id] = dict(rule)
+
+    repaired_rules = []
+    for category_id in ordered_category_ids(config):
+        rule = rules_by_id.get(category_id)
+        if rule is None:
+            rule = {
+                "category_id": category_id,
+                "selection": "single",
+                "required": required_flags[category_id],
+                "fallback_value": recommended[category_id],
+                "reason": "Defaulted by pipeline because the LLM omitted this category.",
+            }
+            warnings.append(f"Added missing rule for category: {category_id}")
+
+        fallback_value = rule.get("fallback_value")
+        if fallback_value not in allowed[category_id]:
+            rule["fallback_value"] = recommended[category_id]
+            reason = str(rule.get("reason") or "").strip()
+            repair_reason = (
+                " Pipeline replaced an invalid fallback_value with the "
+                "topic-contract recommendation."
+            )
+            rule["reason"] = f"{reason}{repair_reason}".strip()
+            warnings.append(
+                "Repaired invalid fallback_value for "
+                f"{category_id}: {fallback_value} -> {recommended[category_id]}"
+            )
+
+        if required_flags[category_id] and not rule.get("required"):
+            rule["required"] = True
+            warnings.append(f"Repaired required flag for category: {category_id}")
+
+        repaired_rules.append(rule)
+
+    return {"rules": repaired_rules}, warnings
 
 
 def validate_rules(config: dict[str, object], result: dict[str, object]) -> None:
@@ -160,6 +294,7 @@ def run(
         topic_contract,
         trace_writer,
     )
+    result, warnings = repair_rules(config, result, topic_contract)
     validate_rules(config, result)
     write_output(output_path, config_path, model, result)
     return StepResult(
@@ -167,6 +302,7 @@ def run(
         inputs={"tagging_config_json": config_path},
         outputs={"tagging_rules_json": output_path},
         row_counts={"rules": len(result["rules"])},
+        warnings=warnings,
         trace_paths=trace_paths,
     )
 

@@ -85,6 +85,7 @@ def render_screen_candidate_prompt(
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,
+    fallback_recommendations: dict[str, str] | None = None,
 ) -> str:
     fallback_policy = {}
     if topic_contract is not None:
@@ -97,6 +98,9 @@ def render_generate_tagging_rules_prompt(
             "research_topic_json": json_block(config["research_topic"]),
             "categories_json": json_block(config["categories"]),
             "fallback_policy_json": json_block(fallback_policy),
+            "fallback_recommendations_json": json_block(
+                fallback_recommendations or {}
+            ),
         },
     )
 

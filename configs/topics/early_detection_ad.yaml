@@ -196,3 +196,4 @@ collection:
     - openalex
   preferred_provider: openalex
   max_results_default: 25
+  exclude_openalex_review_type: true

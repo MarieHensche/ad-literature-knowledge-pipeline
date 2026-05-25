@@ -5,10 +5,14 @@ import json
 from pathlib import Path
 
 from ad_lit_pipeline.llm.client import StaticJSONClient
-from ad_lit_pipeline.steps.collection.plan_search import run as run_plan_search
+from ad_lit_pipeline.steps.collection.plan_search import (
+    enforce_topic_plan_constraints,
+    run as run_plan_search,
+)
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
 from ad_lit_pipeline.steps.tagging.tag_papers import run as run_tag_papers
+from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,13 +71,86 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
         tmp_path / "traces",
     )
 
+    payload = json.loads(output.read_text(encoding="utf-8"))
     assert result.metadata["recommended_provider"] == "openalex"
-    assert json.loads(output.read_text(encoding="utf-8"))["recommended_provider"] == "openalex"
+    assert payload["recommended_provider"] == "openalex"
+    assert payload["filters"]["has_abstract"] is True
+    assert payload["filters"]["exclude_reviews"] is True
+    assert payload["provider_specific_plan"]["filters"] == [
+        {
+            "name": "has_abstract",
+            "value": "true",
+            "reason": (
+                "The topic contract excludes candidates without abstracts, "
+                "so the provider query should retrieve works with abstracts."
+            ),
+        },
+        {
+            "name": "type",
+            "value": "!review",
+            "reason": (
+                "The topic contract excludes review/background papers, "
+                "so OpenAlex review works are filtered before screening."
+            ),
+        },
+    ]
+    assert result.warnings == [
+        "Set filters.has_abstract=true because topic contract excludes missing abstracts.",
+        "Added provider_specific_plan has_abstract filter for screening policy.",
+        "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works.",
+        "Added provider_specific_plan type:!review filter for review exclusion policy.",
+    ]
     assert client.requests[0]["schema"]["properties"]["recommended_provider"]["enum"] == [
         "openalex"
     ]
     assert "semantic_scholar" not in client.requests[0]["prompt"]
     assert result.trace_paths
+
+
+def test_review_exclusion_does_not_force_abstracts_without_policy() -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["candidate_screening"]["missing_abstract_policy"] = "include"
+    plan = {
+        "recommended_provider": "openalex",
+        "main_search_string": "early detection",
+        "filters": {
+            "year_from": None,
+            "year_to": None,
+            "publication_types": [],
+            "open_access_only": None,
+            "has_abstract": None,
+            "has_full_text": None,
+            "language": None,
+            "venue_or_source": [],
+            "field_or_domain": [],
+        },
+        "provider_specific_plan": {
+            "provider": "openalex",
+            "query": "early detection",
+            "filters": [],
+            "sort": None,
+            "max_results_recommendation": 5,
+        },
+    }
+
+    warnings = enforce_topic_plan_constraints(plan, contract)
+
+    assert plan["filters"]["has_abstract"] is None
+    assert plan["filters"]["exclude_reviews"] is True
+    assert plan["provider_specific_plan"]["filters"] == [
+        {
+            "name": "type",
+            "value": "!review",
+            "reason": (
+                "The topic contract excludes review/background papers, "
+                "so OpenAlex review works are filtered before screening."
+            ),
+        }
+    ]
+    assert warnings == [
+        "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works.",
+        "Added provider_specific_plan type:!review filter for review exclusion policy.",
+    ]
 
 
 def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
@@ -159,6 +236,77 @@ def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
     assert result.row_counts["rules"] == 1
     assert json.loads(output_path.read_text(encoding="utf-8"))["rules_count"] == 1
     assert '"review_status": "needs_decision"' in client.requests[0]["prompt"]
+
+
+def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    output_path = tmp_path / "rules.json"
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "early_detection_subtype",
+                "required": False,
+                "allowed_values": [
+                    {"value": "mci_detection"},
+                    {"value": "mixed_or_unclear"},
+                ],
+            },
+            {
+                "category_id": "evidence_modality_family",
+                "required": False,
+                "allowed_values": [
+                    {"value": "neuroimaging"},
+                    {"value": "unclear"},
+                ],
+            },
+        ],
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    client = StaticJSONClient(
+        [
+            {
+                "rules": [
+                    {
+                        "category_id": "early_detection_subtype",
+                        "selection": "single",
+                        "required": False,
+                        "fallback_value": "unclear",
+                        "reason": "Model picked a generic fallback.",
+                    },
+                    {
+                        "category_id": "evidence_modality_family",
+                        "selection": "multi",
+                        "required": False,
+                        "fallback_value": "not_reported",
+                        "reason": "Model picked a missing-information fallback.",
+                    },
+                ]
+            }
+        ]
+    )
+
+    result = run_generate_rules(
+        config_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    rules = {rule["category_id"]: rule for rule in payload["rules"]}
+    assert rules["early_detection_subtype"]["fallback_value"] == "mixed_or_unclear"
+    assert rules["evidence_modality_family"]["fallback_value"] == "unclear"
+    assert result.warnings == [
+        "Repaired invalid fallback_value for early_detection_subtype: unclear -> mixed_or_unclear",
+        "Repaired invalid fallback_value for evidence_modality_family: not_reported -> unclear",
+    ]
+    assert '"early_detection_subtype": "mixed_or_unclear"' in client.requests[0][
+        "prompt"
+    ]
+    assert '"evidence_modality_family": "unclear"' in client.requests[0]["prompt"]
 
 
 def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None:
