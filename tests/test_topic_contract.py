@@ -29,6 +29,7 @@ def test_early_detection_topic_contract_loads() -> None:
 
     assert contract["topic_id"] == "early_detection_ad"
     assert contract["collection"]["allowed_providers"] == ["openalex"]
+    assert contract["collection"]["exclude_openalex_review_type"] is True
     assert contract["rule_based_screening"]["exclude_wins"] is True
     assert "mild cognitive impairment" in contract["rule_based_screening"][
         "include_terms"

@@ -129,6 +129,93 @@ def validate_plan(plan: dict[str, object], allowed_providers: list[str]) -> None
         raise ValueError("provider_specific_plan.provider must match recommended_provider.")
 
 
+def enforce_topic_plan_constraints(
+    plan: dict[str, object],
+    topic_contract: dict[str, Any],
+) -> list[str]:
+    """Apply deterministic collection constraints from the topic contract."""
+    warnings = []
+    collection = collection_from_contract(topic_contract)
+    candidate_screening = topic_contract.get("candidate_screening", {})
+    missing_abstract_policy = ""
+    if isinstance(candidate_screening, dict):
+        missing_abstract_policy = str(
+            candidate_screening.get("missing_abstract_policy") or ""
+        )
+
+    exclude_review_type = collection.get("exclude_openalex_review_type") is True
+
+    if missing_abstract_policy != "exclude" and not exclude_review_type:
+        return warnings
+
+    filters = plan.setdefault("filters", {})
+    if not isinstance(filters, dict):
+        raise ValueError("Plan filters must be an object.")
+
+    if missing_abstract_policy == "exclude" and filters.get("has_abstract") is not True:
+        filters["has_abstract"] = True
+        warnings.append(
+            "Set filters.has_abstract=true because topic contract excludes missing abstracts."
+        )
+
+    provider_plan = plan.get("provider_specific_plan")
+    if not isinstance(provider_plan, dict):
+        raise ValueError("Plan must contain provider_specific_plan.")
+
+    provider_filters = provider_plan.setdefault("filters", [])
+    if not isinstance(provider_filters, list):
+        raise ValueError("provider_specific_plan.filters must be a list.")
+
+    has_provider_filter = any(
+        isinstance(item, dict) and item.get("name") == "has_abstract"
+        for item in provider_filters
+    )
+    if missing_abstract_policy == "exclude" and not has_provider_filter:
+        provider_filters.append(
+            {
+                "name": "has_abstract",
+                "value": "true",
+                "reason": (
+                    "The topic contract excludes candidates without abstracts, "
+                    "so the provider query should retrieve works with abstracts."
+                ),
+            }
+        )
+        warnings.append(
+            "Added provider_specific_plan has_abstract filter for screening policy."
+        )
+
+    if exclude_review_type:
+        if filters.get("exclude_reviews") is not True:
+            filters["exclude_reviews"] = True
+            warnings.append(
+                "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works."
+            )
+
+        has_type_exclusion = any(
+            isinstance(item, dict)
+            and item.get("name") == "type"
+            and item.get("value") == "!review"
+            for item in provider_filters
+        )
+        if not has_type_exclusion:
+            provider_filters.append(
+                {
+                    "name": "type",
+                    "value": "!review",
+                    "reason": (
+                        "The topic contract excludes review/background papers, "
+                        "so OpenAlex review works are filtered before screening."
+                    ),
+                }
+            )
+            warnings.append(
+                "Added provider_specific_plan type:!review filter for review exclusion policy."
+            )
+
+    return warnings
+
+
 def call_llm(
     topic_description: str,
     max_results: int | None,
@@ -174,12 +261,15 @@ def run(
         client or OpenAIResponsesClient(),
         trace_writer,
     )
+    warnings = enforce_topic_plan_constraints(plan, topic_contract)
+    validate_plan(plan, provider_names(providers))
     write_json(output_path, plan)
     return StepResult(
         step_name=STEP.name,
         inputs={"topic_contract_yaml": topic_contract_path},
         outputs={"search_plan_json": output_path},
         trace_paths=trace_paths,
+        warnings=warnings,
         metadata={
             "recommended_provider": plan["recommended_provider"],
             "main_search_string": plan["main_search_string"],
