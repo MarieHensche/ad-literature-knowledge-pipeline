@@ -44,6 +44,7 @@ inputs/full_text/
 outputs/
 reports/generated/
 data/processed/example_*
+runs/
 # Logs and temp
 *.log
 tmp/
