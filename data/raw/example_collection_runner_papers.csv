@@ -1,0 +1,4 @@
+paper_id,title,year,doi,abstract,authors,venue,url,source,full_text_path,notes
+json_001,Machine Learning for Early Detection of Alzheimer's Disease,2024,10.0000/example1,This paper studies early detection of Alzheimer's disease using machine learning and neuroimaging data.,Example Author,Example Conference,https://example.com/paper1,json_metadata,,json_row=1
+json_002,Speech Classification for Mild Cognitive Impairment,2022,,This paper studies speech-based classification for mild cognitive impairment screening.,Second Author,Example Journal,,json_metadata,,json_row=2
+json_003,Drug Discovery for Alzheimer's Disease,2023,,This paper studies computational drug discovery for Alzheimer's disease treatment.,Third Author,Example Journal,,json_metadata,,json_row=3
