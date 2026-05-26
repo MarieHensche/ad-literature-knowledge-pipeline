@@ -1,0 +1,174 @@
+topic_id: ai_in_education
+
+research_topic:
+  title: AI use in education and its impact on learning
+  description: >
+    Collect and tag research studies investigating how artificial intelligence
+    is used for educational purposes in formal learning settings. Include
+    school, classroom, course-based, teacher-supported, and student-facing uses
+    of AI across primary, secondary, vocational, and higher-education contexts
+    when the study addresses pedagogy, instructional practice, learning support,
+    or effects on learners. Focus on AI use cases and impacts on learning
+    outcomes, engagement, motivation, behavior, educational experiences, and
+    teacher-student or instructor-student interactions. Exclude studies
+    primarily focused on the technical design, engineering, architecture, or
+    implementation details of AI systems rather than their educational use and
+    effects.
+
+scope:
+  include_criteria:
+    - Studies on AI use during teaching, learning, studying, or course activities
+    - Studies evaluating educational applications of AI in formal education settings
+    - Studies examining impacts on learning outcomes, engagement, motivation, participation, or student experience
+    - Studies on teacher-supported or instructor-supported use of AI tools
+    - Studies on AI-supported personalization, tutoring, feedback, collaborative learning, or instructional support
+    - Empirical studies, systematic reviews, meta-analyses, and educational interventions
+    - Studies involving students, teachers, instructors, or learners in formal educational settings
+
+  exclude_criteria:
+    - Studies outside formal education or learner-support contexts
+
+  boundary_rules:
+    - Include studies where AI is used as a learning support tool during instruction
+    - Include studies where AI acts as tutor, assistant, feedback system, or personalized learning support
+    - Include studies evaluating teacher-guided, instructor-guided, or student-facing use of generative AI tools
+    - Prefer studies evaluating learning effects and pedagogical implications over technological descriptions
+
+rule_based_screening:
+  include_terms:
+    - artificial intelligence in education
+    - AI in classroom
+    - classroom AI
+    - generative AI
+    - ChatGPT in education
+    - AI in higher education
+    - AI in teaching and learning
+    - AI in schools
+    - AI in education
+    - AI tutoring
+    - intelligent tutoring system
+    - adaptive learning
+    - personalized learning
+    - AI-assisted learning
+    - AI-supported teaching
+    - AI-supported learning
+    - student learning outcomes
+    - classroom intervention
+    - educational intervention
+    - educational AI
+    - student engagement
+    - learning impact
+
+  exclude_terms:
+    - robotics engineering
+
+  exclude_wins: true
+
+candidate_screening:
+  missing_abstract_policy: exclude
+  borderline_policy: include
+  human_review_policy: exclude
+  review_policy: include reviews only when useful for this topic
+
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: true
+    prefer_mixed_or_unclear_when_unclear_missing: true
+    missing_information_value: not_reported
+    knowledge_confidence: very_low
+    review_status: needs_decision
+
+  categories:
+
+    main_topic_category:
+      values:
+        - intelligent_tutoring
+        - personalized_learning
+        - adaptive_learning
+        - classroom_assistant
+        - automated_feedback
+        - collaborative_learning
+        - content_generation
+        - assessment_support
+        - problem_solving_support
+        - mixed_or_unclear
+        - unclear
+
+    learning_impact:
+      values:
+        - positive
+        - negative
+        - mixed
+        - no_effect
+        - unclear
+
+    research_target:
+      values:
+        - academic_performance
+        - engagement
+        - motivation
+        - critical_thinking
+        - creativity
+        - collaboration
+        - participation
+        - learning_experience
+        - behavior
+        - mixed_or_unclear
+        - unclear
+
+    education_level:
+      values:
+        - elementary
+        - middle_school
+        - high_school
+        - primary_secondary_mixed
+        - vocational
+        - higher_education
+        - multiple_or_general_education
+        - unclear
+
+    ai_role:
+      values:
+        - tutor
+        - assistant
+        - feedback_provider
+        - facilitator
+        - content_support
+        - personalized_support
+        - mixed_or_unclear
+        - unclear
+
+    study_type:
+      values:
+        - experimental
+        - observational
+        - intervention
+        - qualitative
+        - mixed_methods
+        - systematic_review
+        - meta_analysis
+        - unclear
+
+    knowledge_confidence:
+      values:
+        - very_low
+        - low
+        - medium
+        - high
+
+    review_status:
+      required: true
+      values:
+        - ai_tagged
+        - human_reviewed
+        - needs_decision
+        - full_text_needed
+        - excluded_from_scope
+
+collection:
+  allowed_providers:
+    - openalex
+
+  preferred_provider: openalex
+  max_results_default: 25
+  exclude_openalex_review_type: true
