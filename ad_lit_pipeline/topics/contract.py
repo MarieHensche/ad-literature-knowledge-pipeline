@@ -6,7 +6,7 @@ from typing import Any
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
 
 
-DEFAULT_TOPIC_CONTRACT_PATH = Path("configs/topics/early_detection_ad.yaml")
+REQUIRED_TOPIC_CATEGORY_IDS = ("main_topic_category", "research_target")
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -25,6 +25,22 @@ def require_non_empty_string(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} must be a non-empty string.")
     return value.strip()
+
+
+def validate_required_topic_categories(categories: dict[str, Any]) -> None:
+    """Require generic category ids used across topic contracts and Mantis export."""
+    missing = [
+        category_id
+        for category_id in REQUIRED_TOPIC_CATEGORY_IDS
+        if category_id not in categories
+    ]
+    if missing:
+        required = ", ".join(REQUIRED_TOPIC_CATEGORY_IDS)
+        missing_text = ", ".join(missing)
+        raise ValueError(
+            "tagging.categories must include the generic topic categories "
+            f"{required}. Missing: {missing_text}"
+        )
 
 
 def validate_topic_contract(contract: dict[str, Any]) -> None:
@@ -62,13 +78,16 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
         contract.get("candidate_screening"), "candidate_screening"
     )
     for key in ["missing_abstract_policy", "borderline_policy", "human_review_policy"]:
-        require_non_empty_string(candidate_screening.get(key), f"candidate_screening.{key}")
+        require_non_empty_string(
+            candidate_screening.get(key), f"candidate_screening.{key}"
+        )
 
     tagging = require_mapping(contract.get("tagging"), "tagging")
     require_mapping(tagging.get("fallback_policy"), "tagging.fallback_policy")
     categories = require_mapping(tagging.get("categories"), "tagging.categories")
     if not categories:
         raise ValueError("tagging.categories must not be empty.")
+    validate_required_topic_categories(categories)
     for category_id, category in categories.items():
         require_non_empty_string(category_id, "tagging category id")
         category_map = require_mapping(category, f"tagging.categories.{category_id}")
@@ -88,7 +107,9 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
     )
     if not allowed_providers:
         raise ValueError("collection.allowed_providers must not be empty.")
-    if not all(isinstance(provider, str) and provider.strip() for provider in allowed_providers):
+    if not all(
+        isinstance(provider, str) and provider.strip() for provider in allowed_providers
+    ):
         raise ValueError("collection.allowed_providers must contain strings.")
     preferred_provider = require_non_empty_string(
         collection.get("preferred_provider"), "collection.preferred_provider"

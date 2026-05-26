@@ -31,7 +31,7 @@ fields:
     required: false
     description: Free-text statement of the early detection problem.
 
-  primary_clinical_target:
+  research_target:
     type: categorical
     required: false
     values:
@@ -44,7 +44,7 @@ fields:
       - mixed_or_unclear
       - unclear
 
-  early_detection_subtype:
+  main_topic_category:
     type: categorical
     required: false
     values:

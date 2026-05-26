@@ -11,6 +11,7 @@ from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.topics.contract import (
     load_topic_contract,
     tagging_config_from_contract,
+    validate_required_topic_categories,
 )
 
 
@@ -80,6 +81,9 @@ def load_config(config_path: Path) -> dict[str, object]:
 def normalize_config(config: dict[str, object]) -> dict[str, object]:
     topic = config["research_topic"]
     categories = config["categories"]
+    if not isinstance(categories, dict):
+        raise ValueError("Tagging config must contain categories.")
+    validate_required_topic_categories(categories)
 
     normalized_topic = {
         "title": clean_text(topic.get("title")),
@@ -163,7 +167,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Normalize tagging config.")
     parser.add_argument(
         "--config",
-        default="configs/early_detection_tagging_config.yaml",
+        default=None,
         help="Input YAML tagging config.",
     )
     parser.add_argument(

@@ -75,6 +75,8 @@ def test_screen_scope_preserves_metadata_and_appends_contract_fields(
         str(normalized),
         "--output",
         str(screened),
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
     )
 
     with screened.open(newline="", encoding="utf-8") as handle:
@@ -376,8 +378,8 @@ def test_export_mantis_ready_uses_claim_and_first_category(tmp_path: Path) -> No
                 "year": "2024",
                 "doi": "10.123/example",
                 "main_knowledge_claim": "The paper detects early AD.",
-                "early_detection_subtype": "mci_detection; early_ad_detection",
-                "primary_clinical_target": "mci",
+                "main_topic_category": "mci_detection; early_ad_detection",
+                "research_target": "mci",
                 "review_status": "ai_tagged",
             }
         ],
@@ -387,8 +389,8 @@ def test_export_mantis_ready_uses_claim_and_first_category(tmp_path: Path) -> No
             "year",
             "doi",
             "main_knowledge_claim",
-            "early_detection_subtype",
-            "primary_clinical_target",
+            "main_topic_category",
+            "research_target",
             "review_status",
         ],
     )

@@ -5,9 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from ad_lit_pipeline.topics.contract import (
     load_topic_contract,
     tagging_config_from_contract,
+    validate_topic_contract,
 )
 
 
@@ -28,6 +31,8 @@ def test_early_detection_topic_contract_loads() -> None:
     contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
 
     assert contract["topic_id"] == "early_detection_ad"
+    assert "main_topic_category" in contract["tagging"]["categories"]
+    assert "research_target" in contract["tagging"]["categories"]
     assert contract["collection"]["allowed_providers"] == ["openalex"]
     assert contract["collection"]["exclude_openalex_review_type"] is True
     assert contract["rule_based_screening"]["exclude_wins"] is True
@@ -36,12 +41,22 @@ def test_early_detection_topic_contract_loads() -> None:
     ]
 
 
+def test_non_ad_topic_contract_loads() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+
+    assert contract["topic_id"] == "ai_in_education"
+    assert "main_topic_category" in contract["tagging"]["categories"]
+    assert "research_target" in contract["tagging"]["categories"]
+
+
 def test_topic_contract_converts_to_legacy_tagging_config() -> None:
     contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
     config = tagging_config_from_contract(contract)
 
     assert config["research_topic"]["title"].startswith("Early detection")
     assert len(config["categories"]) == 12
+    assert "main_topic_category" in config["categories"]
+    assert "research_target" in config["categories"]
     assert config["categories"]["review_status"]["required"] is True
     assert config["categories"]["review_status"]["values"] == [
         "ai_tagged",
@@ -73,3 +88,11 @@ def test_normalize_tagging_config_accepts_topic_contract(tmp_path: Path) -> None
         if category["category_id"] == "review_status"
     ][0]
     assert review_status["required"] is True
+
+
+def test_topic_contract_requires_generic_mantis_categories() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    del contract["tagging"]["categories"]["main_topic_category"]
+
+    with pytest.raises(ValueError, match="main_topic_category"):
+        validate_topic_contract(contract)

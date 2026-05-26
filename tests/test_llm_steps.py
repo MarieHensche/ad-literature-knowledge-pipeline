@@ -245,7 +245,7 @@ def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:
         "research_topic": {"title": "Topic", "description": "Description"},
         "categories": [
             {
-                "category_id": "early_detection_subtype",
+                "category_id": "main_topic_category",
                 "required": False,
                 "allowed_values": [
                     {"value": "mci_detection"},
@@ -268,7 +268,7 @@ def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:
             {
                 "rules": [
                     {
-                        "category_id": "early_detection_subtype",
+                        "category_id": "main_topic_category",
                         "selection": "single",
                         "required": False,
                         "fallback_value": "unclear",
@@ -297,13 +297,13 @@ def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     rules = {rule["category_id"]: rule for rule in payload["rules"]}
-    assert rules["early_detection_subtype"]["fallback_value"] == "mixed_or_unclear"
+    assert rules["main_topic_category"]["fallback_value"] == "mixed_or_unclear"
     assert rules["evidence_modality_family"]["fallback_value"] == "unclear"
     assert result.warnings == [
-        "Repaired invalid fallback_value for early_detection_subtype: unclear -> mixed_or_unclear",
+        "Repaired invalid fallback_value for main_topic_category: unclear -> mixed_or_unclear",
         "Repaired invalid fallback_value for evidence_modality_family: not_reported -> unclear",
     ]
-    assert '"early_detection_subtype": "mixed_or_unclear"' in client.requests[0][
+    assert '"main_topic_category": "mixed_or_unclear"' in client.requests[0][
         "prompt"
     ]
     assert '"evidence_modality_family": "unclear"' in client.requests[0]["prompt"]

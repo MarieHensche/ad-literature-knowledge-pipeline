@@ -60,7 +60,7 @@ tagging:
     knowledge_confidence: very_low
     review_status: needs_decision
   categories:
-    primary_clinical_target:
+    research_target:
       values:
         - ad
         - mci
@@ -71,7 +71,7 @@ tagging:
         - mixed_or_unclear
         - unclear
 
-    early_detection_subtype:
+    main_topic_category:
       values:
         - early_ad_detection
         - mci_detection

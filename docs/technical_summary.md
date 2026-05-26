@@ -1,8 +1,7 @@
 # Technical Summary
 
-This project is a refactored research pipeline for converting
-Alzheimer-related literature metadata into structured knowledge tags and a
-Mantis-ready CSV.
+This project is a refactored research pipeline for converting literature
+metadata into structured knowledge tags and a Mantis-ready CSV.
 
 The script entry points remain stable for existing workflows, but the reusable
 implementation now lives under `ad_lit_pipeline/`.
@@ -112,8 +111,9 @@ The original script names are kept as wrappers or direct CLIs:
 
 ## Topic Contract
 
-`configs/topics/early_detection_ad.yaml` is the current source of truth for the
-default topic. It includes:
+Topic contracts in `configs/topics/` are the source of truth for each pipeline
+run. Each orchestrated run must pass an explicit `--topic-contract`. A contract
+includes:
 
 - research topic title and description
 - include, exclude, and boundary scope criteria
@@ -123,8 +123,12 @@ default topic. It includes:
 - allowed category values
 - enabled collection providers
 
+Every contract must include the generic categories `main_topic_category` and
+`research_target`. The Mantis export uses these fields to populate its core
+`categoric` column without depending on any specific research topic.
+
 The legacy `configs/early_detection_tagging_config.yaml` is still supported by
-`--tagging-config`, but `--topic-contract` should be preferred for new work.
+the direct normalization step, but orchestrated runs require `--topic-contract`.
 
 ## LLM Calls And Tracing
 
@@ -177,8 +181,7 @@ manifest. `--only-step`, `--from-step`, and `--dry-run` are implemented by
 
 - OpenAlex is the only implemented provider in `fetch_candidates`.
 - The Mantis export step requires at least one tagged extraction row.
-- `schemas/early_detection_knowledge_schema.yaml` is still separate from the
-  topic contract and can drift.
+- Legacy schema files remain separate from topic contracts and can drift.
 - Generated files under `data/processed/`, `data/raw/`, and `runs/` should be
   reviewed before committing.
 

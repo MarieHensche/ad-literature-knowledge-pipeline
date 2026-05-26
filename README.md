@@ -1,7 +1,7 @@
-# Alzheimer Literature Knowledge Pipeline
+# Literature Knowledge Pipeline
 
-This repository turns Alzheimer-related literature metadata into structured
-knowledge tags and a Mantis-ready CSV.
+This repository turns research literature metadata into structured knowledge
+tags and a Mantis-ready CSV.
 
 The current refactor keeps the original `scripts/` entry points as compatibility
 wrappers, while the reusable pipeline logic lives in `ad_lit_pipeline/`.
@@ -61,15 +61,18 @@ data/processed/               Normalized, tagged, audited, and exported outputs
 runs/                         Run manifests and LLM traces
 ```
 
-The default topic contract is:
+Example topic contracts live under:
 
 ```text
-configs/topics/early_detection_ad.yaml
+configs/topics/
 ```
 
-It defines the research topic, scope criteria, rule-based screening terms,
-candidate-screening policy, tagging categories, fallback policy, and enabled
-providers.
+Each pipeline run must pass `--topic-contract`. The contract defines the
+research topic, scope criteria, rule-based screening terms, candidate-screening
+policy, tagging categories, fallback policy, and enabled providers. Each
+contract must include the generic categories `main_topic_category` and
+`research_target`; the Mantis export uses them to populate its core
+`categoric` field.
 
 ## Input Format
 
@@ -228,9 +231,9 @@ For architecture details, see `docs/technical_summary.md`.
 ## Current Limits
 
 - OpenAlex is the only implemented collection provider.
-- `--tagging-config` still works for legacy runs, but `--topic-contract` is the
-  preferred source of topic and tagging policy.
+- The orchestrated collection and tagging pipelines require `--topic-contract`.
+  `--tagging-config` is kept for direct legacy config normalization only.
 - If no papers reach LLM tagging, the Mantis export step fails because it
   requires at least one extraction row.
-- `schemas/early_detection_knowledge_schema.yaml` is not generated from the
-  topic contract yet, so schema drift is still possible.
+- Legacy schema files are not generated from topic contracts yet, so schema
+  drift is still possible.

@@ -78,7 +78,7 @@ def build_step_functions(
     trace_dir: Path,
 ) -> dict[str, object]:
     artifacts = main_pipeline_artifacts(args.collection)
-    topic_contract_path = Path(args.topic_contract) if args.topic_contract else None
+    topic_contract_path = Path(args.topic_contract)
     config_path = Path(args.tagging_config) if args.tagging_config else None
     model = args.model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
@@ -87,7 +87,7 @@ def build_step_functions(
         "screen_scope": lambda: rule_based_scope.run(
             artifacts.normalized_papers_csv,
             artifacts.scope_screened_csv,
-            topic_contract_path or rule_based_scope.DEFAULT_TOPIC_CONTRACT_PATH,
+            topic_contract_path,
         ),
         "normalize_tagging_config": lambda: normalize_config.run(
             artifacts.tagging_config_normalized_json,
@@ -124,8 +124,8 @@ def build_step_functions(
 
 
 def run_full_pipeline(args: argparse.Namespace) -> None:
-    if not args.tagging_config and not args.topic_contract:
-        raise ValueError("run requires either --tagging-config or --topic-contract")
+    if not args.topic_contract:
+        raise ValueError("run requires --topic-contract")
 
     if args.resume:
         if not args.run_id:
@@ -138,7 +138,7 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
             return
         args.from_step = resume_from
 
-    topic_contract_path = Path(args.topic_contract) if args.topic_contract else None
+    topic_contract_path = Path(args.topic_contract)
     model = args.model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     manifest = ManifestRecorder.create(
         collection=args.collection,
@@ -179,12 +179,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--tagging-config",
         default=None,
-        help="Input YAML file with research topic and tag categories.",
+        help="Legacy YAML tagging config option; orchestrated runs use --topic-contract.",
     )
     run_parser.add_argument(
         "--topic-contract",
-        default=None,
-        help="Input YAML topic contract. Overrides --tagging-config.",
+        required=True,
+        help="Input YAML topic contract for scope and tagging policy.",
     )
     run_parser.add_argument(
         "--collection",
