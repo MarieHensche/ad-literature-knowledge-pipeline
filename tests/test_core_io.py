@@ -20,6 +20,7 @@ def test_artifact_paths_match_existing_conventions() -> None:
     main = main_pipeline_artifacts("example")
     collection = collection_artifacts("example")
 
+    assert main.raw_papers_csv == Path("data/raw/example_papers.csv")
     assert main.normalized_papers_csv == Path(
         "data/processed/example_papers_normalized.csv"
     )
