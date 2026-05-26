@@ -8,6 +8,7 @@ from pathlib import Path
 class MainPipelineArtifacts:
     """Derived artifact paths for the main tagging pipeline."""
 
+    raw_papers_csv: Path
     normalized_papers_csv: Path
     scope_screened_csv: Path
     tagging_config_normalized_json: Path
@@ -49,6 +50,7 @@ def main_pipeline_artifacts(
 ) -> MainPipelineArtifacts:
     """Build all conventional main-pipeline artifact paths."""
     return MainPipelineArtifacts(
+        raw_papers_csv=raw_path(collection, "papers.csv", base_dir),
         normalized_papers_csv=processed_path(
             collection, "papers_normalized.csv", base_dir
         ),
@@ -83,4 +85,3 @@ def collection_artifacts(
         ),
         papers_csv=raw_path(collection, "papers.csv", base_dir),
     )
-

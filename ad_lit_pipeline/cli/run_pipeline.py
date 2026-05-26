@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Callable
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -9,10 +10,56 @@ from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
 from ad_lit_pipeline.core.registry import MAIN_PIPELINE
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
+from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
+from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
 from ad_lit_pipeline.steps.metadata import normalize
 from ad_lit_pipeline.steps.screening import rule_based_scope
 from ad_lit_pipeline.steps.tagging import audit, generate_rules, normalize_config, tag_papers
+
+
+ImporterRun = Callable[[Path, Path], StepResult]
+
+IMPORTERS_BY_SUFFIX: dict[str, ImporterRun] = {
+    ".bib": bibtex.run,
+    ".bibtex": bibtex.run,
+    ".json": json_metadata.run,
+    ".jsonl": json_metadata.run,
+    ".ris": ris.run,
+}
+
+SUPPORTED_PAPERS_FORMATS = [".csv", *sorted(IMPORTERS_BY_SUFFIX)]
+
+
+def prepare_papers_csv(input_path: Path, imported_csv_path: Path) -> Path:
+    suffix = input_path.suffix.lower()
+    if suffix == ".csv":
+        return input_path
+
+    importer = IMPORTERS_BY_SUFFIX.get(suffix)
+    if importer is None:
+        supported = ", ".join(SUPPORTED_PAPERS_FORMATS)
+        raise ValueError(
+            f"Unsupported --papers format: {input_path.suffix or '<none>'}. "
+            f"Supported formats: {supported}"
+        )
+
+    result = importer(input_path, imported_csv_path)
+    print(
+        f"Imported {result.row_counts['papers']} paper records from "
+        f"{input_path} to {imported_csv_path}"
+    )
+    return imported_csv_path
+
+
+def run_normalize_metadata(args: argparse.Namespace) -> StepResult:
+    artifacts = main_pipeline_artifacts(args.collection)
+    papers_csv = prepare_papers_csv(Path(args.papers), artifacts.raw_papers_csv)
+    result = normalize.run(papers_csv, artifacts.normalized_papers_csv)
+    result.metadata["original_papers_input"] = str(Path(args.papers))
+    if papers_csv != Path(args.papers):
+        result.metadata["imported_papers_csv"] = str(papers_csv)
+    return result
 
 
 def explain(collection: str) -> None:
@@ -36,9 +83,7 @@ def build_step_functions(
     model = args.model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     return {
-        "normalize_metadata": lambda: normalize.run(
-            Path(args.papers), artifacts.normalized_papers_csv
-        ),
+        "normalize_metadata": lambda: run_normalize_metadata(args),
         "screen_scope": lambda: rule_based_scope.run(
             artifacts.normalized_papers_csv,
             artifacts.scope_screened_csv,
@@ -126,7 +171,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser("run", help="Run the full LLM tagging pipeline.")
-    run_parser.add_argument("--papers", required=True, help="Input paper metadata CSV.")
+    run_parser.add_argument(
+        "--papers",
+        required=True,
+        help="Input paper metadata file (.csv, .bib, .bibtex, .json, .jsonl, or .ris).",
+    )
     run_parser.add_argument(
         "--tagging-config",
         default=None,

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
 import subprocess
 import sys
 from pathlib import Path
+
+from ad_lit_pipeline.cli.run_pipeline import prepare_papers_csv
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +19,11 @@ def run_script(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
     )
+
+
+def read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
 
 
 def test_run_pipeline_explain_lists_steps() -> None:
@@ -45,6 +53,35 @@ def test_run_pipeline_dry_run_selects_only_step() -> None:
 
     assert "Would run step: normalize_metadata" in result.stdout
     assert "Would run step: screen_scope" not in result.stdout
+
+
+def test_run_pipeline_prepares_supported_non_csv_papers(tmp_path: Path) -> None:
+    inputs = [
+        ROOT / "data/raw/example_papers.bib",
+        ROOT / "data/raw/example_papers.jsonl",
+        ROOT / "data/raw/example_papers.ris",
+    ]
+
+    for input_path in inputs:
+        output = tmp_path / f"{input_path.suffix[1:]}_papers.csv"
+
+        prepared = prepare_papers_csv(input_path, output)
+
+        rows = read_csv(prepared)
+        assert prepared == output
+        assert len(rows) == 3
+        assert rows[0]["paper_id"]
+        assert rows[0]["title"]
+
+
+def test_run_pipeline_leaves_csv_papers_unchanged(tmp_path: Path) -> None:
+    input_path = ROOT / "data/raw/example_papers.csv"
+    output = tmp_path / "should_not_be_written.csv"
+
+    prepared = prepare_papers_csv(input_path, output)
+
+    assert prepared == input_path
+    assert not output.exists()
 
 
 def test_run_collection_explain_lists_steps() -> None:
