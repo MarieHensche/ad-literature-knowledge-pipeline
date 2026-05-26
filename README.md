@@ -1,91 +1,132 @@
 # Alzheimer Literature Knowledge Pipeline
 
-This project helps turn Alzheimer-related research literature into structured data that can be used in Mantis.
+This repository turns Alzheimer-related literature metadata into structured
+knowledge tags and a Mantis-ready CSV.
 
-The pipeline supports two main workflows:
+The current refactor keeps the original `scripts/` entry points as compatibility
+wrappers, while the reusable pipeline logic lives in `ad_lit_pipeline/`.
+
+## What It Does
+
+The pipeline supports two workflows:
 
 1. Start with an existing paper collection.
-2. Start with only a topic description and let the system collect candidate papers automatically.
+2. Start with a topic description and collect candidate papers automatically.
 
-## What The Pipeline Does
+It can:
 
-The pipeline can:
+- import paper metadata from CSV, BibTeX, JSON, JSONL, or RIS
+- plan and run OpenAlex candidate collection from a topic description
+- deduplicate candidate papers
+- screen papers against a topic contract
+- generate ontology tagging rules
+- tag included papers with an LLM
+- audit extracted tags
+- export a Mantis-ready CSV
 
-- import paper metadata from common formats
-- collect papers from a digital library
-- remove duplicate papers
-- screen papers for relevance
-- assign structured knowledge tags
-- audit the tagged results
-- export a Mantis-ready CSV file
+## Setup
 
-## Main Workflows
-
-### Existing Paper Collection
-
-Use this workflow when you already have papers in a file such as CSV, BibTeX, JSON/JSONL, or RIS.
-
-The input is converted into the pipeline's standard paper table, then processed into a Mantis-ready output file.
-
-### Automated Paper Collection
-
-Use this workflow when you only have a topic description.
-
-The system creates a search plan, collects candidate papers, screens them, converts relevant papers into the standard input format, and then runs the normal tagging pipeline.
-
-## Main Outputs
-
-The most important output is:
-
-```text
-*_mantis_ready.csv
-```
-
-This file can be used for creating or updating a Mantis map.
-
-The pipeline also produces audit files and intermediate files that help inspect what happened during collection, screening, and tagging.
-
-## Important Files
-
-Main scripts:
-
-```text
-scripts/run_pipeline.py      # Run the knowledge-tagging pipeline
-scripts/run_collection.py    # Collect papers automatically from a topic description
-```
-
-Main config files:
-
-```text
-configs/early_detection_tagging_config.yaml
-configs/topics/*.txt
-```
-
-Main input/output locations:
-
-```text
-data/raw/          # Paper inputs and collected paper CSVs
-data/processed/    # Final Mantis-ready CSVs and audit files
-```
-
-## Most Important Commands
-
-Set up the environment:
+Create and activate a local environment:
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Run the pipeline when you already have a paper CSV:
+Configure OpenAI credentials for LLM steps:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```text
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Non-LLM commands, `explain`, and `--dry-run` do not require an API key.
+
+## Main Files
+
+```text
+scripts/run_pipeline.py       Main tagging pipeline CLI
+scripts/run_collection.py     Automated collection CLI
+ad_lit_pipeline/              Importable pipeline package
+configs/topics/               Topic contracts
+data/raw/                     Raw paper inputs and collected candidates
+data/processed/               Normalized, tagged, audited, and exported outputs
+runs/                         Run manifests and LLM traces
+```
+
+The default topic contract is:
+
+```text
+configs/topics/early_detection_ad.yaml
+```
+
+It defines the research topic, scope criteria, rule-based screening terms,
+candidate-screening policy, tagging categories, fallback policy, and enabled
+providers.
+
+## Input Format
+
+The main pipeline accepts `.csv`, `.bib`, `.bibtex`, `.json`, `.jsonl`, and
+`.ris` files through `--papers`.
+
+Canonical CSV inputs should contain one row per paper. Required columns are:
+
+```text
+paper_id
+title
+year
+doi
+abstract
+```
+
+Recommended optional columns are:
+
+```text
+authors
+venue
+url
+source
+full_text_path
+notes
+```
+
+When non-CSV input is provided, the pipeline imports it into the canonical CSV
+shape before normalization.
+
+## Run Existing Papers
+
+Use this when you already have paper metadata:
 
 ```bash
 python scripts/run_pipeline.py run \
   --papers data/raw/example_papers.csv \
-  --tagging-config configs/early_detection_tagging_config.yaml \
+  --topic-contract configs/topics/early_detection_ad.yaml \
   --collection example
 ```
 
-Run automated paper collection from a topic description:
+The final export is written to:
+
+```text
+data/processed/example_mantis_ready.csv
+```
+
+The audit file is written to:
+
+```text
+data/processed/example_extraction_audit.csv
+```
+
+## Run Automated Collection
+
+Use this when you have a topic description and want the pipeline to collect
+candidate papers first:
 
 ```bash
 TOPIC="$(cat configs/topics/ad_early_detection_test_topic.txt)"
@@ -94,45 +135,102 @@ python scripts/run_collection.py run \
   --topic "$TOPIC" \
   --collection ad_early_detection_test \
   --max-results 25 \
-  --model gpt-4o-mini
+  --model gpt-4o-mini \
+  --topic-contract configs/topics/early_detection_ad.yaml
 ```
 
-Run the tagging pipeline on automatically collected papers:
+This writes a canonical paper CSV:
+
+```text
+data/raw/ad_early_detection_test_papers.csv
+```
+
+Then run the main tagging pipeline:
 
 ```bash
 python scripts/run_pipeline.py run \
   --papers data/raw/ad_early_detection_test_papers.csv \
-  --tagging-config configs/ad_early_detection_test_tagging_config.yaml \
+  --topic-contract configs/topics/early_detection_ad.yaml \
   --collection ad_early_detection_test
 ```
 
-Check the final Mantis-ready output:
+## Inspect Or Resume Runs
 
-```text
-data/processed/ad_early_detection_test_mantis_ready.csv
+List pipeline steps and conventional output paths:
+
+```bash
+python scripts/run_pipeline.py explain --collection example
+python scripts/run_collection.py explain --collection example
 ```
 
-## Current Status
+Preview selected steps without executing them:
 
-The project is a working research pipeline. It is designed to support iterative thesis work, not yet to be a fully polished production system.
+```bash
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example \
+  --only-step normalize_metadata \
+  --dry-run
+```
 
-Current automated paper collection uses OpenAlex. Other providers can be added later.
+Run one step or resume from a step:
 
-## Typical Use
+```bash
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example \
+  --only-step normalize_metadata
 
-1. Prepare or collect papers.
-2. Convert papers into the standard CSV format.
-3. Run the tagging pipeline.
-4. Inspect the audit output.
-5. Use the Mantis-ready CSV.
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example \
+  --from-step tag_papers
+```
 
-## Important Notes
+Resume a failed run from its manifest:
 
-- Topic descriptions define what papers should be collected.
-- Tagging configs define what labels should be assigned.
-- Generated files should usually not be committed.
-- Reusable scripts, configs, and topic files can be committed.
+```bash
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example \
+  --run-id 20260525T120000Z-example \
+  --resume
+```
 
-## Future Improvements
+Each run writes:
 
-Possible next steps include adding more digital-library providers, improving screening, reducing repeated work across runs, and adding more documentation and tests.
+```text
+runs/<run_id>/manifest.json
+runs/<run_id>/traces/
+```
+
+The manifest records step inputs, outputs, row counts, warnings, errors, and
+trace paths. LLM traces include rendered prompts, response schemas, raw
+responses, parsed JSON, and metadata.
+
+## Development
+
+Run tests with:
+
+```bash
+pytest
+```
+
+Agent and contributor coding rules live in `AGENT.md`. The short
+Codex-discovery bridge is `AGENTS.md`.
+
+For architecture details, see `docs/technical_summary.md`.
+
+## Current Limits
+
+- OpenAlex is the only implemented collection provider.
+- `--tagging-config` still works for legacy runs, but `--topic-contract` is the
+  preferred source of topic and tagging policy.
+- If no papers reach LLM tagging, the Mantis export step fails because it
+  requires at least one extraction row.
+- `schemas/early_detection_knowledge_schema.yaml` is not generated from the
+  topic contract yet, so schema drift is still possible.
