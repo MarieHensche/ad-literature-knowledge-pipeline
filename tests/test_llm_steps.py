@@ -7,6 +7,7 @@ from pathlib import Path
 from ad_lit_pipeline.llm.client import StaticJSONClient
 from ad_lit_pipeline.steps.collection.plan_search import (
     enforce_topic_plan_constraints,
+    ensure_search_queries,
     run as run_plan_search,
 )
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
@@ -39,7 +40,13 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
                 "provider_reason": "Supported provider.",
                 "search_goal": "Find papers.",
                 "main_search_string": "early detection Alzheimer's",
-                "alternate_search_strings": [],
+                "alternate_search_strings": ["MCI screening"],
+                "search_queries": [
+                    {
+                        "query": "early detection Alzheimer's",
+                        "reason": "Primary topic phrasing.",
+                    }
+                ],
                 "filters": {
                     "year_from": None,
                     "year_to": None,
@@ -79,6 +86,13 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
     assert payload["recommended_provider"] == "openalex"
     assert payload["filters"]["has_abstract"] is True
     assert payload["filters"]["exclude_reviews"] is True
+    assert payload["search_queries"] == [
+        {
+            "query": "early detection Alzheimer's",
+            "reason": "Primary topic phrasing.",
+        },
+        {"query": "MCI screening", "reason": "Alternate planned search string."},
+    ]
     assert payload["provider_specific_plan"]["filters"] == [
         {
             "name": "has_abstract",
@@ -98,6 +112,7 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
         },
     ]
     assert result.warnings == [
+        "Added alternate_search_strings to search_queries.",
         "Set filters.has_abstract=true because topic contract excludes missing abstracts.",
         "Added provider_specific_plan has_abstract filter for screening policy.",
         "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works.",
@@ -108,6 +123,50 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
     ]
     assert "semantic_scholar" not in client.requests[0]["prompt"]
     assert result.trace_paths
+
+
+def test_plan_search_adds_contract_seed_queries() -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["collection"]["search_queries"] = [
+        {
+            "query": "MCI conversion prediction",
+            "reason": "Contract seed query.",
+        }
+    ]
+    plan = {
+        "recommended_provider": "openalex",
+        "main_search_string": "early detection",
+        "alternate_search_strings": [],
+        "provider_specific_plan": {
+            "provider": "openalex",
+            "query": "early detection Alzheimer's",
+            "filters": [],
+            "sort": None,
+            "max_results_recommendation": 5,
+        },
+    }
+
+    warnings = ensure_search_queries(plan, contract)
+
+    assert plan["search_queries"] == [
+        {
+            "query": "early detection Alzheimer's",
+            "reason": "Provider-specific primary query.",
+        },
+        {
+            "query": "early detection",
+            "reason": "Main planned search string.",
+        },
+        {
+            "query": "MCI conversion prediction",
+            "reason": "Contract seed query.",
+        },
+    ]
+    assert warnings == [
+        "Added provider_specific_plan.query to search_queries.",
+        "Added main_search_string to search_queries.",
+        "Added topic-contract search query to search_queries.",
+    ]
 
 
 def test_generate_topic_contract_uses_fake_client_and_validates(

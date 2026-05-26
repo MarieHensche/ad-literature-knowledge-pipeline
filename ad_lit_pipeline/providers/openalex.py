@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from datetime import date
 from typing import Any
@@ -116,17 +117,18 @@ def build_openalex_url(
     page: int,
     per_page: int,
     mailto: str | None,
+    query: str | None = None,
 ) -> str:
     provider_plan = plan.get("provider_specific_plan")
     if not isinstance(provider_plan, dict):
         raise ValueError("Plan must contain provider_specific_plan.")
 
-    query = provider_plan.get("query") or plan.get("main_search_string")
-    if not query:
+    query_text = query or provider_plan.get("query") or plan.get("main_search_string")
+    if not query_text:
         raise ValueError("Plan must contain a query or main_search_string.")
 
     params = {
-        "search": str(query),
+        "search": str(query_text),
         "page": str(page),
         "per-page": str(per_page),
     }
@@ -155,6 +157,10 @@ def candidate_from_work(
     plan: dict[str, object],
     rank: int,
     query_url: str,
+    query: str | None = None,
+    query_index: int | None = None,
+    query_rank: int | None = None,
+    query_reason: str | None = None,
 ) -> dict[str, object]:
     provider_plan = plan.get("provider_specific_plan")
     if not isinstance(provider_plan, dict):
@@ -172,7 +178,12 @@ def candidate_from_work(
         "authors": extract_authors(work),
         "venue": extract_venue(work),
         "url": extract_url(work),
-        "query": str(provider_plan.get("query") or plan.get("main_search_string") or ""),
+        "query": str(
+            query or provider_plan.get("query") or plan.get("main_search_string") or ""
+        ),
+        "query_index": query_index,
+        "query_rank": query_rank,
+        "query_reason": query_reason or "",
         "rank": rank,
         "retrieval_date": date.today().isoformat(),
         "query_url": query_url,
@@ -194,8 +205,47 @@ class OpenAlexProvider:
                 f"OpenAlex provider cannot execute provider plan: {provider}"
             )
 
-        if not isinstance(provider_plan, dict) or provider_plan.get("provider") != self.name:
+        if (
+            not isinstance(provider_plan, dict)
+            or provider_plan.get("provider") != self.name
+        ):
             raise ValueError("provider_specific_plan.provider must be openalex.")
+
+    def search_queries_from_plan(self, plan: dict[str, Any]) -> list[dict[str, str]]:
+        search_queries = []
+        seen = set()
+
+        def append(query: object, reason: str) -> None:
+            query_text = str(query or "").strip()
+            query_key = query_text.lower()
+            if not query_text or query_key in seen:
+                return
+            search_queries.append({"query": query_text, "reason": reason})
+            seen.add(query_key)
+
+        raw_search_queries = plan.get("search_queries")
+        if isinstance(raw_search_queries, list):
+            for item in raw_search_queries:
+                if isinstance(item, dict):
+                    append(item.get("query"), str(item.get("reason") or ""))
+                else:
+                    append(item, "Planned search query.")
+
+        provider_plan = plan.get("provider_specific_plan")
+        if isinstance(provider_plan, dict):
+            append(provider_plan.get("query"), "Provider-specific primary query.")
+
+        append(plan.get("main_search_string"), "Main planned search string.")
+
+        alternate_search_strings = plan.get("alternate_search_strings")
+        if isinstance(alternate_search_strings, list):
+            for alternate in alternate_search_strings:
+                append(alternate, "Alternate planned search string.")
+
+        if not search_queries:
+            raise ValueError("OpenAlex plan must contain at least one search query.")
+
+        return search_queries
 
     def fetch_candidates(
         self,
@@ -206,31 +256,59 @@ class OpenAlexProvider:
         sleep_seconds: float,
     ) -> list[dict[str, Any]]:
         candidates = []
-        page = 1
+        search_queries = self.search_queries_from_plan(plan)
+        per_query_limit = max(1, math.ceil(max_results / len(search_queries)))
 
-        while len(candidates) < max_results:
-            query_url = build_openalex_url(plan, page, per_page, mailto)
-            print(f"Fetching OpenAlex page {page}: {query_url}")
+        for query_index, query_entry in enumerate(search_queries, start=1):
+            page = 1
+            query_rank = 0
+            query = query_entry["query"]
+            query_reason = query_entry["reason"]
 
-            response = fetch_json(query_url)
-            results = response.get("results")
+            while query_rank < per_query_limit and len(candidates) < max_results:
+                query_url = build_openalex_url(
+                    plan,
+                    page,
+                    per_page,
+                    mailto,
+                    query=query,
+                )
+                print(f"Fetching OpenAlex query {query_index} page {page}: {query_url}")
 
-            if not isinstance(results, list) or not results:
-                break
+                response = fetch_json(query_url)
+                results = response.get("results")
 
-            for work in results:
-                if not isinstance(work, dict):
-                    continue
-
-                rank = len(candidates) + 1
-                candidates.append(candidate_from_work(work, plan, rank, query_url))
-
-                if len(candidates) >= max_results:
+                if not isinstance(results, list) or not results:
                     break
 
-            page += 1
+                for work in results:
+                    if not isinstance(work, dict):
+                        continue
 
-            if len(candidates) < max_results:
-                time.sleep(sleep_seconds)
+                    query_rank += 1
+                    rank = len(candidates) + 1
+                    candidates.append(
+                        candidate_from_work(
+                            work,
+                            plan,
+                            rank,
+                            query_url,
+                            query=query,
+                            query_index=query_index,
+                            query_rank=query_rank,
+                            query_reason=query_reason,
+                        )
+                    )
+
+                    if query_rank >= per_query_limit or len(candidates) >= max_results:
+                        break
+
+                page += 1
+
+                if query_rank < per_query_limit and len(candidates) < max_results:
+                    time.sleep(sleep_seconds)
+
+            if len(candidates) >= max_results:
+                break
 
         return candidates

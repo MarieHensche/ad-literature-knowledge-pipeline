@@ -47,17 +47,27 @@ def render_plan_search_prompt(
     topic_description: str,
     providers: list[dict[str, object]],
     max_results: int | None,
+    topic_contract: dict[str, Any] | None = None,
 ) -> str:
     max_results_text = (
         f"The user requested about {max_results} candidates."
         if max_results
         else "No explicit max result count was provided."
     )
+    topic_contract_guidance: dict[str, Any] = {}
+    if topic_contract is not None:
+        topic_contract_guidance = {
+            "research_topic": topic_contract.get("research_topic", {}),
+            "scope": topic_contract.get("scope", {}),
+            "collection": topic_contract.get("collection", {}),
+        }
+
     return render_template(
         "plan_search.md",
         {
             "topic_description": topic_description,
             "max_results_text": max_results_text,
+            "topic_contract_guidance_json": json_block(topic_contract_guidance),
             "providers_json": json_block(providers),
         },
     )

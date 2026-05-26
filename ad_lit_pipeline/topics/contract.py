@@ -117,6 +117,24 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
     if preferred_provider not in allowed_providers:
         raise ValueError("collection.preferred_provider must be allowed.")
 
+    if "search_queries" in collection:
+        search_queries = require_list(
+            collection.get("search_queries"), "collection.search_queries"
+        )
+        for index, item in enumerate(search_queries, start=1):
+            if isinstance(item, str):
+                require_non_empty_string(item, f"collection.search_queries[{index}]")
+                continue
+            item_map = require_mapping(item, f"collection.search_queries[{index}]")
+            require_non_empty_string(
+                item_map.get("query"), f"collection.search_queries[{index}].query"
+            )
+            if "reason" in item_map:
+                require_non_empty_string(
+                    item_map.get("reason"),
+                    f"collection.search_queries[{index}].reason",
+                )
+
 
 def load_topic_contract(path: Path) -> dict[str, Any]:
     """Load and validate a topic contract from YAML."""

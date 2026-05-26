@@ -20,6 +20,19 @@ def plan_schema(provider_names: list[str]) -> dict[str, Any]:
                 "type": "array",
                 "items": {"type": "string"},
             },
+            "search_queries": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["query", "reason"],
+                    "additionalProperties": False,
+                },
+            },
             "filters": {
                 "type": "object",
                 "properties": {
@@ -98,6 +111,7 @@ def plan_schema(provider_names: list[str]) -> dict[str, Any]:
             "search_goal",
             "main_search_string",
             "alternate_search_strings",
+            "search_queries",
             "filters",
             "provider_specific_plan",
             "screening_notes",

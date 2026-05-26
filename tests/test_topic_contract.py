@@ -55,6 +55,7 @@ def test_topic_contract_template_loads() -> None:
     assert contract["topic_id"] == "generated_topic_template"
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert contract["collection"]["exclude_openalex_review_type"] is False
+    assert contract["collection"]["search_queries"] == []
     assert "research_target" in contract["tagging"]["categories"]
 
 
