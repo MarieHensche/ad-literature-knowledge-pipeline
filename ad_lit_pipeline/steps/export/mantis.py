@@ -5,6 +5,7 @@ import csv
 from pathlib import Path
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.topics.contract import REQUIRED_TOPIC_CATEGORY_IDS
 
 
 STEP = StepSpec(
@@ -23,6 +24,9 @@ CORE_COLUMNS = [
     "year",
     "doi",
 ]
+
+MAIN_TOPIC_CATEGORY_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[0]
+RESEARCH_TARGET_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[1]
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
@@ -47,17 +51,37 @@ def make_semantic(row: dict[str, str]) -> str:
     return claim or row.get("title", "").strip()
 
 
-def make_categoric(row: dict[str, str]) -> str:
-    subtype = row.get("early_detection_subtype", "").strip()
-    target = row.get("primary_clinical_target", "").strip()
+def first_selected_value(value: str) -> str:
+    return value.split(";")[0].strip() if value.strip() else ""
 
-    if subtype:
-        return subtype.split(";")[0].strip()
+
+def make_categoric(row: dict[str, str]) -> str:
+    category = first_selected_value(row.get(MAIN_TOPIC_CATEGORY_COLUMN, ""))
+    target = first_selected_value(row.get(RESEARCH_TARGET_COLUMN, ""))
+
+    if category:
+        return category
 
     if target:
-        return target.split(";")[0].strip()
+        return target
 
-    return "uncategorized"
+    paper_id = row.get("paper_id", "<unknown>")
+    raise ValueError(
+        "Mantis export requires a value in "
+        f"{MAIN_TOPIC_CATEGORY_COLUMN} or {RESEARCH_TARGET_COLUMN} "
+        f"for paper_id={paper_id}"
+    )
+
+
+def validate_required_columns(fieldnames: list[str], input_path: Path) -> None:
+    missing = [
+        column for column in REQUIRED_TOPIC_CATEGORY_IDS if column not in fieldnames
+    ]
+    if missing:
+        raise ValueError(
+            f"Mantis export input {input_path} is missing required generic "
+            f"topic column(s): {', '.join(missing)}"
+        )
 
 
 def export_row(row: dict[str, str], tag_fields: list[str]) -> dict[str, str]:
@@ -96,6 +120,7 @@ def run(input_path: Path, output_path: Path) -> StepResult:
         raise ValueError(f"No rows found in {input_path}")
 
     fieldnames = list(rows[0].keys())
+    validate_required_columns(fieldnames, input_path)
     tag_fields = tag_columns(fieldnames)
     output_fields = CORE_COLUMNS + tag_fields
 

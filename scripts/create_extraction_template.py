@@ -75,7 +75,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--schema",
-        default="schemas/early_detection_knowledge_schema.yaml",
+        required=True,
         help="Knowledge schema YAML.",
     )
     parser.add_argument(

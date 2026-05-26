@@ -133,7 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "--topic-contract",
-        default="configs/topics/early_detection_ad.yaml",
+        required=True,
         help="Topic contract YAML for provider and screening policy.",
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")

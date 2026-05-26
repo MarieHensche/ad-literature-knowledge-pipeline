@@ -7,7 +7,6 @@ from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.topics.contract import (
-    DEFAULT_TOPIC_CONTRACT_PATH,
     load_topic_contract,
     rule_based_screening_from_contract,
 )
@@ -126,7 +125,7 @@ def screen_rows(
 def run(
     input_path: Path,
     output_path: Path,
-    topic_contract_path: Path = DEFAULT_TOPIC_CONTRACT_PATH,
+    topic_contract_path: Path,
 ) -> StepResult:
     fieldnames, rows = read_rows(input_path)
     settings = settings_from_contract(topic_contract_path)
@@ -165,7 +164,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--topic-contract",
-        default=str(DEFAULT_TOPIC_CONTRACT_PATH),
+        required=True,
         help="Topic contract YAML with rule-based screening terms.",
     )
     args = parser.parse_args()

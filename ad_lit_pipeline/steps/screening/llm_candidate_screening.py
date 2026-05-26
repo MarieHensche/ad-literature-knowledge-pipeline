@@ -12,7 +12,7 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import SCREENING_SCHEMA
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_screen_candidate_prompt
-from ad_lit_pipeline.topics.contract import DEFAULT_TOPIC_CONTRACT_PATH, load_topic_contract
+from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
 STEP = StepSpec(
@@ -186,7 +186,7 @@ def run(
     topic_description: str,
     output_path: Path,
     model: str,
-    topic_contract_path: Path = DEFAULT_TOPIC_CONTRACT_PATH,
+    topic_contract_path: Path,
     limit: int | None = None,
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
@@ -246,7 +246,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--topic-contract",
-        default=str(DEFAULT_TOPIC_CONTRACT_PATH),
+        required=True,
         help="Topic contract YAML with screening policy.",
     )
     parser.add_argument(

@@ -1,2 +1,1 @@
-"""Importable package for the Alzheimer literature knowledge pipeline."""
-
+"""Importable package for the literature knowledge pipeline."""

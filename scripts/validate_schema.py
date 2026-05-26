@@ -58,12 +58,7 @@ def validate_schema(schema: dict) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate a knowledge schema YAML file.")
-    parser.add_argument(
-        "schema",
-        nargs="?",
-        default="schemas/early_detection_knowledge_schema.yaml",
-        help="Path to schema YAML file.",
-    )
+    parser.add_argument("schema", help="Path to schema YAML file.")
     args = parser.parse_args()
 
     schema_path = Path(args.schema)

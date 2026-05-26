@@ -12,7 +12,6 @@ from ad_lit_pipeline.llm.schemas import plan_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_plan_search_prompt
 from ad_lit_pipeline.topics.contract import (
-    DEFAULT_TOPIC_CONTRACT_PATH,
     collection_from_contract,
     load_topic_contract,
 )
@@ -246,7 +245,7 @@ def run(
     output_path: Path,
     max_results: int | None,
     model: str,
-    topic_contract_path: Path = DEFAULT_TOPIC_CONTRACT_PATH,
+    topic_contract_path: Path,
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
 ) -> StepResult:
@@ -290,7 +289,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--topic-contract",
-        default=str(DEFAULT_TOPIC_CONTRACT_PATH),
+        required=True,
         help="Topic contract YAML with enabled providers.",
     )
     parser.add_argument(

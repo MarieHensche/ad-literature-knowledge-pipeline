@@ -6,7 +6,7 @@ research_topic:
     The focus is on what early disease state, impairment, or signal is identified.
 
 categories:
-  primary_clinical_target:
+  research_target:
     values:
       - ad
       - mci
@@ -17,7 +17,7 @@ categories:
       - mixed_or_unclear
       - unclear
 
-  early_detection_subtype:
+  main_topic_category:
     values:
       - early_ad_detection
       - mci_detection
