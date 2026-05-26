@@ -1,7 +1,7 @@
 name: early_detection_knowledge
 version: 0.1.0
 layer: knowledge
-scope_file: docs/early_detection_scope.md
+scope_file: configs/topics/early_detection_ad.yaml
 
 description: >
   Controlled knowledge fields for the early-detection pilot. These fields
