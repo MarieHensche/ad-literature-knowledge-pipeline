@@ -33,6 +33,8 @@ OUTPUT_COLUMNS = [
     "provider",
     "provider_id",
     "source_rank",
+    "source_query",
+    "source_query_reason",
     "screening_decision",
     "screening_confidence",
     "screening_reason",
@@ -98,6 +100,8 @@ def candidate_for_prompt(candidate: dict[str, Any]) -> dict[str, Any]:
         "venue": candidate.get("venue", ""),
         "provider": candidate.get("provider", ""),
         "query": candidate.get("query", ""),
+        "query_index": candidate.get("query_index", ""),
+        "query_reason": candidate.get("query_reason", ""),
     }
 
 
@@ -164,6 +168,8 @@ def screen_candidate(
             "provider": str(candidate.get("provider") or ""),
             "provider_id": str(candidate.get("provider_id") or ""),
             "source_rank": str(candidate.get("rank") or ""),
+            "source_query": str(candidate.get("query") or ""),
+            "source_query_reason": str(candidate.get("query_reason") or ""),
             "screening_decision": result["decision"],
             "screening_confidence": result["confidence"],
             "screening_reason": result["reason"],

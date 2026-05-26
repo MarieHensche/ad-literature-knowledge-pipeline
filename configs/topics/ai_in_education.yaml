@@ -65,10 +65,13 @@ rule_based_screening:
   exclude_wins: true
 
 candidate_screening:
-  missing_abstract_policy: exclude
+  missing_abstract_policy: include if title or metadata is plausibly relevant
   borderline_policy: include
-  human_review_policy: exclude
+  human_review_policy: include
   review_policy: include reviews only when useful for this topic
+  tangential_topic_policy: >
+    include candidates that address one meaningful aspect of AI use, teaching,
+    learning, learners, instructors, or educational impact
 
 tagging:
   fallback_policy:
@@ -171,4 +174,4 @@ collection:
 
   preferred_provider: openalex
   max_results_default: 25
-  exclude_openalex_review_type: true
+  exclude_openalex_review_type: false

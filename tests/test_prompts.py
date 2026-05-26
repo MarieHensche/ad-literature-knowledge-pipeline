@@ -29,7 +29,8 @@ def test_screen_candidate_prompt_uses_topic_contract_scope() -> None:
 
     assert "detecting MCI or cognitive impairment" in prompt
     assert "drug discovery or treatment response" in prompt
-    assert '"missing_abstract_policy": "exclude"' in prompt
+    assert "recall-oriented candidate-screening pass" in prompt
+    assert '"borderline_policy": "include"' in prompt
     assert "Speech Classification for Mild Cognitive Impairment" in prompt
 
 

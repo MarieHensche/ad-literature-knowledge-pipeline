@@ -85,6 +85,14 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
         f"screening_reason={screening.get('screening_reason', '')}",
     ]
 
+    query = candidate.get("query")
+    if query:
+        notes.append(f"source_query={query}")
+
+    query_reason = candidate.get("query_reason")
+    if query_reason:
+        notes.append(f"source_query_reason={query_reason}")
+
     dedupe_key = candidate.get("dedupe_key")
     if dedupe_key:
         notes.append(f"dedupe_key={dedupe_key}")

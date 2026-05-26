@@ -47,10 +47,15 @@ rule_based_screening:
   exclude_wins: true
 
 candidate_screening:
-  missing_abstract_policy: exclude
-  borderline_policy: exclude
-  human_review_policy: exclude
-  review_policy: include reviews only when the topic does not ask for primary studies only
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: >
+    include reviews only when useful for mapping the topic unless the run asks
+    for primary studies only
+  tangential_topic_policy: >
+    include candidates that address one meaningful aspect of early detection,
+    screening, diagnosis, impairment, biomarkers, or prediction
 
 tagging:
   fallback_policy:

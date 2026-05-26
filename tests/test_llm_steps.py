@@ -84,7 +84,7 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert result.metadata["recommended_provider"] == "openalex"
     assert payload["recommended_provider"] == "openalex"
-    assert payload["filters"]["has_abstract"] is True
+    assert payload["filters"]["has_abstract"] is None
     assert payload["filters"]["exclude_reviews"] is True
     assert payload["search_queries"] == [
         {
@@ -94,14 +94,6 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
         {"query": "MCI screening", "reason": "Alternate planned search string."},
     ]
     assert payload["provider_specific_plan"]["filters"] == [
-        {
-            "name": "has_abstract",
-            "value": "true",
-            "reason": (
-                "The topic contract excludes candidates without abstracts, "
-                "so the provider query should retrieve works with abstracts."
-            ),
-        },
         {
             "name": "type",
             "value": "!review",
@@ -113,8 +105,6 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
     ]
     assert result.warnings == [
         "Added alternate_search_strings to search_queries.",
-        "Set filters.has_abstract=true because topic contract excludes missing abstracts.",
-        "Added provider_specific_plan has_abstract filter for screening policy.",
         "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works.",
         "Added provider_specific_plan type:!review filter for review exclusion policy.",
     ]
@@ -370,6 +360,8 @@ def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
                 "provider_id": "W1",
                 "rank": 1,
                 "abstract": "Screening for mild cognitive impairment.",
+                "query": "MCI screening",
+                "query_reason": "Adjacent screening query.",
             }
         )
         + "\n",
@@ -392,7 +384,10 @@ def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
     rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
     assert result.row_counts["included"] == 1
     assert rows[0]["screening_decision"] == "include"
+    assert rows[0]["source_query"] == "MCI screening"
     assert "detecting MCI or cognitive impairment" in client.requests[0]["prompt"]
+    assert "recall-oriented candidate-screening pass" in client.requests[0]["prompt"]
+    assert "Adjacent screening query." in client.requests[0]["prompt"]
 
 
 def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:

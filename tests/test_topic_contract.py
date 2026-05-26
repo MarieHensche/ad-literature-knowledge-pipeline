@@ -36,6 +36,7 @@ def test_early_detection_topic_contract_loads() -> None:
     assert contract["collection"]["allowed_providers"] == ["openalex"]
     assert contract["collection"]["exclude_openalex_review_type"] is True
     assert contract["rule_based_screening"]["exclude_wins"] is True
+    assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert "mild cognitive impairment" in contract["rule_based_screening"][
         "include_terms"
     ]
@@ -47,6 +48,7 @@ def test_non_ad_topic_contract_loads() -> None:
     assert contract["topic_id"] == "ai_in_education"
     assert "main_topic_category" in contract["tagging"]["categories"]
     assert "research_target" in contract["tagging"]["categories"]
+    assert contract["collection"]["exclude_openalex_review_type"] is False
 
 
 def test_topic_contract_template_loads() -> None:
