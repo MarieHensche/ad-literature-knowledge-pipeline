@@ -82,6 +82,19 @@ def render_screen_candidate_prompt(
     )
 
 
+def render_generate_topic_contract_prompt(
+    topic_description: str,
+    base_contract: dict[str, Any],
+) -> str:
+    return render_template(
+        "generate_topic_contract.md",
+        {
+            "topic_description": topic_description,
+            "base_contract_json": json_block(base_contract),
+        },
+    )
+
+
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,

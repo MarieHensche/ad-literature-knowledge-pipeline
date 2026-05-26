@@ -9,6 +9,9 @@ from ad_lit_pipeline.steps.collection.plan_search import (
     enforce_topic_plan_constraints,
     run as run_plan_search,
 )
+from ad_lit_pipeline.steps.collection.generate_topic_contract import (
+    run as run_generate_topic_contract,
+)
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
 from ad_lit_pipeline.steps.tagging.tag_papers import run as run_tag_papers
@@ -104,6 +107,148 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
         "openalex"
     ]
     assert "semantic_scholar" not in client.requests[0]["prompt"]
+    assert result.trace_paths
+
+
+def test_generate_topic_contract_uses_fake_client_and_validates(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "contract.yaml"
+    client = StaticJSONClient(
+        [
+            {
+                "topic_id": "climate_health",
+                "research_topic": {
+                    "title": "Climate change and human health",
+                    "description": (
+                        "Research on relationships between climate change, "
+                        "exposure, adaptation, and human health outcomes."
+                    ),
+                },
+                "scope": {
+                    "include_criteria": [
+                        "Studies directly examining climate-related health outcomes",
+                        "Studies on climate adaptation and health impacts",
+                        "Reviews that map climate-health evidence",
+                    ],
+                    "exclude_criteria": [
+                        "Papers with no climate or health connection",
+                    ],
+                    "boundary_rules": [
+                        "Include adjacent exposure or adaptation papers for review.",
+                    ],
+                },
+                "rule_based_screening": {
+                    "include_terms": [
+                        "climate change",
+                        "human health",
+                        "heat exposure",
+                    ],
+                    "exclude_terms": ["unrelated engineering"],
+                    "exclude_wins": False,
+                },
+                "candidate_screening": {
+                    "missing_abstract_policy": (
+                        "include if title or metadata is plausibly relevant"
+                    ),
+                    "borderline_policy": "include",
+                    "human_review_policy": "include",
+                    "review_policy": "include reviews unless primary-only",
+                    "tangential_topic_policy": (
+                        "include candidates addressing one meaningful aspect"
+                    ),
+                },
+                "tagging": {
+                    "fallback_policy": {
+                        "prefer_unclear_when_allowed": True,
+                        "prefer_mixed_or_unclear_when_unclear_missing": True,
+                        "missing_information_value": "not_reported",
+                        "knowledge_confidence": "very_low",
+                        "review_status": "needs_decision",
+                    },
+                    "categories": [
+                        {
+                            "category_id": "main_topic_category",
+                            "required": False,
+                            "values": [
+                                "health_impact",
+                                "adaptation",
+                                "mixed_or_unclear",
+                                "unclear",
+                            ],
+                        },
+                        {
+                            "category_id": "research_target",
+                            "required": False,
+                            "values": [
+                                "mortality",
+                                "morbidity",
+                                "mental_health",
+                                "mixed_or_unclear",
+                                "unclear",
+                            ],
+                        },
+                        {
+                            "category_id": "study_type",
+                            "required": False,
+                            "values": ["empirical", "review", "unclear"],
+                        },
+                        {
+                            "category_id": "knowledge_confidence",
+                            "required": False,
+                            "values": ["high", "medium", "low", "very_low"],
+                        },
+                        {
+                            "category_id": "review_status",
+                            "required": True,
+                            "values": [
+                                "ai_tagged",
+                                "human_reviewed",
+                                "needs_decision",
+                                "full_text_needed",
+                                "excluded_from_scope",
+                            ],
+                        },
+                    ],
+                },
+                "collection": {
+                    "allowed_providers": ["openalex"],
+                    "preferred_provider": "openalex",
+                    "max_results_default": 50,
+                    "exclude_openalex_review_type": False,
+                    "search_queries": [
+                        {
+                            "query": "climate change human health",
+                            "reason": "Core phrasing.",
+                        },
+                        {
+                            "query": "heat exposure mortality morbidity",
+                            "reason": "Exposure and outcome phrasing.",
+                        },
+                        {
+                            "query": "climate adaptation health outcomes",
+                            "reason": "Adaptation phrasing.",
+                        },
+                    ],
+                },
+            }
+        ]
+    )
+
+    result = run_generate_topic_contract(
+        "How does climate change affect human health?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    assert contract["topic_id"] == "climate_health"
+    assert "main_topic_category" in contract["tagging"]["categories"]
+    assert contract["tagging"]["categories"]["review_status"]["required"] is True
+    assert contract["candidate_screening"]["borderline_policy"] == "include"
+    assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
 
 

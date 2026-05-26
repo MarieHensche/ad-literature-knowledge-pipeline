@@ -19,3 +19,7 @@ COLLECTION_PIPELINE = [
     "export_included_candidates",
 ]
 
+COLLECTION_WITH_CONTRACT_PIPELINE = [
+    "generate_topic_contract",
+    *COLLECTION_PIPELINE,
+]

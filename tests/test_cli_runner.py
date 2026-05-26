@@ -89,4 +89,25 @@ def test_run_collection_explain_lists_steps() -> None:
 
     assert "plan_search" in result.stdout
     assert "fetch_candidates" in result.stdout
+    assert "generate_topic_contract" in result.stdout
     assert "example_openalex_candidates.jsonl" in result.stdout
+
+
+def test_run_collection_dry_run_can_generate_contract_first() -> None:
+    result = run_script(
+        "scripts/run_collection.py",
+        "run",
+        "--topic",
+        "How does climate change affect human health?",
+        "--collection",
+        "pytest_contract_dry_run",
+        "--generate-topic-contract",
+        "--only-step",
+        "generate_topic_contract",
+        "--dry-run",
+        "--run-id",
+        "pytest-collection-contract-dry-run",
+    )
+
+    assert "Would run step: generate_topic_contract" in result.stdout
+    assert "pytest_contract_dry_run_topic_contract.yaml" in result.stdout
