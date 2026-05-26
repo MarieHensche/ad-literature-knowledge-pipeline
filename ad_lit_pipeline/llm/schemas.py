@@ -357,9 +357,17 @@ def paper_tags_schema(config: dict[str, Any]) -> dict[str, Any]:
 
     for category in categories:
         category_id = category["category_id"]
+        allowed_values = [
+            value["value"]
+            for value in category.get("allowed_values", [])
+            if isinstance(value, dict) and value.get("value")
+        ]
+        items: dict[str, Any] = {"type": "string"}
+        if allowed_values:
+            items["enum"] = allowed_values
         properties[category_id] = {
             "type": "array",
-            "items": {"type": "string"},
+            "items": items,
         }
         required.append(category_id)
 

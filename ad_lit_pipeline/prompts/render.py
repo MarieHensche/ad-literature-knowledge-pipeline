@@ -135,6 +135,24 @@ def render_tag_paper_prompt(
     topic_contract: dict[str, Any] | None = None,
 ) -> str:
     scope = scope_text(topic_contract) if topic_contract is not None else ""
+    categories = config.get("categories")
+    category_ids = set()
+    if isinstance(categories, list):
+        category_ids = {
+            str(category.get("category_id"))
+            for category in categories
+            if isinstance(category, dict)
+        }
+    if "review_status" in category_ids:
+        review_status_instruction = (
+            '- Set review_status to ["ai_tagged"] unless the paper clearly '
+            "needs a human decision."
+        )
+    else:
+        review_status_instruction = (
+            "- Do not return review_status because it is not listed as an "
+            "allowed category."
+        )
     return render_template(
         "tag_paper.md",
         {
@@ -143,5 +161,6 @@ def render_tag_paper_prompt(
             "paper_json": json_block(paper),
             "categories_json": json_block(config["categories"]),
             "rules_json": json_block(rules["rules"]),
+            "review_status_instruction": review_status_instruction,
         },
     )

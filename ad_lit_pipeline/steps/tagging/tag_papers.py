@@ -226,7 +226,11 @@ def run(
             topic_contract,
             trace_writer,
         )
-        validate_tagged_row(tagged, config, rules)
+        try:
+            validate_tagged_row(tagged, config, rules)
+        except ValueError as error:
+            paper_id = paper.get("paper_id") or f"row_{index}"
+            raise ValueError(f"{paper_id}: {error}") from error
         rows.append(flatten_tagged_row(paper, tagged, config))
         all_trace_paths.extend(trace_paths)
 

@@ -27,4 +27,4 @@ Rules:
 - If the paper does not provide enough information, use the category fallback value from the fixed rules.
 - Do not invent new values.
 - main_knowledge_claim should be one concise sentence describing what the paper contributes to the research topic.
-- Set review_status to ["ai_tagged"] unless the paper clearly needs a human decision.
+$review_status_instruction

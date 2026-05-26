@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 
 from ad_lit_pipeline.llm.client import StaticJSONClient
+from ad_lit_pipeline.llm.schemas import paper_tags_schema
+from ad_lit_pipeline.io.yaml_io import write_yaml_object
 from ad_lit_pipeline.steps.collection.plan_search import (
     enforce_topic_plan_constraints,
     ensure_search_queries,
@@ -32,6 +34,10 @@ def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> 
 
 def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
     output = tmp_path / "plan.json"
+    topic_contract = load_topic_contract(TOPIC_CONTRACT)
+    topic_contract["candidate_screening"]["missing_abstract_policy"] = "include"
+    topic_contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(topic_contract_path, topic_contract)
     client = StaticJSONClient(
         [
             {
@@ -76,7 +82,7 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
         output,
         5,
         "test-model",
-        TOPIC_CONTRACT,
+        topic_contract_path,
         client,
         tmp_path / "traces",
     )
@@ -248,15 +254,9 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                             "values": ["high", "medium", "low", "very_low"],
                         },
                         {
-                            "category_id": "review_status",
-                            "required": True,
-                            "values": [
-                                "ai_tagged",
-                                "human_reviewed",
-                                "needs_decision",
-                                "full_text_needed",
-                                "excluded_from_scope",
-                            ],
+                            "category_id": "exposure_type",
+                            "required": False,
+                            "values": ["heat", "wildfire", "unclear"],
                         },
                     ],
                 },
@@ -296,6 +296,13 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     assert contract["topic_id"] == "climate_health"
     assert "main_topic_category" in contract["tagging"]["categories"]
     assert contract["tagging"]["categories"]["review_status"]["required"] is True
+    assert contract["tagging"]["categories"]["review_status"]["values"] == [
+        "ai_tagged",
+        "human_reviewed",
+        "needs_decision",
+        "full_text_needed",
+        "excluded_from_scope",
+    ]
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
@@ -593,3 +600,24 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert result.row_counts["tagged_papers"] == 1
     assert rows[0]["main_knowledge_claim"] == "The paper screens for MCI."
     assert rows[0]["review_status"] == "ai_tagged"
+
+
+def test_paper_tags_schema_constrains_category_values() -> None:
+    config = {
+        "categories": [
+            {
+                "category_id": "impact_category",
+                "allowed_values": [
+                    {"value": "physical_health"},
+                    {"value": "vulnerable_populations"},
+                ],
+            }
+        ]
+    }
+
+    schema = paper_tags_schema(config)
+
+    assert schema["properties"]["impact_category"]["items"]["enum"] == [
+        "physical_health",
+        "vulnerable_populations",
+    ]

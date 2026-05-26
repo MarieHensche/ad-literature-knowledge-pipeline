@@ -14,7 +14,8 @@ Rules:
 - Use general, reusable language; do not hard-code assumptions from unrelated example topics.
 - Set `topic_id` to a lowercase snake_case identifier.
 - Keep `collection.allowed_providers` to the providers available in the template.
-- Include `research_target` and `main_topic_category` in `tagging.categories`.
+- Include `research_target`, `main_topic_category`, and `review_status` in `tagging.categories`.
+- For `review_status`, use values `ai_tagged`, `human_reviewed`, `needs_decision`, `full_text_needed`, and `excluded_from_scope`, and mark it required.
 - Add a small set of topic-specific tagging categories that would help later extraction.
 - Include `mixed_or_unclear` and `unclear` values where ambiguity is expected.
 - Make `scope.include_criteria` cover direct papers and meaningfully adjacent papers.

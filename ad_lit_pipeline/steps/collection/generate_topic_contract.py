@@ -35,6 +35,17 @@ DEFAULT_BASE_CONTRACT = (
 
 SUPPORTED_PROVIDERS = ["openalex"]
 
+REVIEW_STATUS_CATEGORY = {
+    "values": [
+        "ai_tagged",
+        "human_reviewed",
+        "needs_decision",
+        "full_text_needed",
+        "excluded_from_scope",
+    ],
+    "required": True,
+}
+
 
 def read_topic(args: argparse.Namespace) -> str:
     if args.topic:
@@ -55,6 +66,7 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     categories = tagging.get("categories")
     if isinstance(categories, dict):
+        ensure_review_status_category(contract)
         return contract
 
     if not isinstance(categories, list):
@@ -81,7 +93,20 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         category_map[category_id] = category_payload
 
     tagging["categories"] = category_map
+    ensure_review_status_category(contract)
     return contract
+
+
+def ensure_review_status_category(contract: dict[str, Any]) -> None:
+    tagging = contract.get("tagging")
+    if not isinstance(tagging, dict):
+        raise ValueError("Generated topic contract must contain tagging.")
+
+    categories = tagging.get("categories")
+    if not isinstance(categories, dict):
+        raise ValueError("Generated tagging.categories must be a mapping.")
+
+    categories.setdefault("review_status", deepcopy(REVIEW_STATUS_CATEGORY))
 
 
 def call_llm(

@@ -6,6 +6,7 @@ from ad_lit_pipeline.prompts.render import (
     render_generate_tagging_rules_prompt,
     render_generate_topic_contract_prompt,
     render_screen_candidate_prompt,
+    render_tag_paper_prompt,
 )
 from ad_lit_pipeline.steps.tagging.normalize_config import normalize_config
 from ad_lit_pipeline.topics.contract import (
@@ -53,4 +54,34 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
 
     assert "borderline or tangentially relevant candidates are included" in prompt
     assert "collection.search_queries" in prompt
+    assert "`review_status`" in prompt
     assert "climate change affect human health" in prompt
+
+
+def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "impact_category",
+                "allowed_values": [{"value": "physical_health"}],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "impact_category",
+                "selection": "single",
+                "fallback_value": "physical_health",
+            }
+        ]
+    }
+    prompt = render_tag_paper_prompt(
+        {"paper_id": "p1", "title": "Climate health"},
+        config,
+        rules,
+    )
+
+    assert "Do not return review_status" in prompt
+    assert 'Set review_status to ["ai_tagged"]' not in prompt
