@@ -22,6 +22,8 @@ def openalex_plan() -> dict[str, object]:
             "year_from": 2020,
             "year_to": 2024,
             "language": "en",
+            "has_abstract": True,
+            "exclude_reviews": True,
         },
         "provider_specific_plan": {
             "provider": "openalex",
@@ -43,6 +45,8 @@ def test_openalex_url_uses_query_and_supported_filters() -> None:
     assert "from_publication_date%3A2020-01-01" in url
     assert "to_publication_date%3A2024-12-31" in url
     assert "language%3Aen" in url
+    assert "has_abstract%3Atrue" in url
+    assert "type%3A%21review" in url
     assert "mailto=a%40test" in url
 
 
