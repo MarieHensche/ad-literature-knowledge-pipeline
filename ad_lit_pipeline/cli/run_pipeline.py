@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
@@ -163,6 +164,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = build_parser()
     args = parser.parse_args()
 
