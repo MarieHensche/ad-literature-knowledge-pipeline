@@ -103,6 +103,26 @@ def active_filters_from_plan(plan: dict[str, object]) -> dict[str, str]:
     if isinstance(has_abstract, bool):
         openalex_filters.append(f"has_abstract:{str(has_abstract).lower()}")
 
+    if filters.get("open_access_only") is True:
+        openalex_filters.append("open_access.is_oa:true")
+
+    if filters.get("has_full_text") is True:
+        openalex_filters.append("has_fulltext:true")
+
+    if filters.get("has_pdf_url") is True:
+        openalex_filters.append("has_pdf_url:true")
+
+    if filters.get("has_content_pdf") is True:
+        openalex_filters.append("has_content.pdf:true")
+
+    publication_types = filters.get("publication_types")
+    if (
+        isinstance(publication_types, list)
+        and "review" in publication_types
+        and filters.get("exclude_reviews") is not True
+    ):
+        openalex_filters.append("type:review")
+
     if filters.get("exclude_reviews") is True:
         openalex_filters.append("type:!review")
 

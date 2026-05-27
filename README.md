@@ -57,6 +57,8 @@ Non-LLM commands, `explain`, and `--dry-run` do not require an API key.
 scripts/run_pipeline.py             Main tagging pipeline CLI
 scripts/run_collection.py           Automated collection CLI
 scripts/generate_topic_contract.py  Topic-contract draft generator
+scripts/fetch_review_overviews.py   Review/overview seed fetcher
+scripts/refine_topic_contract.py    Review-seeded contract refiner
 ad_lit_pipeline/                    Importable pipeline package
 configs/topics/                     Topic contracts and the generic template
 data/collection_plans/              Search plans and generated topic contracts
@@ -145,8 +147,9 @@ data/processed/example_extraction_audit.csv
 
 Use this when you have a topic description and want the pipeline to collect
 candidate papers first. If `--topic-contract` is omitted, the collection
-workflow generates a draft contract at the conventional collection path before
-planning the search:
+workflow generates a draft contract, fetches a small set of OpenAlex
+review/overview seed papers, refines the contract's knowledge and know-how
+tagging categories from those seeds, and then plans the search:
 
 ```bash
 TOPIC="How does climate change affect human health?"
@@ -155,18 +158,40 @@ python scripts/run_collection.py run \
   --topic "$TOPIC" \
   --collection climate_health \
   --model gpt-4o-mini \
-  --only-step generate_topic_contract
+  --max-review-overviews 5
 ```
 
-This writes:
+The generated and refined contract is written to:
 
 ```text
 data/collection_plans/climate_health_topic_contract.yaml
 ```
 
-Review and edit that file. Then continue collection from search planning:
+The review/overview seed artifact is written to:
+
+```text
+data/raw/climate_health_review_overviews.jsonl
+```
+
+If you want a human review gate before candidate collection, run the three
+contract-bootstrap steps separately, review the YAML, then continue collection
+from search planning:
 
 ```bash
+python scripts/generate_topic_contract.py \
+  --topic "$TOPIC" \
+  --output data/collection_plans/climate_health_topic_contract.yaml
+
+python scripts/fetch_review_overviews.py \
+  --topic-contract data/collection_plans/climate_health_topic_contract.yaml \
+  --output data/raw/climate_health_review_overviews.jsonl \
+  --max-results 5
+
+python scripts/refine_topic_contract.py \
+  --topic "$TOPIC" \
+  --topic-contract data/collection_plans/climate_health_topic_contract.yaml \
+  --review-overviews data/raw/climate_health_review_overviews.jsonl
+
 python scripts/run_collection.py run \
   --topic "$TOPIC" \
   --collection climate_health \
@@ -174,14 +199,6 @@ python scripts/run_collection.py run \
   --model gpt-4o-mini \
   --topic-contract data/collection_plans/climate_health_topic_contract.yaml \
   --from-step plan_search
-```
-
-You can also generate the contract with the standalone compatibility wrapper:
-
-```bash
-python scripts/generate_topic_contract.py \
-  --topic "$TOPIC" \
-  --output data/collection_plans/climate_health_topic_contract.yaml
 ```
 
 If you already have a reviewed contract, run collection directly:
@@ -314,8 +331,8 @@ For architecture details, see `docs/technical_summary.md`.
 
 - OpenAlex is the only implemented collection provider.
 - The main tagging pipeline requires `--topic-contract`. The collection
-  pipeline can either receive `--topic-contract` or create one automatically
-  when no contract is supplied.
+  pipeline can either receive `--topic-contract` or create and refine one
+  automatically from review/overview seed papers when no contract is supplied.
 - `--tagging-config` is kept for direct legacy config normalization only.
 - If no papers reach LLM tagging, the Mantis export step fails because it
   requires at least one extraction row.

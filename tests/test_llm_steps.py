@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
+from copy import deepcopy
 from pathlib import Path
 
 from ad_lit_pipeline.llm.client import StaticJSONClient
 from ad_lit_pipeline.llm.schemas import paper_tags_schema
+from ad_lit_pipeline.io.jsonl_io import write_jsonl
 from ad_lit_pipeline.io.yaml_io import write_yaml_object
 from ad_lit_pipeline.steps.collection.plan_search import (
     enforce_topic_plan_constraints,
@@ -14,6 +16,9 @@ from ad_lit_pipeline.steps.collection.plan_search import (
 )
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     run as run_generate_topic_contract,
+)
+from ad_lit_pipeline.steps.collection.refine_topic_contract import (
+    run as run_refine_topic_contract,
 )
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
@@ -306,6 +311,113 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
+
+
+def test_refine_topic_contract_adds_review_seeded_categories(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["collection"]["search_queries"] = [
+        {"query": "early detection Alzheimer's review", "reason": "Review seed."},
+        {"query": "MCI diagnosis overview", "reason": "Overview seed."},
+        {"query": "dementia screening systematic review", "reason": "Review seed."},
+    ]
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    review_path = tmp_path / "review_overviews.jsonl"
+    write_jsonl(
+        review_path,
+        [
+            {
+                "provider_id": "W1",
+                "title": "Review of AI biomarkers for early AD detection",
+                "year": 2024,
+                "venue": "Example Reviews",
+                "abstract": (
+                    "This overview maps neuroimaging, speech, cognitive tests, "
+                    "and model validation practices for early AD detection."
+                ),
+                "query": "early detection Alzheimer's review",
+                "raw_record": {
+                    "type": "review",
+                    "open_access": {"is_oa": True},
+                    "best_oa_location": {"pdf_url": "https://example.test/paper.pdf"},
+                },
+            }
+        ],
+    )
+
+    refined_payload = deepcopy(contract)
+    refined_payload["tagging"]["categories"] = [
+        {
+            "category_id": "main_topic_category",
+            "required": False,
+            "values": [
+                "early_detection",
+                "screening",
+                "mixed_or_unclear",
+                "unclear",
+            ],
+        },
+        {
+            "category_id": "research_target",
+            "required": False,
+            "values": ["ad", "mci", "dementia", "mixed_or_unclear", "unclear"],
+        },
+        {
+            "category_id": "knowledge_signal_family",
+            "required": False,
+            "values": [
+                "neuroimaging",
+                "speech_language",
+                "cognitive_assessment",
+                "mixed_or_unclear",
+                "unclear",
+            ],
+        },
+        {
+            "category_id": "know_how_validation_design",
+            "required": False,
+            "values": [
+                "internal_validation",
+                "external_validation",
+                "cross_validation",
+                "not_reported",
+                "unclear",
+            ],
+        },
+        {
+            "category_id": "review_status",
+            "required": True,
+            "values": [
+                "ai_tagged",
+                "human_reviewed",
+                "needs_decision",
+                "full_text_needed",
+                "excluded_from_scope",
+            ],
+        },
+    ]
+    client = StaticJSONClient([refined_payload])
+
+    result = run_refine_topic_contract(
+        "How can Alzheimer's disease be detected early?",
+        contract_path,
+        review_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    refined = load_topic_contract(contract_path)
+    categories = refined["tagging"]["categories"]
+    assert "knowledge_signal_family" in categories
+    assert "know_how_validation_design" in categories
+    assert result.row_counts["review_overviews"] == 1
+    assert result.row_counts["tagging_categories"] == 5
+    assert result.trace_paths
+    assert "Review and overview seed papers" in client.requests[0]["prompt"]
+    assert "AI biomarkers" in client.requests[0]["prompt"]
 
 
 def test_review_exclusion_does_not_force_abstracts_without_policy() -> None:

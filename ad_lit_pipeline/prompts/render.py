@@ -105,6 +105,21 @@ def render_generate_topic_contract_prompt(
     )
 
 
+def render_refine_topic_contract_prompt(
+    topic_description: str,
+    current_contract: dict[str, Any],
+    review_overviews: list[dict[str, Any]],
+) -> str:
+    return render_template(
+        "refine_topic_contract_from_reviews.md",
+        {
+            "topic_description": topic_description,
+            "current_contract_json": json_block(current_contract),
+            "review_overviews_json": json_block(review_overviews),
+        },
+    )
+
+
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,

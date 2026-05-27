@@ -81,6 +81,7 @@ async function loadConfig() {
   $("mainModel").value = state.config.defaults.model;
   $("baseContract").value = state.config.defaults.baseContract;
   $("maxResults").value = state.config.defaults.maxResults;
+  $("maxReviewOverviews").value = state.config.defaults.maxReviewOverviews;
 
   fillSelect($("contractSelect"), state.config.contracts, "Choose a contract");
   fillSelect($("paperInputSelect"), state.config.paperInputs, "Choose an input file");
@@ -140,6 +141,7 @@ function collectionPayload(workflow = "collection") {
     topic: $("collectionTopic").value.trim(),
     collection,
     maxResults: $("maxResults").value,
+    maxReviewOverviews: $("maxReviewOverviews").value,
     model: $("collectionModel").value.trim(),
     runId: $("collectionRunId").value.trim(),
     topicContract: activeContractPath(),

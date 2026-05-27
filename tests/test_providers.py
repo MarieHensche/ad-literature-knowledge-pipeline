@@ -62,6 +62,25 @@ def test_openalex_url_uses_query_and_supported_filters() -> None:
     assert "mailto=a%40test" in url
 
 
+def test_openalex_url_can_select_open_review_overviews() -> None:
+    plan = openalex_plan()
+    plan["filters"] = {
+        "publication_types": ["review"],
+        "open_access_only": True,
+        "has_full_text": True,
+        "has_pdf_url": True,
+        "has_content_pdf": True,
+    }
+
+    url = build_openalex_url(plan, page=1, per_page=5, mailto=None)
+
+    assert "type%3Areview" in url
+    assert "open_access.is_oa%3Atrue" in url
+    assert "has_fulltext%3Atrue" in url
+    assert "has_pdf_url%3Atrue" in url
+    assert "has_content.pdf%3Atrue" in url
+
+
 def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
     work = {
         "id": "https://openalex.org/W1",

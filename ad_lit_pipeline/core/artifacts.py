@@ -22,6 +22,7 @@ class MainPipelineArtifacts:
 class CollectionArtifacts:
     """Derived artifact paths for the collection workflow."""
 
+    review_overviews_jsonl: Path
     plan_json: Path
     candidates_jsonl: Path
     deduped_candidates_jsonl: Path
@@ -75,6 +76,9 @@ def collection_artifacts(
 ) -> CollectionArtifacts:
     """Build all conventional collection-workflow artifact paths."""
     return CollectionArtifacts(
+        review_overviews_jsonl=raw_path(
+            collection, "review_overviews.jsonl", base_dir
+        ),
         plan_json=plan_path(collection, base_dir),
         candidates_jsonl=raw_path(collection, "openalex_candidates.jsonl", base_dir),
         deduped_candidates_jsonl=raw_path(

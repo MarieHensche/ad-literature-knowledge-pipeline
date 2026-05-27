@@ -222,6 +222,7 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
     collection = validate_collection(require_text(payload, "collection", "collection"))
     topic = require_text(payload, "topic", "topic")
     max_results = optional_int(payload, "maxResults", 25)
+    max_review_overviews = optional_int(payload, "maxReviewOverviews", 5)
     model = optional_text(payload, "model") or "gpt-4o-mini"
     run_id = validate_run_id(optional_text(payload, "runId"), "collection")
     topic_contract = optional_text(payload, "topicContract")
@@ -253,6 +254,7 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
 
     if generate_contract:
         command.append("--generate-topic-contract")
+        command.extend(["--max-review-overviews", str(max_review_overviews)])
         base_contract = optional_text(payload, "baseContract")
         if base_contract:
             command.extend(
@@ -291,7 +293,7 @@ def build_job_commands(payload: dict[str, Any], root: Path = ROOT) -> list[Comma
         commands = [build_collection_command(payload, root)]
         if payload.get("runMainAfterCollection"):
             topic_contract = optional_text(payload, "topicContract")
-            if payload.get("generateTopicContract") and not topic_contract:
+            if not topic_contract:
                 topic_contract = generated_contract_relative_path(collection)
             main_payload = dict(payload)
             main_payload["workflow"] = "main"
@@ -394,6 +396,7 @@ def app_config(root: Path = ROOT) -> dict[str, Any]:
             "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
             "baseContract": "configs/topics/topic_contract_template.yaml",
             "maxResults": 25,
+            "maxReviewOverviews": 5,
         },
     }
 

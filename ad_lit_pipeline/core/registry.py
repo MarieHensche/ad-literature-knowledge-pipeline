@@ -19,7 +19,13 @@ COLLECTION_PIPELINE = [
     "export_included_candidates",
 ]
 
-COLLECTION_WITH_CONTRACT_PIPELINE = [
+CONTRACT_BOOTSTRAP_PIPELINE = [
     "generate_topic_contract",
+    "fetch_review_overviews",
+    "refine_topic_contract",
+]
+
+COLLECTION_WITH_CONTRACT_PIPELINE = [
+    *CONTRACT_BOOTSTRAP_PIPELINE,
     *COLLECTION_PIPELINE,
 ]

@@ -6,6 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects
+from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
+    run as run_fetch_review_overviews,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,6 +41,38 @@ def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+class FakeReviewProvider:
+    name = "openalex"
+
+    def __init__(self) -> None:
+        self.plan: dict[str, object] | None = None
+        self.max_results: int | None = None
+
+    def validate_plan(self, plan: dict[str, object]) -> None:
+        self.plan = plan
+
+    def fetch_candidates(
+        self,
+        plan: dict[str, object],
+        max_results: int,
+        per_page: int,
+        mailto: str | None,
+        sleep_seconds: float,
+    ) -> list[dict[str, object]]:
+        self.plan = plan
+        self.max_results = max_results
+        return [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "title": "A Review of Early Detection",
+                "abstract": "Review evidence about biomarkers and models.",
+                "query": "early detection review overview",
+                "rank": 1,
+            }
+        ]
+
+
 def test_normalize_metadata_example_cli(tmp_path: Path) -> None:
     output = tmp_path / "papers_normalized.csv"
 
@@ -54,6 +91,31 @@ def test_normalize_metadata_example_cli(tmp_path: Path) -> None:
     assert rows[0]["abstract_available"] == "yes"
     assert rows[0]["full_text_available"] == "no"
     assert rows[0]["metadata_notes"] == "missing_full_text_path"
+
+
+def test_fetch_review_overviews_builds_review_only_openalex_plan(tmp_path: Path) -> None:
+    output_path = tmp_path / "review_overviews.jsonl"
+    provider = FakeReviewProvider()
+
+    result = run_fetch_review_overviews(
+        ROOT / "configs/topics/early_detection_ad.yaml",
+        output_path,
+        max_results=5,
+        provider=provider,
+    )
+
+    rows = read_jsonl_objects(output_path)
+    assert rows[0]["provider_id"] == "W1"
+    assert result.row_counts["review_overviews"] == 1
+    assert provider.max_results == 5
+    assert provider.plan is not None
+    assert provider.plan["filters"] == {
+        "publication_types": ["review"],
+        "open_access_only": True,
+        "has_abstract": True,
+        "has_full_text": True,
+    }
+    assert provider.plan["search_queries"][0]["query"].endswith("review overview")
 
 
 def test_screen_scope_preserves_metadata_and_appends_contract_fields(

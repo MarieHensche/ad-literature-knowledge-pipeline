@@ -74,6 +74,7 @@ def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> No
     command = commands[0].command
     assert command[:3] == [sys.executable, "scripts/run_collection.py", "run"]
     assert "--generate-topic-contract" in command
+    assert "--max-review-overviews" in command
     assert "--overwrite-topic-contract" in command
     assert "--only-step" in command
     assert "generate_topic_contract" in command
@@ -93,7 +94,33 @@ def test_build_collection_without_contract_generates_one(tmp_path: Path) -> None
     ).command
 
     assert "--generate-topic-contract" in command
+    assert "--max-review-overviews" in command
     assert "--topic-contract" not in command
+
+
+def test_build_collection_without_contract_can_run_main_afterward(
+    tmp_path: Path,
+) -> None:
+    commands = server.build_job_commands(
+        {
+            "workflow": "collection",
+            "topic": "How does climate change affect health?",
+            "collection": "climate_health",
+            "model": "gpt-4o-mini",
+            "runId": "ui-collection",
+            "runMainAfterCollection": True,
+        },
+        tmp_path,
+    )
+
+    assert len(commands) == 2
+    main_command = commands[1].command
+    assert "data/raw/climate_health_papers.csv" in main_command
+    contract_index = main_command.index("--topic-contract")
+    assert (
+        main_command[contract_index + 1]
+        == "data/collection_plans/climate_health_topic_contract.yaml"
+    )
 
 
 def test_list_manifests_returns_newest_first(tmp_path: Path) -> None:

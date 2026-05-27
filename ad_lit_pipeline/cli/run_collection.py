@@ -15,8 +15,10 @@ from ad_lit_pipeline.steps.collection import (
     deduplicate,
     export_included,
     fetch_candidates,
+    fetch_review_overviews,
     generate_topic_contract,
     plan_search,
+    refine_topic_contract,
 )
 from ad_lit_pipeline.steps.screening import llm_candidate_screening
 
@@ -29,6 +31,8 @@ def explain(collection: str) -> None:
     print()
     print("Optional preflight step:")
     print("  - generate_topic_contract")
+    print("  - fetch_review_overviews")
+    print("  - refine_topic_contract")
     print()
     print("Conventional outputs:")
     for field, value in artifacts.__dict__.items():
@@ -66,6 +70,18 @@ def build_step_functions(
             Path(args.base_contract),
             trace_dir=trace_dir,
             overwrite=args.overwrite_topic_contract,
+        ),
+        "fetch_review_overviews": lambda: fetch_review_overviews.run(
+            topic_contract_path,
+            artifacts.review_overviews_jsonl,
+            args.max_review_overviews,
+        ),
+        "refine_topic_contract": lambda: refine_topic_contract.run(
+            args.topic,
+            topic_contract_path,
+            artifacts.review_overviews_jsonl,
+            args.model,
+            trace_dir=trace_dir,
         ),
         "plan_search": lambda: plan_search.run(
             args.topic,
@@ -163,6 +179,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=25,
         help="Candidate count to fetch.",
+    )
+    run_parser.add_argument(
+        "--max-review-overviews",
+        type=int,
+        default=fetch_review_overviews.DEFAULT_MAX_REVIEWS,
+        help="Review/overview seed count used when generating a contract.",
     )
     run_parser.add_argument(
         "--model",
