@@ -220,20 +220,20 @@ def build_main_command(payload: dict[str, Any], root: Path = ROOT) -> CommandSpe
 
 def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> CommandSpec:
     collection = validate_collection(require_text(payload, "collection", "collection"))
-    topic = require_text(payload, "topic", "topic")
+    topic = optional_text(payload, "topic")
     max_results = optional_int(payload, "maxResults", 25)
     max_review_overviews = optional_int(payload, "maxReviewOverviews", 5)
     model = optional_text(payload, "model") or "gpt-4o-mini"
     run_id = validate_run_id(optional_text(payload, "runId"), "collection")
     topic_contract = optional_text(payload, "topicContract")
     generate_contract = bool(payload.get("generateTopicContract")) or not topic_contract
+    if generate_contract and not topic:
+        raise UiError("topic is required when generating a topic contract.")
 
     command = [
         sys.executable,
         "scripts/run_collection.py",
         "run",
-        "--topic",
-        topic,
         "--collection",
         collection,
         "--max-results",
@@ -243,6 +243,8 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
         "--run-id",
         run_id,
     ]
+    if topic:
+        command.extend(["--topic", topic])
 
     if topic_contract:
         command.extend(

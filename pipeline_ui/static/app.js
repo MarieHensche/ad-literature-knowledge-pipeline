@@ -91,8 +91,7 @@ async function loadConfig() {
   fillStepSelect($("mainFromStep"), state.config.steps.main);
   renderManifestList(state.config.manifests);
 
-  if (state.config.contracts[0] && !$("contractPath").value) {
-    $("contractPath").value = state.config.contracts[0].path;
+  if (state.config.contracts[0] && !$("mainContractPath").value) {
     $("mainContractPath").value = state.config.contracts[0].path;
   }
   if (state.config.paperInputs[0] && !$("paperPath").value) {

@@ -21,6 +21,7 @@ from ad_lit_pipeline.steps.collection import (
     refine_topic_contract,
 )
 from ad_lit_pipeline.steps.screening import llm_candidate_screening
+from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
 def explain(collection: str) -> None:
@@ -55,16 +56,41 @@ def selected_collection_pipeline(args: argparse.Namespace) -> list[str]:
     return COLLECTION_PIPELINE
 
 
+def topic_description_from_contract(topic_contract_path: Path) -> str:
+    """Derive collection prompt text from a reviewed topic contract."""
+    contract = load_topic_contract(topic_contract_path)
+    research_topic = contract["research_topic"]
+    return (
+        f"{research_topic['title']}\n\n{research_topic['description']}"
+    ).strip()
+
+
+def resolve_topic_description(
+    args: argparse.Namespace,
+    topic_contract_path: Path,
+    selected_steps: list[str],
+) -> str:
+    """Return user topic text, or derive it from the contract when possible."""
+    if args.topic:
+        return args.topic.strip()
+
+    if "generate_topic_contract" in selected_steps:
+        raise ValueError("--topic is required when generating a topic contract.")
+
+    return topic_description_from_contract(topic_contract_path)
+
+
 def build_step_functions(
     args: argparse.Namespace,
     trace_dir: Path,
     topic_contract_path: Path,
+    topic_description: str,
 ) -> dict[str, object]:
     artifacts = collection_artifacts(args.collection)
 
     return {
         "generate_topic_contract": lambda: generate_topic_contract.run(
-            args.topic,
+            topic_description,
             topic_contract_path,
             args.model,
             Path(args.base_contract),
@@ -77,14 +103,14 @@ def build_step_functions(
             args.max_review_overviews,
         ),
         "refine_topic_contract": lambda: refine_topic_contract.run(
-            args.topic,
+            topic_description,
             topic_contract_path,
             artifacts.review_overviews_jsonl,
             args.model,
             trace_dir=trace_dir,
         ),
         "plan_search": lambda: plan_search.run(
-            args.topic,
+            topic_description,
             artifacts.plan_json,
             args.max_results,
             args.model,
@@ -102,7 +128,7 @@ def build_step_functions(
         ),
         "screen_candidates": lambda: llm_candidate_screening.run(
             artifacts.deduped_candidates_jsonl,
-            args.topic,
+            topic_description,
             artifacts.candidate_screening_csv,
             args.model,
             topic_contract_path,
@@ -141,7 +167,13 @@ def run_collection(args: argparse.Namespace) -> None:
     )
     trace_dir = Path(args.trace_dir) if args.trace_dir else default_trace_dir(manifest)
     selected = select_steps(pipeline, args.only_step, args.from_step)
-    step_functions = build_step_functions(args, trace_dir, topic_contract_path)
+    topic_description = resolve_topic_description(args, topic_contract_path, selected)
+    step_functions = build_step_functions(
+        args,
+        trace_dir,
+        topic_contract_path,
+        topic_description,
+    )
 
     if args.dry_run:
         print(f"Run id: {manifest.run_id}")
@@ -172,7 +204,14 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser("run", help="Run the collection workflow.")
-    run_parser.add_argument("--topic", required=True, help="Topic description.")
+    run_parser.add_argument(
+        "--topic",
+        default=None,
+        help=(
+            "Topic description. Required when generating a topic contract; "
+            "optional when --topic-contract is supplied."
+        ),
+    )
     run_parser.add_argument("--collection", required=True, help="Collection name.")
     run_parser.add_argument(
         "--max-results",

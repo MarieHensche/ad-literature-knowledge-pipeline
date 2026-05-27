@@ -193,7 +193,6 @@ python scripts/refine_topic_contract.py \
   --review-overviews data/raw/climate_health_review_overviews.jsonl
 
 python scripts/run_collection.py run \
-  --topic "$TOPIC" \
   --collection climate_health \
   --max-results 50 \
   --model gpt-4o-mini \
@@ -204,10 +203,7 @@ python scripts/run_collection.py run \
 If you already have a reviewed contract, run collection directly:
 
 ```bash
-TOPIC="$(cat configs/topics/ad_early_detection_test_topic.txt)"
-
 python scripts/run_collection.py run \
-  --topic "$TOPIC" \
   --collection ad_early_detection_test \
   --max-results 25 \
   --model gpt-4o-mini \

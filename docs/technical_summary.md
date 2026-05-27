@@ -90,6 +90,10 @@ categories, and then continues into search planning. The planner can describe
 multiple provider types, but the current fetch layer implements only OpenAlex.
 Unsupported provider selections fail before any network fetch.
 
+When a reviewed topic contract is supplied, `--topic` is optional. Collection
+steps derive the planner and candidate-screening topic text from the contract's
+`research_topic` fields.
+
 ## Script-To-Module Map
 
 The original script names are kept as wrappers or direct CLIs:

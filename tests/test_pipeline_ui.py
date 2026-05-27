@@ -98,6 +98,39 @@ def test_build_collection_without_contract_generates_one(tmp_path: Path) -> None
     assert "--topic-contract" not in command
 
 
+def test_build_collection_with_contract_does_not_require_topic(tmp_path: Path) -> None:
+    command = server.build_collection_command(
+        {
+            "workflow": "collection",
+            "collection": "climate_health",
+            "topicContract": "configs/topics/early_detection_ad.yaml",
+            "model": "gpt-4o-mini",
+            "runId": "ui-existing-contract",
+        },
+        tmp_path,
+    ).command
+
+    assert "--topic-contract" in command
+    assert "configs/topics/early_detection_ad.yaml" in command
+    assert "--generate-topic-contract" not in command
+    assert "--topic" not in command
+
+
+def test_build_collection_requires_topic_when_generating_contract(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(server.UiError, match="topic is required"):
+        server.build_collection_command(
+            {
+                "workflow": "collection",
+                "collection": "climate_health",
+                "model": "gpt-4o-mini",
+                "runId": "ui-missing-topic",
+            },
+            tmp_path,
+        )
+
+
 def test_build_collection_without_contract_can_run_main_afterward(
     tmp_path: Path,
 ) -> None:

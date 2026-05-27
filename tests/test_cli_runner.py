@@ -130,3 +130,45 @@ def test_run_collection_dry_run_without_contract_auto_generates_contract() -> No
 
     assert "Would run step: generate_topic_contract" in result.stdout
     assert "pytest_auto_contract_dry_run_topic_contract.yaml" in result.stdout
+
+
+def test_run_collection_with_contract_does_not_require_topic() -> None:
+    result = run_script(
+        "scripts/run_collection.py",
+        "run",
+        "--collection",
+        "pytest_existing_contract_dry_run",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--only-step",
+        "plan_search",
+        "--dry-run",
+        "--run-id",
+        "pytest-existing-contract-dry-run",
+    )
+
+    assert "Would run step: plan_search" in result.stdout
+    assert "generate_topic_contract" not in result.stdout
+
+
+def test_run_collection_requires_topic_when_generating_contract() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_collection.py",
+            "run",
+            "--collection",
+            "pytest_missing_topic",
+            "--only-step",
+            "generate_topic_contract",
+            "--dry-run",
+            "--run-id",
+            "pytest-missing-topic",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "--topic is required when generating a topic contract" in result.stderr
