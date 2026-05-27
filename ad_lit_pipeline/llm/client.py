@@ -51,40 +51,66 @@ class OpenAIResponsesClient:
         from openai import OpenAI
 
         client = OpenAI()
-        response = client.responses.create(
-            model=model,
-            input=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": prompt},
-            ],
-            text=text_format(schema_name, schema),
-        )
 
-        parsed = json.loads(response.output_text)
-        if not isinstance(parsed, dict):
-            raise ValueError("Expected JSON object from LLM response.")
+        # Retry logic: try up to 2 times (1 initial attempt + 1 retry) on JSON decode errors
+        last_error = None
+        for attempt in range(2):
+            try:
+                response = client.responses.create(
+                    model=model,
+                    input=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": prompt},
+                    ],
+                    text=text_format(schema_name, schema),
+                )
 
-        raw_response: Any
-        if hasattr(response, "model_dump"):
-            raw_response = response.model_dump()
-        else:
-            raw_response = {"output_text": response.output_text}
+                parsed = json.loads(response.output_text)
 
-        trace_paths = None
-        if trace_writer is not None:
-            trace_paths = trace_writer.write_trace(
-                step_name=step_name,
-                call_id=call_id,
-                system_message=system_message,
-                prompt=prompt,
-                model=model,
-                schema_name=schema_name,
-                schema=schema,
-                raw_response=raw_response,
-                parsed_response=parsed,
-            )
+                if not isinstance(parsed, dict):
+                    raise ValueError("Expected JSON object from LLM response.")
 
-        return LLMResult(parsed=parsed, raw_response=raw_response, trace_paths=trace_paths)
+                raw_response: Any
+                if hasattr(response, "model_dump"):
+                    raw_response = response.model_dump()
+                else:
+                    raw_response = {"output_text": response.output_text}
+
+                trace_paths = None
+                if trace_writer is not None:
+                    trace_paths = trace_writer.write_trace(
+                        step_name=step_name,
+                        call_id=call_id,
+                        system_message=system_message,
+                        prompt=prompt,
+                        model=model,
+                        schema_name=schema_name,
+                        schema=schema,
+                        raw_response=raw_response,
+                        parsed_response=parsed,
+                    )
+
+                return LLMResult(parsed=parsed, raw_response=raw_response, trace_paths=trace_paths)
+
+            except json.JSONDecodeError as error:
+                last_error = error
+                # Retry once on JSON decode errors (transient API issues)
+                if attempt < 1:
+                    continue
+                else:
+                    # Out of retries, raise error
+                    raise ValueError(
+                        f"LLM returned malformed JSON (possible transient API issue). "
+                        f"Try re-running the command. Error: {error}"
+                    ) from error
+
+        # Should not reach here, but if we do, raise the last error
+        if last_error:
+            raise ValueError(
+                f"LLM returned malformed JSON (possible transient API issue). "
+                f"Try re-running the command. Error: {last_error}"
+            ) from last_error
+        raise ValueError("Unexpected error in create_json")
 
 
 class StaticJSONClient:

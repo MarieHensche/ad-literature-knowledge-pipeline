@@ -45,6 +45,7 @@ def run_selected_steps(
             print(f"Would run step: {step_name}")
             continue
 
+        print(f"Running: {step_name}")
         step_function = step_functions[step_name]
         started = time.monotonic()
         started_at = utc_now()
@@ -54,6 +55,7 @@ def run_selected_steps(
             result.metadata["started_at"] = started_at
             result.metadata["ended_at"] = utc_now()
             manifest.record_step(result)
+            print(f"Completed: {step_name} ({result.elapsed_seconds:.1f}s)")
         except Exception as error:
             result = StepResult(
                 step_name=step_name,
