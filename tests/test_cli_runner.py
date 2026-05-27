@@ -113,6 +113,26 @@ def test_run_collection_dry_run_can_generate_contract_first() -> None:
     assert "pytest_contract_dry_run_topic_contract.yaml" in result.stdout
 
 
+def test_run_collection_can_run_contract_bootstrap_only() -> None:
+    result = run_script(
+        "scripts/run_collection.py",
+        "run",
+        "--topic",
+        "How does climate change affect human health?",
+        "--collection",
+        "pytest_contract_bootstrap_dry_run",
+        "--contract-bootstrap-only",
+        "--dry-run",
+        "--run-id",
+        "pytest-contract-bootstrap-dry-run",
+    )
+
+    assert "Would run step: generate_topic_contract" in result.stdout
+    assert "Would run step: fetch_review_overviews" in result.stdout
+    assert "Would run step: refine_topic_contract" in result.stdout
+    assert "Would run step: plan_search" not in result.stdout
+
+
 def test_run_collection_dry_run_without_contract_auto_generates_contract() -> None:
     result = run_script(
         "scripts/run_collection.py",

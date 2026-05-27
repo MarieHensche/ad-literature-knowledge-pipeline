@@ -9,6 +9,7 @@ from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_man
 from ad_lit_pipeline.core.registry import (
     COLLECTION_PIPELINE,
     COLLECTION_WITH_CONTRACT_PIPELINE,
+    CONTRACT_BOOTSTRAP_PIPELINE,
 )
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
 from ad_lit_pipeline.steps.collection import (
@@ -51,6 +52,8 @@ def resolve_topic_contract_path(args: argparse.Namespace) -> Path:
 
 
 def selected_collection_pipeline(args: argparse.Namespace) -> list[str]:
+    if args.contract_bootstrap_only:
+        return CONTRACT_BOOTSTRAP_PIPELINE
     if args.generate_topic_contract or not args.topic_contract:
         return COLLECTION_WITH_CONTRACT_PIPELINE
     return COLLECTION_PIPELINE
@@ -255,6 +258,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--overwrite-topic-contract",
         action="store_true",
         help="Replace the generated topic contract if it already exists.",
+    )
+    run_parser.add_argument(
+        "--contract-bootstrap-only",
+        action="store_true",
+        help=(
+            "Run only the contract bootstrap steps: generate the draft, fetch "
+            "review/overview seeds, and refine the contract."
+        ),
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")
     run_parser.add_argument("--dry-run", action="store_true", help="Print selected steps.")

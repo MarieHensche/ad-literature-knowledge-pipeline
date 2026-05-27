@@ -90,6 +90,10 @@ categories, and then continues into search planning. The planner can describe
 multiple provider types, but the current fetch layer implements only OpenAlex.
 Unsupported provider selections fail before any network fetch.
 
+Passing `--contract-bootstrap-only` runs only the three contract-bootstrap steps
+and stops before search planning, so a user can review the generated contract
+before candidate collection.
+
 When a reviewed topic contract is supplied, `--topic` is optional. Collection
 steps derive the planner and candidate-screening topic text from the contract's
 `research_topic` fields.

@@ -84,6 +84,7 @@ async function loadConfig() {
   $("maxReviewOverviews").value = state.config.defaults.maxReviewOverviews;
 
   fillSelect($("contractSelect"), state.config.contracts, "Choose a contract");
+  fillSelect($("mainContractSelect"), state.config.contracts, "Choose a contract");
   fillSelect($("paperInputSelect"), state.config.paperInputs, "Choose an input file");
   fillStepSelect($("collectionOnlyStep"), state.config.steps.collectionWithContract);
   fillStepSelect($("collectionFromStep"), state.config.steps.collectionWithContract);
@@ -93,6 +94,7 @@ async function loadConfig() {
 
   if (state.config.contracts[0] && !$("mainContractPath").value) {
     $("mainContractPath").value = state.config.contracts[0].path;
+    $("mainContractSelect").value = state.config.contracts[0].path;
   }
   if (state.config.paperInputs[0] && !$("paperPath").value) {
     $("paperPath").value = state.config.paperInputs[0].path;
@@ -108,6 +110,7 @@ async function loadContract(path = activeContractPath()) {
   const file = await api(`/api/files?path=${encodeURIComponent(path)}`);
   $("contractPath").value = file.path;
   $("mainContractPath").value = file.path;
+  $("mainContractSelect").value = file.path;
   $("contractEditor").value = file.content;
   setStatus($("contractState"), "loaded");
 }
@@ -126,6 +129,7 @@ async function saveContract() {
   });
   $("contractPath").value = file.path;
   $("mainContractPath").value = file.path;
+  $("mainContractSelect").value = file.path;
   setStatus($("contractState"), "saved");
   showToast("Contract saved.");
   await refreshManifests();
@@ -155,7 +159,8 @@ function collectionPayload(workflow = "collection") {
   };
   if (workflow === "contract") {
     payload.topicContract = "";
-    payload.onlyStep = "generate_topic_contract";
+    payload.contractBootstrapOnly = true;
+    payload.onlyStep = "";
     payload.fromStep = "";
     state.lastGeneratedContractPath = generatedContractPath(collection);
     $("contractPath").value = state.lastGeneratedContractPath;
@@ -475,6 +480,10 @@ function bindEvents() {
   $("collectionName").addEventListener("input", syncSuggestedContractPath);
   $("contractSelect").addEventListener("change", (event) => {
     $("contractPath").value = event.target.value;
+    $("mainContractPath").value = event.target.value;
+    $("mainContractSelect").value = event.target.value;
+  });
+  $("mainContractSelect").addEventListener("change", (event) => {
     $("mainContractPath").value = event.target.value;
   });
   $("paperInputSelect").addEventListener("change", (event) => {

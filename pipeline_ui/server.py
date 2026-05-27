@@ -267,6 +267,8 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
             )
         if payload.get("overwriteTopicContract"):
             command.append("--overwrite-topic-contract")
+    if payload.get("contractBootstrapOnly"):
+        command.append("--contract-bootstrap-only")
 
     add_step_options(command, payload)
     return CommandSpec(
@@ -311,7 +313,9 @@ def build_job_commands(payload: dict[str, Any], root: Path = ROOT) -> list[Comma
         contract_payload = dict(payload)
         contract_payload["workflow"] = "collection"
         contract_payload["generateTopicContract"] = True
-        contract_payload["onlyStep"] = "generate_topic_contract"
+        contract_payload["contractBootstrapOnly"] = True
+        contract_payload["onlyStep"] = ""
+        contract_payload["fromStep"] = ""
         return [build_collection_command(contract_payload, root)]
 
     raise UiError(f"Unknown workflow: {workflow}")

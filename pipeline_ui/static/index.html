@@ -49,7 +49,7 @@
               </label>
               <label class="field">
                 <span>Review Seeds</span>
-                <input id="maxReviewOverviews" min="0" type="number" value="5">
+                <input id="maxReviewOverviews" min="1" type="number" value="5">
               </label>
               <label class="field">
                 <span>Model</span>
@@ -90,7 +90,7 @@
             </details>
 
             <div class="action-row">
-              <button class="secondary-button" id="generateContract" type="button">Generate Draft</button>
+              <button class="secondary-button" id="generateContract" type="button">Create Contract</button>
               <button class="primary-button" id="startCollection" type="button">Start Collection</button>
               <button class="primary-button quiet" id="saveAndStartCollection" type="button">Save and Start</button>
             </div>
@@ -153,6 +153,10 @@
               </label>
               <label class="field field-wide">
                 <span>Topic Contract</span>
+                <select id="mainContractSelect"></select>
+              </label>
+              <label class="field field-wide">
+                <span>Contract Path</span>
                 <input id="mainContractPath" type="text" placeholder="configs/topics/early_detection_ad.yaml">
               </label>
               <label class="field">

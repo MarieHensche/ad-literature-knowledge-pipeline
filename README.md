@@ -173,31 +173,23 @@ The review/overview seed artifact is written to:
 data/raw/climate_health_review_overviews.jsonl
 ```
 
-If you want a human review gate before candidate collection, run the three
-contract-bootstrap steps separately, review the YAML, then continue collection
-from search planning:
+If you want a human review gate before candidate collection, run only the
+contract-bootstrap pipeline, review the YAML, then run collection with the
+reviewed contract:
 
 ```bash
-python scripts/generate_topic_contract.py \
+python scripts/run_collection.py run \
   --topic "$TOPIC" \
-  --output data/collection_plans/climate_health_topic_contract.yaml
-
-python scripts/fetch_review_overviews.py \
-  --topic-contract data/collection_plans/climate_health_topic_contract.yaml \
-  --output data/raw/climate_health_review_overviews.jsonl \
-  --max-results 5
-
-python scripts/refine_topic_contract.py \
-  --topic "$TOPIC" \
-  --topic-contract data/collection_plans/climate_health_topic_contract.yaml \
-  --review-overviews data/raw/climate_health_review_overviews.jsonl
+  --collection climate_health \
+  --model gpt-4o-mini \
+  --max-review-overviews 5 \
+  --contract-bootstrap-only
 
 python scripts/run_collection.py run \
   --collection climate_health \
   --max-results 50 \
   --model gpt-4o-mini \
-  --topic-contract data/collection_plans/climate_health_topic_contract.yaml \
-  --from-step plan_search
+  --topic-contract data/collection_plans/climate_health_topic_contract.yaml
 ```
 
 If you already have a reviewed contract, run collection directly:

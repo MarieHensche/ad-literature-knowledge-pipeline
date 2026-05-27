@@ -56,6 +56,16 @@ def test_build_main_command_uses_existing_pipeline_cli(tmp_path: Path) -> None:
     assert command.command[only_step_index + 1] == "normalize_metadata"
 
 
+def test_ui_has_main_contract_dropdown() -> None:
+    html = (Path(__file__).resolve().parents[1] / "pipeline_ui/static/index.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="paperInputSelect"' in html
+    assert 'id="mainContractSelect"' in html
+    assert 'id="mainContractPath"' in html
+
+
 def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> None:
     commands = server.build_job_commands(
         {
@@ -76,8 +86,8 @@ def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> No
     assert "--generate-topic-contract" in command
     assert "--max-review-overviews" in command
     assert "--overwrite-topic-contract" in command
-    assert "--only-step" in command
-    assert "generate_topic_contract" in command
+    assert "--contract-bootstrap-only" in command
+    assert "--only-step" not in command
     assert "--topic-contract" not in command
 
 
