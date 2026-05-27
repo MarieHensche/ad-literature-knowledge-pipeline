@@ -83,6 +83,7 @@ def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> No
     assert len(commands) == 1
     command = commands[0].command
     assert command[:3] == [sys.executable, "scripts/run_collection.py", "run"]
+    assert commands[0].label == "Create contract"
     assert "--generate-topic-contract" in command
     assert "--max-review-overviews" in command
     assert "--overwrite-topic-contract" in command
@@ -124,6 +125,26 @@ def test_build_collection_with_contract_does_not_require_topic(tmp_path: Path) -
     assert "configs/topics/early_detection_ad.yaml" in command
     assert "--generate-topic-contract" not in command
     assert "--topic" not in command
+
+
+def test_build_collection_with_contract_ignores_stale_bootstrap_step(
+    tmp_path: Path,
+) -> None:
+    command = server.build_collection_command(
+        {
+            "workflow": "collection",
+            "collection": "climate_health",
+            "topicContract": "configs/topics/early_detection_ad.yaml",
+            "model": "gpt-4o-mini",
+            "runId": "ui-existing-contract-review",
+            "fromStep": "fetch_review_overviews",
+        },
+        tmp_path,
+    ).command
+
+    assert "--topic-contract" in command
+    assert "--generate-topic-contract" not in command
+    assert "--from-step" not in command
 
 
 def test_build_collection_requires_topic_when_generating_contract(

@@ -56,6 +56,9 @@ def selected_collection_pipeline(args: argparse.Namespace) -> list[str]:
         return CONTRACT_BOOTSTRAP_PIPELINE
     if args.generate_topic_contract or not args.topic_contract:
         return COLLECTION_WITH_CONTRACT_PIPELINE
+    requested_step = args.only_step or args.from_step
+    if requested_step in CONTRACT_BOOTSTRAP_PIPELINE:
+        return COLLECTION_WITH_CONTRACT_PIPELINE
     return COLLECTION_PIPELINE
 
 
@@ -148,7 +151,6 @@ def build_step_functions(
 def run_collection(args: argparse.Namespace) -> None:
     load_dotenv()
     topic_contract_path = resolve_topic_contract_path(args)
-    pipeline = selected_collection_pipeline(args)
 
     if args.resume:
         if not args.run_id:
@@ -161,6 +163,7 @@ def run_collection(args: argparse.Namespace) -> None:
             return
         args.from_step = resume_from
 
+    pipeline = selected_collection_pipeline(args)
     manifest = ManifestRecorder.create(
         collection=args.collection,
         pipeline_name="collection",

@@ -25,6 +25,7 @@ from ad_lit_pipeline.cli.run_pipeline import SUPPORTED_PAPERS_FORMATS
 from ad_lit_pipeline.core.registry import (
     COLLECTION_PIPELINE,
     COLLECTION_WITH_CONTRACT_PIPELINE,
+    CONTRACT_BOOTSTRAP_PIPELINE,
     MAIN_PIPELINE,
 )
 
@@ -181,6 +182,31 @@ def add_step_options(command: list[str], payload: dict[str, Any]) -> None:
         command.extend(["--trace-dir", relative_to_root(resolve_workspace_path(trace_dir))])
 
 
+def collection_step_names(
+    generate_contract: bool,
+    contract_bootstrap_only: bool,
+) -> list[str]:
+    if contract_bootstrap_only:
+        return CONTRACT_BOOTSTRAP_PIPELINE
+    if generate_contract:
+        return COLLECTION_WITH_CONTRACT_PIPELINE
+    return COLLECTION_PIPELINE
+
+
+def with_valid_collection_step_options(
+    payload: dict[str, Any],
+    generate_contract: bool,
+    contract_bootstrap_only: bool,
+) -> dict[str, Any]:
+    normalized = dict(payload)
+    allowed_steps = set(collection_step_names(generate_contract, contract_bootstrap_only))
+    for key in ("onlyStep", "fromStep"):
+        value = optional_text(normalized, key)
+        if value and value not in allowed_steps:
+            normalized[key] = ""
+    return normalized
+
+
 def build_main_command(payload: dict[str, Any], root: Path = ROOT) -> CommandSpec:
     collection = validate_collection(require_text(payload, "collection", "collection"))
     papers = relative_to_root(
@@ -227,6 +253,7 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
     run_id = validate_run_id(optional_text(payload, "runId"), "collection")
     topic_contract = optional_text(payload, "topicContract")
     generate_contract = bool(payload.get("generateTopicContract")) or not topic_contract
+    contract_bootstrap_only = bool(payload.get("contractBootstrapOnly"))
     if generate_contract and not topic:
         raise UiError("topic is required when generating a topic contract.")
 
@@ -267,12 +294,18 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
             )
         if payload.get("overwriteTopicContract"):
             command.append("--overwrite-topic-contract")
-    if payload.get("contractBootstrapOnly"):
+    if contract_bootstrap_only:
         command.append("--contract-bootstrap-only")
 
+    payload = with_valid_collection_step_options(
+        payload,
+        generate_contract,
+        contract_bootstrap_only,
+    )
     add_step_options(command, payload)
+    label = "Create contract" if contract_bootstrap_only else "Collect papers"
     return CommandSpec(
-        label="Collect papers",
+        label=label,
         command=command,
         run_id=run_id,
         manifest_path=f"runs/{run_id}/manifest.json",

@@ -49,6 +49,14 @@ function fillStepSelect(select, steps) {
   fillSelect(select, steps, "Any");
 }
 
+function refillStepSelect(select, steps) {
+  const current = select.value;
+  fillStepSelect(select, steps);
+  if (steps.includes(current)) {
+    select.value = current;
+  }
+}
+
 function setStatus(element, status) {
   element.textContent = status || "Idle";
   element.className = `status-pill ${status || ""}`;
@@ -66,12 +74,35 @@ function generatedContractPath(collection) {
   return `data/collection_plans/${collection}_topic_contract.yaml`;
 }
 
-function syncSuggestedContractPath() {
-  const collection = $("collectionName").value.trim();
-  if (!collection || activeContractPath()) {
-    return;
+function collectionUsesContractBootstrap(workflow = "collection") {
+  return (
+    workflow === "contract" ||
+    $("generateInRun").checked ||
+    !activeContractPath()
+  );
+}
+
+function collectionStepsForCurrentMode() {
+  if (!state.config) {
+    return [];
   }
-  $("contractPath").value = generatedContractPath(collection);
+  if (collectionUsesContractBootstrap()) {
+    return state.config.steps.collectionWithContract;
+  }
+  return state.config.steps.collection;
+}
+
+function updateCollectionStepControls() {
+  const steps = collectionStepsForCurrentMode();
+  refillStepSelect($("collectionOnlyStep"), steps);
+  refillStepSelect($("collectionFromStep"), steps);
+}
+
+function selectedCollectionStepValue(element, usesBootstrap) {
+  const steps = usesBootstrap
+    ? state.config.steps.collectionWithContract
+    : state.config.steps.collection;
+  return steps.includes(element.value) ? element.value : "";
 }
 
 async function loadConfig() {
@@ -86,8 +117,7 @@ async function loadConfig() {
   fillSelect($("contractSelect"), state.config.contracts, "Choose a contract");
   fillSelect($("mainContractSelect"), state.config.contracts, "Choose a contract");
   fillSelect($("paperInputSelect"), state.config.paperInputs, "Choose an input file");
-  fillStepSelect($("collectionOnlyStep"), state.config.steps.collectionWithContract);
-  fillStepSelect($("collectionFromStep"), state.config.steps.collectionWithContract);
+  updateCollectionStepControls();
   fillStepSelect($("mainOnlyStep"), state.config.steps.main);
   fillStepSelect($("mainFromStep"), state.config.steps.main);
   renderManifestList(state.config.manifests);
@@ -112,6 +142,8 @@ async function loadContract(path = activeContractPath()) {
   $("mainContractPath").value = file.path;
   $("mainContractSelect").value = file.path;
   $("contractEditor").value = file.content;
+  $("generateInRun").checked = false;
+  updateCollectionStepControls();
   setStatus($("contractState"), "loaded");
 }
 
@@ -130,6 +162,8 @@ async function saveContract() {
   $("contractPath").value = file.path;
   $("mainContractPath").value = file.path;
   $("mainContractSelect").value = file.path;
+  $("generateInRun").checked = false;
+  updateCollectionStepControls();
   setStatus($("contractState"), "saved");
   showToast("Contract saved.");
   await refreshManifests();
@@ -138,7 +172,7 @@ async function saveContract() {
 
 function collectionPayload(workflow = "collection") {
   const collection = $("collectionName").value.trim();
-  const generateTopicContract = $("generateInRun").checked || workflow === "contract";
+  const usesBootstrap = collectionUsesContractBootstrap(workflow);
   const payload = {
     workflow,
     topic: $("collectionTopic").value.trim(),
@@ -150,10 +184,10 @@ function collectionPayload(workflow = "collection") {
     topicContract: activeContractPath(),
     baseContract: $("baseContract").value.trim(),
     overwriteTopicContract: $("overwriteContract").checked,
-    generateTopicContract,
+    generateTopicContract: usesBootstrap,
     dryRun: $("collectionDryRun").checked,
-    onlyStep: $("collectionOnlyStep").value,
-    fromStep: $("collectionFromStep").value,
+    onlyStep: selectedCollectionStepValue($("collectionOnlyStep"), usesBootstrap),
+    fromStep: selectedCollectionStepValue($("collectionFromStep"), usesBootstrap),
     traceDir: $("collectionTraceDir").value.trim(),
     runMainAfterCollection: $("runMainAfterCollection").checked,
   };
@@ -163,7 +197,10 @@ function collectionPayload(workflow = "collection") {
     payload.onlyStep = "";
     payload.fromStep = "";
     state.lastGeneratedContractPath = generatedContractPath(collection);
-    $("contractPath").value = state.lastGeneratedContractPath;
+    $("contractPath").value = "";
+    $("contractEditor").value = "";
+    $("generateInRun").checked = false;
+    updateCollectionStepControls();
   }
   return payload;
 }
@@ -222,8 +259,10 @@ function watchJob(jobId) {
       if (!["queued", "running"].includes(job.status)) {
         window.clearInterval(state.jobTimer);
         await refreshManifests();
-        if (job.status === "succeeded" && state.lastGeneratedContractPath) {
-          await loadContract(state.lastGeneratedContractPath);
+        const generatedContractPath = state.lastGeneratedContractPath;
+        state.lastGeneratedContractPath = null;
+        if (job.status === "succeeded" && generatedContractPath) {
+          await loadContract(generatedContractPath);
         }
       }
     } catch (error) {
@@ -477,11 +516,14 @@ function bindEvents() {
   $("refreshConfig").addEventListener("click", () => loadConfig().catch(showError));
   $("refreshManifests").addEventListener("click", () => refreshManifests().catch(showError));
   $("manifestFilter").addEventListener("input", () => renderManifestList(state.config.manifests));
-  $("collectionName").addEventListener("input", syncSuggestedContractPath);
+  $("collectionName").addEventListener("input", updateCollectionStepControls);
+  $("contractPath").addEventListener("input", updateCollectionStepControls);
+  $("generateInRun").addEventListener("change", updateCollectionStepControls);
   $("contractSelect").addEventListener("change", (event) => {
     $("contractPath").value = event.target.value;
     $("mainContractPath").value = event.target.value;
     $("mainContractSelect").value = event.target.value;
+    updateCollectionStepControls();
   });
   $("mainContractSelect").addEventListener("change", (event) => {
     $("mainContractPath").value = event.target.value;

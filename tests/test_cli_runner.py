@@ -171,6 +171,27 @@ def test_run_collection_with_contract_does_not_require_topic() -> None:
     assert "generate_topic_contract" not in result.stdout
 
 
+def test_run_collection_with_contract_can_start_at_review_refinement() -> None:
+    result = run_script(
+        "scripts/run_collection.py",
+        "run",
+        "--collection",
+        "pytest_existing_contract_review_dry_run",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--from-step",
+        "fetch_review_overviews",
+        "--dry-run",
+        "--run-id",
+        "pytest-existing-contract-review-dry-run",
+    )
+
+    assert "Would run step: generate_topic_contract" not in result.stdout
+    assert "Would run step: fetch_review_overviews" in result.stdout
+    assert "Would run step: refine_topic_contract" in result.stdout
+    assert "Would run step: plan_search" in result.stdout
+
+
 def test_run_collection_requires_topic_when_generating_contract() -> None:
     result = subprocess.run(
         [
