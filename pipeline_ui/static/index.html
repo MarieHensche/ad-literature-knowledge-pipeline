@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pipeline UI</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Literature Knowledge Pipeline</p>
+        <h1>Run Console</h1>
+      </div>
+      <div class="workspace" id="workspacePath">Loading workspace</div>
+    </header>
+
+    <nav class="tabs" aria-label="Primary views">
+      <button class="tab is-active" data-tab="collect" type="button">Collect</button>
+      <button class="tab" data-tab="main" type="button">Tag Papers</button>
+      <button class="tab" data-tab="manifests" type="button">Manifests</button>
+    </nav>
+
+    <main>
+      <section class="tab-panel is-active" id="collectPanel">
+        <div class="workbench two-column">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Automated Collection</p>
+                <h2>Collect Papers</h2>
+              </div>
+              <button class="ghost-button" id="refreshConfig" type="button">Refresh</button>
+            </div>
+
+            <div class="form-grid">
+              <label class="field field-wide">
+                <span>Topic</span>
+                <textarea id="collectionTopic" rows="5" placeholder="How does..."></textarea>
+              </label>
+              <label class="field">
+                <span>Collection</span>
+                <input id="collectionName" type="text" value="new_collection">
+              </label>
+              <label class="field">
+                <span>Max Results</span>
+                <input id="maxResults" min="1" type="number" value="25">
+              </label>
+              <label class="field">
+                <span>Model</span>
+                <input id="collectionModel" type="text" value="gpt-4o-mini">
+              </label>
+              <label class="field">
+                <span>Run ID</span>
+                <input id="collectionRunId" type="text" placeholder="auto">
+              </label>
+            </div>
+
+            <details class="advanced">
+              <summary>Advanced</summary>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Only Step</span>
+                  <select id="collectionOnlyStep"></select>
+                </label>
+                <label class="field">
+                  <span>From Step</span>
+                  <select id="collectionFromStep"></select>
+                </label>
+                <label class="field">
+                  <span>Trace Dir</span>
+                  <input id="collectionTraceDir" type="text" placeholder="auto">
+                </label>
+                <label class="field">
+                  <span>Base Contract</span>
+                  <input id="baseContract" type="text" value="configs/topics/topic_contract_template.yaml">
+                </label>
+              </div>
+              <div class="check-row">
+                <label><input id="collectionDryRun" type="checkbox"> Dry run</label>
+                <label><input id="overwriteContract" type="checkbox"> Overwrite generated contract</label>
+                <label><input id="generateInRun" type="checkbox"> Generate contract in this run</label>
+                <label><input id="runMainAfterCollection" type="checkbox"> Tag after collection</label>
+              </div>
+            </details>
+
+            <div class="action-row">
+              <button class="secondary-button" id="generateContract" type="button">Generate Draft</button>
+              <button class="primary-button" id="startCollection" type="button">Start Collection</button>
+              <button class="primary-button quiet" id="saveAndStartCollection" type="button">Save and Start</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Topic Contract</p>
+                <h2>View And Edit</h2>
+              </div>
+              <span class="status-pill" id="contractState">Idle</span>
+            </div>
+
+            <div class="form-grid">
+              <label class="field field-wide">
+                <span>Known Contracts</span>
+                <select id="contractSelect"></select>
+              </label>
+              <label class="field field-wide">
+                <span>Path</span>
+                <input id="contractPath" type="text" placeholder="configs/topics/example.yaml">
+              </label>
+            </div>
+            <div class="action-row compact">
+              <button class="ghost-button" id="loadContract" type="button">Load</button>
+              <button class="secondary-button" id="saveContract" type="button">Save</button>
+            </div>
+            <textarea class="code-editor" id="contractEditor" spellcheck="false"></textarea>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="mainPanel">
+        <div class="workbench two-column">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Existing Papers</p>
+                <h2>Tag Papers</h2>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>Collection</span>
+                <input id="mainCollectionName" type="text" value="example">
+              </label>
+              <label class="field">
+                <span>Model</span>
+                <input id="mainModel" type="text" value="gpt-4o-mini">
+              </label>
+              <label class="field field-wide">
+                <span>Paper Input</span>
+                <select id="paperInputSelect"></select>
+              </label>
+              <label class="field field-wide">
+                <span>Paper Path</span>
+                <input id="paperPath" type="text" placeholder="data/raw/example_papers.csv">
+              </label>
+              <label class="field field-wide">
+                <span>Topic Contract</span>
+                <input id="mainContractPath" type="text" placeholder="configs/topics/early_detection_ad.yaml">
+              </label>
+              <label class="field">
+                <span>Run ID</span>
+                <input id="mainRunId" type="text" placeholder="auto">
+              </label>
+            </div>
+
+            <details class="advanced">
+              <summary>Advanced</summary>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Only Step</span>
+                  <select id="mainOnlyStep"></select>
+                </label>
+                <label class="field">
+                  <span>From Step</span>
+                  <select id="mainFromStep"></select>
+                </label>
+                <label class="field">
+                  <span>Trace Dir</span>
+                  <input id="mainTraceDir" type="text" placeholder="auto">
+                </label>
+              </div>
+              <div class="check-row">
+                <label><input id="mainDryRun" type="checkbox"> Dry run</label>
+                <label><input id="mainResume" type="checkbox"> Resume</label>
+              </div>
+            </details>
+
+            <div class="action-row">
+              <button class="primary-button" id="startMain" type="button">Start Tagging</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Live Job</p>
+                <h2>Output</h2>
+              </div>
+              <span class="status-pill" id="jobState">Idle</span>
+            </div>
+            <div class="job-summary" id="jobSummary"></div>
+            <pre class="log-output" id="jobLog"></pre>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="manifestsPanel">
+        <div class="manifest-layout">
+          <aside class="panel manifest-list">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Runs</p>
+                <h2>History</h2>
+              </div>
+              <button class="ghost-button" id="refreshManifests" type="button">Refresh</button>
+            </div>
+            <input class="filter-input" id="manifestFilter" type="search" placeholder="Filter runs">
+            <div class="run-list" id="manifestList"></div>
+          </aside>
+
+          <section class="panel manifest-viewer">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Manifest</p>
+                <h2 id="manifestTitle">Select A Run</h2>
+              </div>
+              <span class="status-pill" id="manifestState">Idle</span>
+            </div>
+            <div class="manifest-summary" id="manifestSummary"></div>
+            <div class="steps" id="manifestSteps"></div>
+            <details class="raw-block">
+              <summary>Raw Manifest</summary>
+              <pre id="rawManifest"></pre>
+            </details>
+          </section>
+
+          <section class="panel file-preview">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">File</p>
+                <h2 id="filePreviewTitle">Preview</h2>
+              </div>
+            </div>
+            <pre id="filePreview"></pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

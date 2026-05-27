@@ -278,6 +278,25 @@ Collection manifests include the generated or supplied topic contract path,
 search plan path, fetched candidate counts, query counts, screening counts, and
 trace paths for contract generation, search planning, and candidate screening.
 
+## Local UI
+
+Run the local web console:
+
+```bash
+.venv/bin/python scripts/run_ui.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765
+```
+
+The UI is a separate wrapper over the existing CLIs. It can generate and edit
+topic contracts, start automated collection runs, start tagging runs from an
+input file, tail run logs, and inspect run manifests without changing pipeline
+step behavior.
+
 ## Development
 
 Run tests with:
