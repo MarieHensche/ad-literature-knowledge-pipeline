@@ -81,7 +81,9 @@ Steps:
 | `screen_candidates` | `ad_lit_pipeline/steps/screening/llm_candidate_screening.py` | `data/raw/<collection>_candidate_screening.csv` |
 | `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
 
-The planner can describe multiple provider types, but the current fetch layer
+When no topic contract is supplied, collection first generates a draft contract
+at the conventional collection path and then continues into search planning. The
+planner can describe multiple provider types, but the current fetch layer
 implements only OpenAlex. Unsupported provider selections fail before any network
 fetch.
 

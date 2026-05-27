@@ -224,7 +224,8 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
     max_results = optional_int(payload, "maxResults", 25)
     model = optional_text(payload, "model") or "gpt-4o-mini"
     run_id = validate_run_id(optional_text(payload, "runId"), "collection")
-    generate_contract = bool(payload.get("generateTopicContract"))
+    topic_contract = optional_text(payload, "topicContract")
+    generate_contract = bool(payload.get("generateTopicContract")) or not topic_contract
 
     command = [
         sys.executable,
@@ -242,7 +243,6 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
         run_id,
     ]
 
-    topic_contract = optional_text(payload, "topicContract")
     if topic_contract:
         command.extend(
             [
@@ -250,8 +250,6 @@ def build_collection_command(payload: dict[str, Any], root: Path = ROOT) -> Comm
                 relative_to_root(resolve_workspace_path(topic_contract, root), root),
             ]
         )
-    elif not generate_contract:
-        raise UiError("--topic-contract is required unless a topic contract is generated.")
 
     if generate_contract:
         command.append("--generate-topic-contract")

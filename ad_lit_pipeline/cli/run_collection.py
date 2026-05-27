@@ -42,15 +42,11 @@ def generated_topic_contract_path(collection: str) -> Path:
 def resolve_topic_contract_path(args: argparse.Namespace) -> Path:
     if args.topic_contract:
         return Path(args.topic_contract)
-    if args.generate_topic_contract:
-        return generated_topic_contract_path(args.collection)
-    raise ValueError(
-        "--topic-contract is required unless --generate-topic-contract is used."
-    )
+    return generated_topic_contract_path(args.collection)
 
 
 def selected_collection_pipeline(args: argparse.Namespace) -> list[str]:
-    if args.generate_topic_contract:
+    if args.generate_topic_contract or not args.topic_contract:
         return COLLECTION_WITH_CONTRACT_PIPELINE
     return COLLECTION_PIPELINE
 
@@ -176,12 +172,18 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--topic-contract",
         default=None,
-        help="Topic contract YAML for provider and screening policy.",
+        help=(
+            "Topic contract YAML for provider and screening policy. "
+            "If omitted, a contract is generated before collection."
+        ),
     )
     run_parser.add_argument(
         "--generate-topic-contract",
         action="store_true",
-        help="Generate a topic contract draft before running collection.",
+        help=(
+            "Generate a topic contract draft before running collection. "
+            "This is implied when --topic-contract is omitted."
+        ),
     )
     run_parser.add_argument(
         "--base-contract",

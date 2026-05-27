@@ -144,7 +144,9 @@ data/processed/example_extraction_audit.csv
 ## Run Automated Collection
 
 Use this when you have a topic description and want the pipeline to collect
-candidate papers first. For a new topic, generate a draft topic contract:
+candidate papers first. If `--topic-contract` is omitted, the collection
+workflow generates a draft contract at the conventional collection path before
+planning the search:
 
 ```bash
 TOPIC="How does climate change affect human health?"
@@ -153,7 +155,6 @@ python scripts/run_collection.py run \
   --topic "$TOPIC" \
   --collection climate_health \
   --model gpt-4o-mini \
-  --generate-topic-contract \
   --only-step generate_topic_contract
 ```
 
@@ -313,8 +314,8 @@ For architecture details, see `docs/technical_summary.md`.
 
 - OpenAlex is the only implemented collection provider.
 - The main tagging pipeline requires `--topic-contract`. The collection
-  pipeline can either receive `--topic-contract` or create one with
-  `--generate-topic-contract`.
+  pipeline can either receive `--topic-contract` or create one automatically
+  when no contract is supplied.
 - `--tagging-config` is kept for direct legacy config normalization only.
 - If no papers reach LLM tagging, the Mantis export step fails because it
   requires at least one extraction row.

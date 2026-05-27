@@ -80,6 +80,22 @@ def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> No
     assert "--topic-contract" not in command
 
 
+def test_build_collection_without_contract_generates_one(tmp_path: Path) -> None:
+    command = server.build_collection_command(
+        {
+            "workflow": "collection",
+            "topic": "How does climate change affect health?",
+            "collection": "climate_health",
+            "model": "gpt-4o-mini",
+            "runId": "ui-collection",
+        },
+        tmp_path,
+    ).command
+
+    assert "--generate-topic-contract" in command
+    assert "--topic-contract" not in command
+
+
 def test_list_manifests_returns_newest_first(tmp_path: Path) -> None:
     first = tmp_path / "runs" / "run-a" / "manifest.json"
     second = tmp_path / "runs" / "run-b" / "manifest.json"

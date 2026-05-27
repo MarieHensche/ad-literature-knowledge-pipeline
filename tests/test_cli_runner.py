@@ -111,3 +111,22 @@ def test_run_collection_dry_run_can_generate_contract_first() -> None:
 
     assert "Would run step: generate_topic_contract" in result.stdout
     assert "pytest_contract_dry_run_topic_contract.yaml" in result.stdout
+
+
+def test_run_collection_dry_run_without_contract_auto_generates_contract() -> None:
+    result = run_script(
+        "scripts/run_collection.py",
+        "run",
+        "--topic",
+        "How does climate change affect human health?",
+        "--collection",
+        "pytest_auto_contract_dry_run",
+        "--only-step",
+        "generate_topic_contract",
+        "--dry-run",
+        "--run-id",
+        "pytest-auto-contract-dry-run",
+    )
+
+    assert "Would run step: generate_topic_contract" in result.stdout
+    assert "pytest_auto_contract_dry_run_topic_contract.yaml" in result.stdout
