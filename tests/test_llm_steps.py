@@ -376,12 +376,12 @@ def test_refine_topic_contract_adds_review_seeded_categories(
             ],
         },
         {
-            "category_id": "know_how_validation_design",
+            "category_id": "knowledge_outcome_family",
             "required": False,
             "values": [
-                "internal_validation",
-                "external_validation",
-                "cross_validation",
+                "diagnostic_accuracy",
+                "conversion_prediction",
+                "screening_feasibility",
                 "not_reported",
                 "unclear",
             ],
@@ -412,7 +412,7 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     refined = load_topic_contract(contract_path)
     categories = refined["tagging"]["categories"]
     assert "knowledge_signal_family" in categories
-    assert "know_how_validation_design" in categories
+    assert "knowledge_outcome_family" in categories
     assert result.row_counts["review_overviews"] == 1
     assert result.row_counts["tagging_categories"] == 5
     assert result.trace_paths

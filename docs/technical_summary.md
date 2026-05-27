@@ -85,10 +85,10 @@ Steps:
 | `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
 
 When no topic contract is supplied, collection first generates a draft contract,
-fetches review/overview seed papers, refines the contract's knowledge and
-know-how categories, and then continues into search planning. The planner can
-describe multiple provider types, but the current fetch layer implements only
-OpenAlex. Unsupported provider selections fail before any network fetch.
+fetches review/overview seed papers, refines the contract's knowledge
+categories, and then continues into search planning. The planner can describe
+multiple provider types, but the current fetch layer implements only OpenAlex.
+Unsupported provider selections fail before any network fetch.
 
 ## Script-To-Module Map
 

@@ -55,11 +55,13 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
 
     assert "borderline or tangentially relevant candidates are included" in prompt
     assert "collection.search_queries" in prompt
+    assert "multiple topic-specific knowledge tagging categories" in prompt
+    assert "multiple allowed values" in prompt
     assert "`review_status`" in prompt
     assert "climate change affect human health" in prompt
 
 
-def test_refine_topic_contract_prompt_requests_knowledge_and_know_how_tags() -> None:
+def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -> None:
     contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
     prompt = render_refine_topic_contract_prompt(
         "How can Alzheimer's disease be detected early?",
@@ -74,7 +76,8 @@ def test_refine_topic_contract_prompt_requests_knowledge_and_know_how_tags() -> 
 
     assert "Review and overview seed papers" in prompt
     assert "knowledge categories" in prompt
-    assert "know-how categories" in prompt
+    assert "multiple allowed values" in prompt
+    assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
 
 

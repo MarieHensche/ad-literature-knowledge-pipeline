@@ -25,13 +25,11 @@ Rules:
 - For `review_status`, use values `ai_tagged`, `human_reviewed`,
   `needs_decision`, `full_text_needed`, and `excluded_from_scope`, and mark it
   required.
-- Add or improve topic-specific knowledge categories for what the literature is
-  about: targets, phenomena, populations, outcomes, mechanisms, claims, or other
-  domain concepts visible in the review evidence.
-- Add or improve topic-specific know-how categories for how the literature works:
-  methods, measurements, evidence sources, datasets, modalities, validation
-  designs, study families, or evaluation practices visible in the review
-  evidence.
+- Add or improve multiple topic-specific knowledge categories for what the
+  literature is about: targets, phenomena, populations, outcomes, mechanisms,
+  claims, signals, or other domain concepts visible in the review evidence.
+- Give each tagging category multiple allowed values; do not collapse the
+  ontology into one broad category.
 - Prefer compact category IDs in lowercase snake_case.
 - Prefer compact allowed values in lowercase snake_case.
 - Keep each category useful across many papers, not just one seed review.

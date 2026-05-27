@@ -148,8 +148,8 @@ data/processed/example_extraction_audit.csv
 Use this when you have a topic description and want the pipeline to collect
 candidate papers first. If `--topic-contract` is omitted, the collection
 workflow generates a draft contract, fetches a small set of OpenAlex
-review/overview seed papers, refines the contract's knowledge and know-how
-tagging categories from those seeds, and then plans the search:
+review/overview seed papers, refines the contract's knowledge tagging
+categories from those seeds, and then plans the search:
 
 ```bash
 TOPIC="How does climate change affect human health?"
