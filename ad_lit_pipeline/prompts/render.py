@@ -47,17 +47,27 @@ def render_plan_search_prompt(
     topic_description: str,
     providers: list[dict[str, object]],
     max_results: int | None,
+    topic_contract: dict[str, Any] | None = None,
 ) -> str:
     max_results_text = (
         f"The user requested about {max_results} candidates."
         if max_results
         else "No explicit max result count was provided."
     )
+    topic_contract_guidance: dict[str, Any] = {}
+    if topic_contract is not None:
+        topic_contract_guidance = {
+            "research_topic": topic_contract.get("research_topic", {}),
+            "scope": topic_contract.get("scope", {}),
+            "collection": topic_contract.get("collection", {}),
+        }
+
     return render_template(
         "plan_search.md",
         {
             "topic_description": topic_description,
             "max_results_text": max_results_text,
+            "topic_contract_guidance_json": json_block(topic_contract_guidance),
             "providers_json": json_block(providers),
         },
     )
@@ -78,6 +88,34 @@ def render_screen_candidate_prompt(
                 topic_contract.get("candidate_screening", {})
             ),
             "candidate_json": json_block(candidate),
+        },
+    )
+
+
+def render_generate_topic_contract_prompt(
+    topic_description: str,
+    base_contract: dict[str, Any],
+) -> str:
+    return render_template(
+        "generate_topic_contract.md",
+        {
+            "topic_description": topic_description,
+            "base_contract_json": json_block(base_contract),
+        },
+    )
+
+
+def render_refine_topic_contract_prompt(
+    topic_description: str,
+    current_contract: dict[str, Any],
+    review_overviews: list[dict[str, Any]],
+) -> str:
+    return render_template(
+        "refine_topic_contract_from_reviews.md",
+        {
+            "topic_description": topic_description,
+            "current_contract_json": json_block(current_contract),
+            "review_overviews_json": json_block(review_overviews),
         },
     )
 
@@ -112,6 +150,24 @@ def render_tag_paper_prompt(
     topic_contract: dict[str, Any] | None = None,
 ) -> str:
     scope = scope_text(topic_contract) if topic_contract is not None else ""
+    categories = config.get("categories")
+    category_ids = set()
+    if isinstance(categories, list):
+        category_ids = {
+            str(category.get("category_id"))
+            for category in categories
+            if isinstance(category, dict)
+        }
+    if "review_status" in category_ids:
+        review_status_instruction = (
+            '- Set review_status to ["ai_tagged"] unless another configured '
+            "review_status value such as full_text_needed clearly applies."
+        )
+    else:
+        review_status_instruction = (
+            "- Do not return review_status because it is not listed as an "
+            "allowed category."
+        )
     return render_template(
         "tag_paper.md",
         {
@@ -120,5 +176,6 @@ def render_tag_paper_prompt(
             "paper_json": json_block(paper),
             "categories_json": json_block(config["categories"]),
             "rules_json": json_block(rules["rules"]),
+            "review_status_instruction": review_status_instruction,
         },
     )

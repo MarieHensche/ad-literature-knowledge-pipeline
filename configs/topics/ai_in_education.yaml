@@ -67,8 +67,11 @@ rule_based_screening:
 candidate_screening:
   missing_abstract_policy: exclude
   borderline_policy: include
-  human_review_policy: exclude
-  review_policy: include reviews only when useful for this topic
+  human_review_policy: include
+  review_policy: exclude
+  tangential_topic_policy: >
+    include candidates that address one meaningful aspect of AI use, teaching,
+    learning, learners, instructors, or educational impact
 
 tagging:
   fallback_policy:
@@ -76,21 +79,16 @@ tagging:
     prefer_mixed_or_unclear_when_unclear_missing: true
     missing_information_value: not_reported
     knowledge_confidence: very_low
-    review_status: needs_decision
+    review_status: ai_tagged
 
   categories:
 
     main_topic_category:
+      required: true
       values:
-        - intelligent_tutoring
-        - personalized_learning
-        - adaptive_learning
-        - classroom_assistant
-        - automated_feedback
-        - collaborative_learning
-        - content_generation
-        - assessment_support
-        - problem_solving_support
+        - core_topic
+        - adjacent_but_relevant
+        - out_of_scope
         - mixed_or_unclear
         - unclear
 
@@ -161,7 +159,6 @@ tagging:
       values:
         - ai_tagged
         - human_reviewed
-        - needs_decision
         - full_text_needed
         - excluded_from_scope
 
@@ -171,4 +168,4 @@ collection:
 
   preferred_provider: openalex
   max_results_default: 25
-  exclude_openalex_review_type: true
+  exclude_openalex_review_type: false

@@ -9,6 +9,7 @@ import pytest
 
 from ad_lit_pipeline.topics.contract import (
     load_topic_contract,
+    rule_based_screening_from_contract,
     tagging_config_from_contract,
     validate_topic_contract,
 )
@@ -36,6 +37,7 @@ def test_early_detection_topic_contract_loads() -> None:
     assert contract["collection"]["allowed_providers"] == ["openalex"]
     assert contract["collection"]["exclude_openalex_review_type"] is True
     assert contract["rule_based_screening"]["exclude_wins"] is True
+    assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert "mild cognitive impairment" in contract["rule_based_screening"][
         "include_terms"
     ]
@@ -46,6 +48,17 @@ def test_non_ad_topic_contract_loads() -> None:
 
     assert contract["topic_id"] == "ai_in_education"
     assert "main_topic_category" in contract["tagging"]["categories"]
+    assert "research_target" in contract["tagging"]["categories"]
+    assert contract["collection"]["exclude_openalex_review_type"] is False
+
+
+def test_topic_contract_template_loads() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/topic_contract_template.yaml")
+
+    assert contract["topic_id"] == "generated_topic_template"
+    assert contract["candidate_screening"]["borderline_policy"] == "include"
+    assert contract["collection"]["exclude_openalex_review_type"] is False
+    assert contract["collection"]["search_queries"] == []
     assert "research_target" in contract["tagging"]["categories"]
 
 
@@ -61,10 +74,21 @@ def test_topic_contract_converts_to_legacy_tagging_config() -> None:
     assert config["categories"]["review_status"]["values"] == [
         "ai_tagged",
         "human_reviewed",
-        "needs_decision",
         "full_text_needed",
         "excluded_from_scope",
     ]
+
+
+def test_rule_based_screening_uses_tag_values_as_include_terms() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    rule_based = rule_based_screening_from_contract(contract)
+
+    assert "ad" in rule_based["include_terms"]
+    assert "neuroimaging" in rule_based["include_terms"]
+    assert "core topic" not in rule_based["include_terms"]
+    assert "out of scope" not in rule_based["include_terms"]
+    assert "mixed or unclear" not in rule_based["include_terms"]
+    assert "ai tagged" not in rule_based["include_terms"]
 
 
 def test_normalize_tagging_config_accepts_topic_contract(tmp_path: Path) -> None:

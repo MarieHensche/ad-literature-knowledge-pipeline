@@ -14,3 +14,11 @@ def read_yaml_object(path: Path) -> dict[str, Any]:
         raise ValueError(f"Expected YAML object: {path}")
     return data
 
+
+def write_yaml_object(path: Path, payload: dict[str, Any]) -> None:
+    """Write a YAML mapping with stable key order and a trailing newline."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=False),
+        encoding="utf-8",
+    )

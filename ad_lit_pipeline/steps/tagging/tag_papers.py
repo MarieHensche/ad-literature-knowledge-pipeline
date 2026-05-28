@@ -215,20 +215,33 @@ def run(
 
     rows = []
     all_trace_paths: list[Path] = []
+    warnings = []
+
     for index, paper in enumerate(papers, start=1):
-        print(f"Tagging paper {index}/{len(papers)}: {paper.get('paper_id')}")
-        tagged, trace_paths = call_llm(
-            paper,
-            config,
-            rules,
-            model,
-            llm_client,
-            topic_contract,
-            trace_writer,
-        )
-        validate_tagged_row(tagged, config, rules)
-        rows.append(flatten_tagged_row(paper, tagged, config))
-        all_trace_paths.extend(trace_paths)
+        paper_id = paper.get("paper_id") or f"row_{index}"
+        print(f"Tagging paper {index}/{len(papers)}: {paper_id}")
+
+        try:
+            tagged, trace_paths = call_llm(
+                paper,
+                config,
+                rules,
+                model,
+                llm_client,
+                topic_contract,
+                trace_writer,
+            )
+            validate_tagged_row(tagged, config, rules)
+            rows.append(flatten_tagged_row(paper, tagged, config))
+            all_trace_paths.extend(trace_paths)
+
+        except ValueError as error:
+            # LLM failed or validation failed - skip this paper and continue with warning
+            error_msg = str(error)
+            warning = f"Failed to tag paper '{paper_id}' after retry (skipped): {error_msg}"
+            warnings.append(warning)
+            print(f"  Warning: {warning}")
+            # Paper is skipped, not added to rows
 
     write_rows(output_path, rows, config)
     return StepResult(
@@ -241,6 +254,7 @@ def run(
         outputs={"extraction_filled_csv": output_path},
         row_counts={"tagged_papers": len(rows)},
         trace_paths=all_trace_paths,
+        warnings=warnings,
     )
 
 

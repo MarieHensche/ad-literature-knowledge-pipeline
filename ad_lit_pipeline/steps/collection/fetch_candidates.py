@@ -59,6 +59,9 @@ def run(
     provider_name = provider_name_from_plan(plan)
     provider = get_provider(provider_name)
     provider.validate_plan(plan)
+    search_query_count = 1
+    if hasattr(provider, "search_queries_from_plan"):
+        search_query_count = len(provider.search_queries_from_plan(plan))
     resolved_max_results = max_results or int(
         provider_plan.get("max_results_recommendation") or 100
     )
@@ -76,7 +79,7 @@ def run(
         inputs={"search_plan_json": plan_path},
         outputs={"candidates_jsonl": output_path},
         row_counts={"fetched_candidates": len(candidates)},
-        metadata={"provider": provider_name},
+        metadata={"provider": provider_name, "search_queries": search_query_count},
     )
 
 

@@ -11,14 +11,16 @@ wrappers, while the reusable pipeline logic lives in `ad_lit_pipeline/`.
 The pipeline supports two workflows:
 
 1. Start with an existing paper collection.
-2. Start with a topic description and collect candidate papers automatically.
+2. Start with a research question, generate a topic contract, and collect
+   candidate papers automatically.
 
 It can:
 
 - import paper metadata from CSV, BibTeX, JSON, JSONL, or RIS
-- plan and run OpenAlex candidate collection from a topic description
+- draft a topic contract from a plain research question
+- plan and run OpenAlex candidate collection from multiple search-query variants
 - deduplicate candidate papers
-- screen papers against a topic contract
+- screen papers against a topic contract with a recall-oriented candidate pass
 - generate ontology tagging rules
 - tag included papers with an LLM
 - audit extracted tags
@@ -52,13 +54,17 @@ Non-LLM commands, `explain`, and `--dry-run` do not require an API key.
 ## Main Files
 
 ```text
-scripts/run_pipeline.py       Main tagging pipeline CLI
-scripts/run_collection.py     Automated collection CLI
-ad_lit_pipeline/              Importable pipeline package
-configs/topics/               Topic contracts
-data/raw/                     Raw paper inputs and collected candidates
-data/processed/               Normalized, tagged, audited, and exported outputs
-runs/                         Run manifests and LLM traces
+scripts/run_pipeline.py             Main tagging pipeline CLI
+scripts/run_collection.py           Automated collection CLI
+scripts/generate_topic_contract.py  Topic-contract draft generator
+scripts/fetch_review_overviews.py   Review/overview seed fetcher
+scripts/refine_topic_contract.py    Review-seeded contract refiner
+ad_lit_pipeline/                    Importable pipeline package
+configs/topics/                     Topic contracts and the generic template
+data/collection_plans/              Search plans and generated topic contracts
+data/raw/                           Raw paper inputs and collected candidates
+data/processed/                     Normalized, tagged, audited, and exported outputs
+runs/                               Run manifests and LLM traces
 ```
 
 Example topic contracts live under:
@@ -67,12 +73,23 @@ Example topic contracts live under:
 configs/topics/
 ```
 
-Each pipeline run must pass `--topic-contract`. The contract defines the
-research topic, scope criteria, rule-based screening terms, candidate-screening
-policy, tagging categories, fallback policy, and enabled providers. Each
-contract must include the generic categories `main_topic_category` and
-`research_target`; the Mantis export uses them to populate its core
-`categoric` field.
+Topic contracts define the research topic, scope criteria, rule-based screening
+terms, candidate-screening policy, tagging categories, fallback policy, enabled
+providers, and optional seed search queries. Each contract must include the
+generic categories `main_topic_category` and `research_target`; the Mantis
+export uses them to populate its core `categoric` field.
+
+For a new research direction, start from a plain research question and generate
+a draft contract. The generator uses:
+
+```text
+configs/topics/topic_contract_template.yaml
+```
+
+The generated YAML is meant to be inspected and edited before collection
+continues. This is the review point for tightening scope, adding topic-specific
+tagging categories, changing candidate-screening policy, or improving search
+queries.
 
 ## Input Format
 
@@ -129,18 +146,66 @@ data/processed/example_extraction_audit.csv
 ## Run Automated Collection
 
 Use this when you have a topic description and want the pipeline to collect
-candidate papers first:
+candidate papers first. If `--topic-contract` is omitted, the collection
+workflow generates a draft contract, fetches a small set of OpenAlex
+review/overview seed papers, refines the contract's knowledge tagging
+categories from those seeds, and then plans the search:
 
 ```bash
-TOPIC="$(cat configs/topics/ad_early_detection_test_topic.txt)"
+TOPIC="How does climate change affect human health?"
 
 python scripts/run_collection.py run \
   --topic "$TOPIC" \
+  --collection climate_health \
+  --model gpt-4o-mini \
+  --max-review-overviews 5
+```
+
+The generated and refined contract is written to:
+
+```text
+data/collection_plans/climate_health_topic_contract.yaml
+```
+
+The review/overview seed artifact is written to:
+
+```text
+data/raw/climate_health_review_overviews.jsonl
+```
+
+If you want a human review gate before candidate collection, run only the
+contract-bootstrap pipeline, review the YAML, then run collection with the
+reviewed contract:
+
+```bash
+python scripts/run_collection.py run \
+  --topic "$TOPIC" \
+  --collection climate_health \
+  --model gpt-4o-mini \
+  --max-review-overviews 5 \
+  --contract-bootstrap-only
+
+python scripts/run_collection.py run \
+  --collection climate_health \
+  --max-results 50 \
+  --model gpt-4o-mini \
+  --topic-contract data/collection_plans/climate_health_topic_contract.yaml
+```
+
+If you already have a reviewed contract, run collection directly:
+
+```bash
+python scripts/run_collection.py run \
   --collection ad_early_detection_test \
   --max-results 25 \
   --model gpt-4o-mini \
   --topic-contract configs/topics/early_detection_ad.yaml
 ```
+
+The search plan can include multiple executable `search_queries`. OpenAlex is
+called once per query variant, spreading the `--max-results` budget across
+queries. Candidate artifacts preserve the query, query index, query rank, query
+reason, and provider URL so screening decisions can be debugged later.
 
 This writes a canonical paper CSV:
 
@@ -215,24 +280,48 @@ The manifest records step inputs, outputs, row counts, warnings, errors, and
 trace paths. LLM traces include rendered prompts, response schemas, raw
 responses, parsed JSON, and metadata.
 
+Collection manifests include the generated or supplied topic contract path,
+search plan path, fetched candidate counts, query counts, screening counts, and
+trace paths for contract generation, search planning, and candidate screening.
+
+## Local UI
+
+Run the local web console:
+
+```bash
+.venv/bin/python scripts/run_ui.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765
+```
+
+The UI is a separate wrapper over the existing CLIs. It can generate and edit
+topic contracts, start automated collection runs, start tagging runs from an
+input file, tail run logs, and inspect run manifests without changing pipeline
+step behavior.
+
 ## Development
 
 Run tests with:
 
 ```bash
-pytest
+.venv/bin/python -m pytest
 ```
 
-Agent and contributor coding rules live in `AGENT.md`. The short
-Codex-discovery bridge is `AGENTS.md`.
+Agent and contributor coding rules live in `AGENTS.md`.
 
 For architecture details, see `docs/technical_summary.md`.
 
 ## Current Limits
 
 - OpenAlex is the only implemented collection provider.
-- The orchestrated collection and tagging pipelines require `--topic-contract`.
-  `--tagging-config` is kept for direct legacy config normalization only.
+- The main tagging pipeline requires `--topic-contract`. The collection
+  pipeline can either receive `--topic-contract` or create and refine one
+  automatically from review/overview seed papers when no contract is supplied.
+- `--tagging-config` is kept for direct legacy config normalization only.
 - If no papers reach LLM tagging, the Mantis export step fails because it
   requires at least one extraction row.
 - Legacy schema files are not generated from topic contracts yet, so schema

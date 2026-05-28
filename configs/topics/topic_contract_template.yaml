@@ -1,0 +1,86 @@
+topic_id: generated_topic_template
+
+research_topic:
+  title: Generated research topic
+  description: Replace with a concise description of the research direction.
+
+scope:
+  include_criteria:
+    - Papers directly studying the research question
+    - Papers studying meaningful subtopics, applications, methods, populations, or outcomes related to the research question
+    - Reviews, meta-analyses, datasets, methods, and empirical studies that help map the topic unless the user requests a narrower scope
+  exclude_criteria:
+    - Papers with no substantive connection to the research question
+  boundary_rules:
+    - Include borderline or tangentially relevant papers when they address one meaningful aspect of the research direction.
+    - Exclude only when the title and abstract clearly show the paper belongs to an unrelated topic.
+
+rule_based_screening:
+  include_terms:
+    - replace with broad topic keyword
+    - replace with common synonym
+    - replace with adjacent concept
+  exclude_terms: []
+  exclude_wins: false
+
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of the topic
+
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: true
+    prefer_mixed_or_unclear_when_unclear_missing: true
+    missing_information_value: not_reported
+    knowledge_confidence: very_low
+    review_status: ai_tagged
+  categories:
+    main_topic_category:
+      required: true
+      values:
+        - core_topic
+        - adjacent_but_relevant
+        - out_of_scope
+        - mixed_or_unclear
+        - unclear
+    research_target:
+      values:
+        - primary_target
+        - related_target
+        - population_or_setting
+        - outcome_or_effect
+        - mixed_or_unclear
+        - unclear
+    study_type:
+      values:
+        - empirical
+        - review
+        - method
+        - dataset_or_resource
+        - mixed_or_unclear
+        - unclear
+    knowledge_confidence:
+      values:
+        - high
+        - medium
+        - low
+        - very_low
+        - conflict
+    review_status:
+      required: true
+      values:
+        - ai_tagged
+        - human_reviewed
+        - full_text_needed
+        - excluded_from_scope
+
+collection:
+  allowed_providers:
+    - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries: []

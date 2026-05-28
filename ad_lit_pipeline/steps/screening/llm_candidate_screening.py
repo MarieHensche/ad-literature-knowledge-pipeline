@@ -33,6 +33,8 @@ OUTPUT_COLUMNS = [
     "provider",
     "provider_id",
     "source_rank",
+    "source_query",
+    "source_query_reason",
     "screening_decision",
     "screening_confidence",
     "screening_reason",
@@ -98,6 +100,8 @@ def candidate_for_prompt(candidate: dict[str, Any]) -> dict[str, Any]:
         "venue": candidate.get("venue", ""),
         "provider": candidate.get("provider", ""),
         "query": candidate.get("query", ""),
+        "query_index": candidate.get("query_index", ""),
+        "query_reason": candidate.get("query_reason", ""),
     }
 
 
@@ -164,6 +168,8 @@ def screen_candidate(
             "provider": str(candidate.get("provider") or ""),
             "provider_id": str(candidate.get("provider_id") or ""),
             "source_rank": str(candidate.get("rank") or ""),
+            "source_query": str(candidate.get("query") or ""),
+            "source_query_reason": str(candidate.get("query_reason") or ""),
             "screening_decision": result["decision"],
             "screening_confidence": result["confidence"],
             "screening_reason": result["reason"],
@@ -200,19 +206,48 @@ def run(
     trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
     rows = []
     all_trace_paths: list[Path] = []
+    warnings = []
+
     for index, candidate in enumerate(candidates, start=1):
         print(f"Screening candidate {index}/{len(candidates)}: {candidate.get('title')}")
-        row, trace_paths = screen_candidate(
-            topic_description,
-            topic_contract,
-            candidate,
-            index,
-            model,
-            llm_client,
-            trace_writer,
-        )
-        rows.append(row)
-        all_trace_paths.extend(trace_paths)
+
+        try:
+            row, trace_paths = screen_candidate(
+                topic_description,
+                topic_contract,
+                candidate,
+                index,
+                model,
+                llm_client,
+                trace_writer,
+            )
+            rows.append(row)
+            all_trace_paths.extend(trace_paths)
+
+        except ValueError as e:
+            # LLM failed even after retry - auto-exclude this candidate and continue
+            paper_id = make_paper_id(candidate, index)
+            error_msg = str(e)
+            warning = f"Failed to screen candidate '{paper_id}' after retry (auto-excluded): {error_msg}"
+            warnings.append(warning)
+            print(f"  Warning: {warning}")
+
+            # Create a row with auto-exclude decision
+            row = {
+                "paper_id": paper_id,
+                "title": str(candidate.get("title") or ""),
+                "year": str(candidate.get("year") or ""),
+                "doi": str(candidate.get("doi") or ""),
+                "provider": str(candidate.get("provider") or ""),
+                "provider_id": str(candidate.get("provider_id") or ""),
+                "source_rank": str(candidate.get("rank") or ""),
+                "source_query": str(candidate.get("query") or ""),
+                "source_query_reason": str(candidate.get("query_reason") or ""),
+                "screening_decision": "exclude",
+                "screening_confidence": "n/a",
+                "screening_reason": f"Auto-excluded due to LLM error: {error_msg}",
+            }
+            rows.append(row)
 
     write_csv(output_path, rows)
     included = sum(1 for row in rows if row["screening_decision"] == "include")
@@ -230,6 +265,7 @@ def run(
             "excluded": excluded,
         },
         trace_paths=all_trace_paths,
+        warnings=warnings,
     )
 
 

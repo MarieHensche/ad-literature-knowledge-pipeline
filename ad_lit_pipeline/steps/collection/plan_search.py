@@ -125,7 +125,103 @@ def validate_plan(plan: dict[str, object], allowed_providers: list[str]) -> None
     if not isinstance(provider_plan, dict):
         raise ValueError("Plan must contain provider_specific_plan.")
     if provider_plan.get("provider") != recommended:
-        raise ValueError("provider_specific_plan.provider must match recommended_provider.")
+        raise ValueError(
+            "provider_specific_plan.provider must match recommended_provider."
+        )
+
+
+def append_search_query(
+    search_queries: list[dict[str, str]],
+    seen_queries: set[str],
+    query: object,
+    reason: str,
+) -> bool:
+    query_text = str(query or "").strip()
+    query_key = query_text.lower()
+    if not query_text or query_key in seen_queries:
+        return False
+
+    search_queries.append({"query": query_text, "reason": reason})
+    seen_queries.add(query_key)
+    return True
+
+
+def ensure_search_queries(
+    plan: dict[str, object],
+    topic_contract: dict[str, Any],
+) -> list[str]:
+    """Normalize executable query variants on the search plan."""
+    warnings = []
+    search_queries: list[dict[str, str]] = []
+    seen_queries: set[str] = set()
+
+    raw_search_queries = plan.get("search_queries")
+    if isinstance(raw_search_queries, list):
+        for item in raw_search_queries:
+            if isinstance(item, dict):
+                appended = append_search_query(
+                    search_queries,
+                    seen_queries,
+                    item.get("query"),
+                    str(item.get("reason") or "Planned search query."),
+                )
+            else:
+                appended = append_search_query(
+                    search_queries,
+                    seen_queries,
+                    item,
+                    "Planned search query.",
+                )
+            if not appended:
+                continue
+
+    provider_plan = plan.get("provider_specific_plan")
+    if isinstance(provider_plan, dict):
+        if append_search_query(
+            search_queries,
+            seen_queries,
+            provider_plan.get("query"),
+            "Provider-specific primary query.",
+        ):
+            warnings.append("Added provider_specific_plan.query to search_queries.")
+
+    if append_search_query(
+        search_queries,
+        seen_queries,
+        plan.get("main_search_string"),
+        "Main planned search string.",
+    ):
+        warnings.append("Added main_search_string to search_queries.")
+
+    alternate_search_strings = plan.get("alternate_search_strings")
+    if isinstance(alternate_search_strings, list):
+        for alternate in alternate_search_strings:
+            if append_search_query(
+                search_queries,
+                seen_queries,
+                alternate,
+                "Alternate planned search string.",
+            ):
+                warnings.append("Added alternate_search_strings to search_queries.")
+
+    collection = collection_from_contract(topic_contract)
+    contract_queries = collection.get("search_queries")
+    if isinstance(contract_queries, list):
+        for item in contract_queries:
+            if isinstance(item, dict):
+                query = item.get("query")
+                reason = str(item.get("reason") or "Topic-contract search query.")
+            else:
+                query = item
+                reason = "Topic-contract search query."
+            if append_search_query(search_queries, seen_queries, query, reason):
+                warnings.append("Added topic-contract search query to search_queries.")
+
+    if not search_queries:
+        raise ValueError("Search plan must contain at least one executable query.")
+
+    plan["search_queries"] = search_queries
+    return warnings
 
 
 def enforce_topic_plan_constraints(
@@ -219,11 +315,17 @@ def call_llm(
     topic_description: str,
     max_results: int | None,
     model: str,
+    topic_contract: dict[str, Any],
     providers: list[dict[str, object]],
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, object], list[Path]]:
-    prompt = render_plan_search_prompt(topic_description, providers, max_results)
+    prompt = render_plan_search_prompt(
+        topic_description,
+        providers,
+        max_results,
+        topic_contract,
+    )
     names = provider_names(providers)
     result = client.create_json(
         model=model,
@@ -256,11 +358,14 @@ def run(
         topic_description,
         max_results,
         model,
+        topic_contract,
         providers,
         client or OpenAIResponsesClient(),
         trace_writer,
     )
-    warnings = enforce_topic_plan_constraints(plan, topic_contract)
+    warnings = []
+    warnings.extend(ensure_search_queries(plan, topic_contract))
+    warnings.extend(enforce_topic_plan_constraints(plan, topic_contract))
     validate_plan(plan, provider_names(providers))
     write_json(output_path, plan)
     return StepResult(
@@ -272,6 +377,7 @@ def run(
         metadata={
             "recommended_provider": plan["recommended_provider"],
             "main_search_string": plan["main_search_string"],
+            "search_queries": len(plan["search_queries"]),
         },
     )
 

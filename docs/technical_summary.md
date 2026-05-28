@@ -75,15 +75,28 @@ Steps:
 
 | Step | Module | Output |
 | --- | --- | --- |
+| `generate_topic_contract` | `ad_lit_pipeline/steps/collection/generate_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
+| `fetch_review_overviews` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` | `data/raw/<collection>_review_overviews.jsonl` |
+| `refine_topic_contract` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
 | `plan_search` | `ad_lit_pipeline/steps/collection/plan_search.py` | `data/collection_plans/<collection>_plan.json` |
 | `fetch_candidates` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` | `data/raw/<collection>_openalex_candidates.jsonl` |
 | `deduplicate_candidates` | `ad_lit_pipeline/steps/collection/deduplicate.py` | `data/raw/<collection>_openalex_candidates_deduped.jsonl` |
 | `screen_candidates` | `ad_lit_pipeline/steps/screening/llm_candidate_screening.py` | `data/raw/<collection>_candidate_screening.csv` |
 | `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
 
-The planner can describe multiple provider types, but the current fetch layer
-implements only OpenAlex. Unsupported provider selections fail before any network
-fetch.
+When no topic contract is supplied, collection first generates a draft contract,
+fetches review/overview seed papers, refines the contract's knowledge
+categories, and then continues into search planning. The planner can describe
+multiple provider types, but the current fetch layer implements only OpenAlex.
+Unsupported provider selections fail before any network fetch.
+
+Passing `--contract-bootstrap-only` runs only the three contract-bootstrap steps
+and stops before search planning, so a user can review the generated contract
+before candidate collection.
+
+When a reviewed topic contract is supplied, `--topic` is optional. Collection
+steps derive the planner and candidate-screening topic text from the contract's
+`research_topic` fields.
 
 ## Script-To-Module Map
 
@@ -103,6 +116,9 @@ The original script names are kept as wrappers or direct CLIs:
 | `scripts/tag_papers_with_llm.py` | `ad_lit_pipeline/steps/tagging/tag_papers.py` |
 | `scripts/audit_extraction.py` | `ad_lit_pipeline/steps/tagging/audit.py` |
 | `scripts/export_mantis_ready.py` | `ad_lit_pipeline/steps/export/mantis.py` |
+| `scripts/generate_topic_contract.py` | `ad_lit_pipeline/steps/collection/generate_topic_contract.py` |
+| `scripts/fetch_review_overviews.py` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` |
+| `scripts/refine_topic_contract.py` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` |
 | `scripts/plan_library_search.py` | `ad_lit_pipeline/steps/collection/plan_search.py` |
 | `scripts/fetch_openalex_candidates.py` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` and `ad_lit_pipeline/providers/openalex.py` |
 | `scripts/deduplicate_candidates.py` | `ad_lit_pipeline/steps/collection/deduplicate.py` |
@@ -111,9 +127,10 @@ The original script names are kept as wrappers or direct CLIs:
 
 ## Topic Contract
 
-Topic contracts in `configs/topics/` are the source of truth for each pipeline
-run. Each orchestrated run must pass an explicit `--topic-contract`. A contract
-includes:
+Topic contracts in `configs/topics/` or `data/collection_plans/` are the source
+of truth for each pipeline run. Main tagging runs require an explicit
+`--topic-contract`; collection runs can generate and refine one automatically
+when no contract is supplied. A contract includes:
 
 - research topic title and description
 - include, exclude, and boundary scope criteria

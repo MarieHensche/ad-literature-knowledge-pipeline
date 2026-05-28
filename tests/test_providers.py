@@ -7,6 +7,7 @@ import pytest
 
 from ad_lit_pipeline.core.errors import UnsupportedProviderError
 from ad_lit_pipeline.providers.openalex import (
+    OpenAlexProvider,
     build_openalex_url,
     candidate_from_work,
     inverted_index_to_text,
@@ -18,6 +19,17 @@ def openalex_plan() -> dict[str, object]:
     return {
         "recommended_provider": "openalex",
         "main_search_string": "early detection",
+        "alternate_search_strings": ["MCI screening"],
+        "search_queries": [
+            {
+                "query": "early detection Alzheimer's",
+                "reason": "Primary phrasing.",
+            },
+            {
+                "query": "MCI screening",
+                "reason": "Adjacent phrasing.",
+            },
+        ],
         "filters": {
             "year_from": 2020,
             "year_to": 2024,
@@ -50,6 +62,25 @@ def test_openalex_url_uses_query_and_supported_filters() -> None:
     assert "mailto=a%40test" in url
 
 
+def test_openalex_url_can_select_open_review_overviews() -> None:
+    plan = openalex_plan()
+    plan["filters"] = {
+        "publication_types": ["review"],
+        "open_access_only": True,
+        "has_full_text": True,
+        "has_pdf_url": True,
+        "has_content_pdf": True,
+    }
+
+    url = build_openalex_url(plan, page=1, per_page=5, mailto=None)
+
+    assert "type%3Areview" in url
+    assert "open_access.is_oa%3Atrue" in url
+    assert "has_fulltext%3Atrue" in url
+    assert "has_pdf_url%3Atrue" in url
+    assert "has_content.pdf%3Atrue" in url
+
+
 def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
     work = {
         "id": "https://openalex.org/W1",
@@ -71,6 +102,55 @@ def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
     assert candidate["abstract"] == "hello world"
     assert candidate["authors"] == "A. Author"
     assert candidate["venue"] == "Journal"
+
+
+def test_openalex_fetches_multiple_search_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls: list[str] = []
+
+    def fake_fetch_json(url: str) -> dict[str, object]:
+        urls.append(url)
+        if "MCI+screening" in url:
+            work_id = "https://openalex.org/W2"
+            title = "MCI Screening"
+        else:
+            work_id = "https://openalex.org/W1"
+            title = "Early Detection"
+        return {
+            "results": [
+                {
+                    "id": work_id,
+                    "display_name": title,
+                    "publication_year": 2024,
+                    "abstract_inverted_index": {"abstract": [0]},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "ad_lit_pipeline.providers.openalex.fetch_json",
+        fake_fetch_json,
+    )
+
+    provider = OpenAlexProvider()
+    candidates = provider.fetch_candidates(
+        openalex_plan(),
+        max_results=2,
+        per_page=25,
+        mailto=None,
+        sleep_seconds=0,
+    )
+
+    assert len(candidates) == 2
+    assert candidates[0]["query"] == "early detection Alzheimer's"
+    assert candidates[0]["query_index"] == 1
+    assert candidates[0]["query_rank"] == 1
+    assert candidates[1]["query"] == "MCI screening"
+    assert candidates[1]["query_index"] == 2
+    assert len(urls) == 2
+    assert "search=early+detection+Alzheimer%27s" in urls[0]
+    assert "search=MCI+screening" in urls[1]
 
 
 def test_fetch_candidates_rejects_unsupported_provider(tmp_path: Path) -> None:
