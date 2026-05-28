@@ -1,0 +1,112 @@
+topic_id: ai_use_in_education
+research_topic:
+  title: AI Use in Education and Its Impact on Student Learning
+  description: Exploration of how AI technologies are integrated into educational
+    practices and their effects on student learning outcomes.
+scope:
+  include_criteria:
+  - Papers directly studying the impact of AI in educational settings
+  - Papers examining applications of AI to enhance teaching and learning
+  - Research on methods, frameworks, or tools involving AI in education
+  - Studies focusing on populations impacted by AI educational tools
+  exclude_criteria:
+  - Papers with no substantive connection to AI or education
+  boundary_rules:
+  - Include borderline or tangentially relevant papers if they offer insights into
+    AI applications or impacts within educational contexts.
+  - Exclude papers only when the title and abstract clearly indicate a lack of relevance
+    to AI in education.
+rule_based_screening:
+  include_terms:
+  - artificial intelligence in education
+  - AI learning tools
+  - machine learning education
+  - educational technology AI
+  - impact of AI on students
+  exclude_terms:
+  - non-educational AI
+  - AI in unrelated sectors
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for
+    primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of
+    AI in education
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: true
+    prefer_mixed_or_unclear_when_unclear_missing: true
+    missing_information_value: not_reported
+    knowledge_confidence: very_low
+    review_status: needs_decision
+  categories:
+    main_topic_category:
+      values:
+      - ai_in_education
+      - teaching_methods
+      - learning_outcomes
+      - student_engagement
+      - pedagogical_tools
+      - adaptive_learning
+      required: true
+    research_target:
+      values:
+      - students
+      - educators
+      - learning_outcomes
+      - educational_systems
+      - mixed_or_unclear
+      - unclear
+      required: true
+    study_type:
+      values:
+      - empirical
+      - review
+      - methodological
+      - conceptual
+      - mixed_or_unclear
+      - unclear
+    knowledge_confidence:
+      values:
+      - high
+      - medium
+      - low
+      - very_low
+      - conflict
+    review_status:
+      values:
+      - ai_tagged
+      - human_reviewed
+      - needs_decision
+      - full_text_needed
+      - excluded_from_scope
+      required: true
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: AI technology in classroom
+    reason: To capture studies on AI applications specifically targeted at classroom
+      settings.
+  - query: effects of artificial intelligence on learning outcomes
+    reason: To gather research that analyzes the learning impacts of AI.
+  - query: educational AI tools and student performance
+    reason: To find studies that assess the performance outcomes associated with AI
+      tools in education.
+  - query: machine learning in educational psychology
+    reason: To explore the intersection of machine learning methodologies and educational
+      psychology.
+  - query: student engagement AI
+    reason: To look into how AI influences student engagement in learning environments.
+  - query: AI applications in personalized learning
+    reason: To target relevant papers on personalized learning facilitated by AI.
+  - query: AI tutoring systems and educational outcomes
+    reason: To capture research on the impact of AI-based tutoring systems.
+  - query: AI ethics in education
+    reason: To include discussions on ethical implications of AI in educational settings.

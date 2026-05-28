@@ -1,0 +1,48 @@
+{
+  "topic_description": "Research studies about the usage of AI in schools for education purpose. Include papers show how AI can be used for education purposes during the school time in a classroom. Exclude papers that focus on the different technological implementations of AI. Focus on the different ways of how to use AI in schools and on the impact this has on learning and the students.",
+  "recommended_provider": "openalex",
+  "provider_reason": "OpenAlex is suitable for a broad scholarly search across disciplines, making it an ideal choice for this literature review.",
+  "search_goal": "To find relevant research studies that discuss the usage of AI in educational contexts, specifically how it influences learning and students in schools.",
+  "main_search_string": "usage of AI in education classroom impact on learning",
+  "alternate_search_strings": [
+    "AI in schools educational practices",
+    "artificial intelligence learning outcomes classroom",
+    "educational AI applications in schools",
+    "impact of AI on student learning in classrooms"
+  ],
+  "filters": {
+    "year_from": 2018,
+    "year_to": null,
+    "publication_types": [],
+    "open_access_only": null,
+    "has_abstract": true,
+    "has_full_text": null,
+    "language": null,
+    "venue_or_source": [],
+    "field_or_domain": [],
+    "exclude_reviews": true
+  },
+  "provider_specific_plan": {
+    "provider": "openalex",
+    "query": "usage of AI in education classroom impact on learning",
+    "filters": [
+      {
+        "name": "has_abstract",
+        "value": "true",
+        "reason": "The topic contract excludes candidates without abstracts, so the provider query should retrieve works with abstracts."
+      },
+      {
+        "name": "type",
+        "value": "!review",
+        "reason": "The topic contract excludes review/background papers, so OpenAlex review works are filtered before screening."
+      }
+    ],
+    "sort": null,
+    "max_results_recommendation": 10
+  },
+  "screening_notes": "Focus on papers that discuss the practical applications of AI in classroom settings and their educational outcomes, while avoiding technical discussions of AI technology itself.",
+  "risks_or_ambiguities": [
+    "Potential overlap with papers that focus on technological implementations rather than educational methodologies.",
+    "Variability in terminology used across papers which may affect search completeness."
+  ]
+}
