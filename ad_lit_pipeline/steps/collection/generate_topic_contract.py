@@ -39,9 +39,19 @@ REVIEW_STATUS_CATEGORY = {
     "values": [
         "ai_tagged",
         "human_reviewed",
-        "needs_decision",
         "full_text_needed",
         "excluded_from_scope",
+    ],
+    "required": True,
+}
+
+MAIN_TOPIC_CATEGORY = {
+    "values": [
+        "core_topic",
+        "adjacent_but_relevant",
+        "out_of_scope",
+        "mixed_or_unclear",
+        "unclear",
     ],
     "required": True,
 }
@@ -66,7 +76,7 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     categories = tagging.get("categories")
     if isinstance(categories, dict):
-        ensure_review_status_category(contract)
+        ensure_required_categories(contract)
         return contract
 
     if not isinstance(categories, list):
@@ -93,11 +103,11 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         category_map[category_id] = category_payload
 
     tagging["categories"] = category_map
-    ensure_review_status_category(contract)
+    ensure_required_categories(contract)
     return contract
 
 
-def ensure_review_status_category(contract: dict[str, Any]) -> None:
+def ensure_required_categories(contract: dict[str, Any]) -> None:
     tagging = contract.get("tagging")
     if not isinstance(tagging, dict):
         raise ValueError("Generated topic contract must contain tagging.")
@@ -106,7 +116,12 @@ def ensure_review_status_category(contract: dict[str, Any]) -> None:
     if not isinstance(categories, dict):
         raise ValueError("Generated tagging.categories must be a mapping.")
 
-    categories.setdefault("review_status", deepcopy(REVIEW_STATUS_CATEGORY))
+    categories["main_topic_category"] = deepcopy(MAIN_TOPIC_CATEGORY)
+    categories["review_status"] = deepcopy(REVIEW_STATUS_CATEGORY)
+
+    fallback_policy = tagging.get("fallback_policy")
+    if isinstance(fallback_policy, dict):
+        fallback_policy["review_status"] = "ai_tagged"
 
 
 def call_llm(

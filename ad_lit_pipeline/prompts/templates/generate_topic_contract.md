@@ -15,14 +15,17 @@ Rules:
 - Set `topic_id` to a lowercase snake_case identifier.
 - Keep `collection.allowed_providers` to the providers available in the template.
 - Include `research_target`, `main_topic_category`, and `review_status` in `tagging.categories`.
-- For `review_status`, use values `ai_tagged`, `human_reviewed`, `needs_decision`, `full_text_needed`, and `excluded_from_scope`, and mark it required.
+- For `main_topic_category`, use exactly these values: `core_topic`, `adjacent_but_relevant`, `out_of_scope`, `mixed_or_unclear`, and `unclear`. This category controls Mantis export eligibility.
+- For `review_status`, use values `ai_tagged`, `human_reviewed`, `full_text_needed`, and `excluded_from_scope`, and mark it required.
+- Set `tagging.fallback_policy.review_status` to `ai_tagged`.
 - Add multiple topic-specific knowledge tagging categories that would help later extraction.
 - Give each tagging category multiple allowed values; do not collapse the ontology into one broad category.
 - Include `mixed_or_unclear` and `unclear` values where ambiguity is expected.
 - Make `scope.include_criteria` cover direct papers and meaningfully adjacent papers.
 - Keep `scope.exclude_criteria` for clear mismatches only.
 - Make `scope.boundary_rules` describe when related or tangential papers should stay in for human review.
-- Make `rule_based_screening.include_terms` broad enough to catch synonyms and adjacent phrasing.
+- Make `rule_based_screening.include_terms` broad, atomic, and recall-oriented enough to catch synonyms, adjacent phrasing, plural/singular variants, and common abbreviations or acronyms such as AI/ML/GPA when relevant.
+- Add important topic-specific tag values and category concepts to `rule_based_screening.include_terms` when they are useful search or screening signals.
 - Keep `rule_based_screening.exclude_terms` short and only for hard negatives.
 - Set candidate screening so borderline or tangentially relevant candidates are included for later review unless clearly outside the topic.
 - Include reviews unless the research question explicitly asks for primary studies only.

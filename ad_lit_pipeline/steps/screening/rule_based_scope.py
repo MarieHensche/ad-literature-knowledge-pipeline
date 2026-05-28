@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
+import re
 from pathlib import Path
 from typing import Any
 
@@ -34,11 +36,135 @@ def text_for_screening(row: dict[str, str]) -> str:
             row.get("title", ""),
             row.get("abstract", ""),
         ]
-    ).lower()
+    )
 
 
-def matched_terms(text: str, terms: list[str]) -> list[str]:
-    return [term for term in terms if term.lower() in text]
+KNOWN_ABBREVIATIONS = {
+    "artificial intelligence": ["ai"],
+    "machine learning": ["ml"],
+    "deep learning": ["dl"],
+    "natural language processing": ["nlp"],
+    "large language model": ["llm"],
+    "large language models": ["llm", "llms"],
+    "electric vehicle": ["ev"],
+    "electric vehicles": ["ev", "evs"],
+    "greenhouse gas": ["ghg"],
+    "greenhouse gases": ["ghg", "ghgs"],
+    "particulate matter": ["pm"],
+    "nitrogen oxide": ["nox"],
+    "nitrogen oxides": ["nox"],
+    "grade point average": ["gpa"],
+    "urban heat island": ["uhi"],
+    "urban heat islands": ["uhi"],
+    "internet of things": ["iot"],
+    "virtual reality": ["vr"],
+    "augmented reality": ["ar"],
+    "randomized controlled trial": ["rct"],
+}
+
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+}
+
+
+def normalize_text(value: str) -> str:
+    """Normalize text for recall-oriented screening term matching."""
+    text = html.unescape(value).lower()
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[_/\\-]+", " ", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def normalize_token(token: str) -> str:
+    if len(token) > 4 and token.endswith("ies"):
+        return f"{token[:-3]}y"
+    if len(token) > 4 and token.endswith("es"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s"):
+        return token[:-1]
+    return token
+
+
+def meaningful_tokens(value: str) -> list[str]:
+    return [
+        normalize_token(token)
+        for token in normalize_text(value).split()
+        if token not in STOPWORDS
+    ]
+
+
+def acronym_for_tokens(tokens: list[str]) -> str:
+    return "".join(token[0] for token in tokens if token and token not in STOPWORDS)
+
+
+def term_variants(term: str) -> list[str]:
+    normalized = normalize_text(term)
+    if not normalized:
+        return []
+
+    variants = [normalized]
+    variants.extend(KNOWN_ABBREVIATIONS.get(normalized, []))
+
+    tokens = meaningful_tokens(normalized)
+    acronym = acronym_for_tokens(tokens)
+    if len(tokens) > 1 and 2 <= len(acronym) <= 6:
+        variants.append(acronym)
+
+    deduped = []
+    seen = set()
+    for variant in variants:
+        if variant and variant not in seen:
+            deduped.append(variant)
+            seen.add(variant)
+    return deduped
+
+
+def contains_phrase(text: str, phrase: str) -> bool:
+    return bool(re.search(rf"(^| ){re.escape(phrase)}( |$)", text))
+
+
+def token_overlap_matches(text_tokens: set[str], term: str) -> bool:
+    tokens = meaningful_tokens(term)
+    if len(tokens) < 2:
+        return False
+
+    matched = sum(1 for token in tokens if token in text_tokens)
+    required = len(tokens) if len(tokens) == 2 else max(2, int(len(tokens) * 0.67))
+    return matched >= required
+
+
+def term_matches(text: str, text_tokens: set[str], term: str, similar: bool) -> bool:
+    for variant in term_variants(term):
+        if contains_phrase(text, variant):
+            return True
+
+    return similar and token_overlap_matches(text_tokens, term)
+
+
+def matched_terms(text: str, terms: list[str], similar: bool = True) -> list[str]:
+    normalized_text = normalize_text(text)
+    text_tokens = {normalize_token(token) for token in normalized_text.split()}
+    return [
+        term
+        for term in terms
+        if term_matches(normalized_text, text_tokens, term, similar=similar)
+    ]
 
 
 def decide_scope(
@@ -48,8 +174,8 @@ def decide_scope(
     exclude_wins: bool = True,
 ) -> dict[str, str]:
     text = text_for_screening(row)
-    matched_exclude = matched_terms(text, exclude_terms)
-    matched_include = matched_terms(text, include_terms)
+    matched_exclude = matched_terms(text, exclude_terms, similar=False)
+    matched_include = matched_terms(text, include_terms, similar=True)
 
     if matched_exclude and (exclude_wins or not matched_include):
         decision = "exclude_or_route_elsewhere"
@@ -61,8 +187,8 @@ def decide_scope(
         decision = "include"
         reason = f"Matched include term(s): {', '.join(matched_include)}"
     else:
-        decision = "needs_decision"
-        reason = "No clear include or exclude term matched."
+        decision = "include"
+        reason = "No exclude term matched; included for downstream tagging."
 
     return {
         "scope_decision": decision,

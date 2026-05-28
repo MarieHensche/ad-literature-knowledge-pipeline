@@ -52,6 +52,11 @@ def compact_review_overview(record: dict[str, Any]) -> dict[str, Any]:
         "abstract": record.get("abstract", ""),
         "query": record.get("query", ""),
         "query_reason": record.get("query_reason", ""),
+        "cited_by_count": record.get("cited_by_count", ""),
+        "citation_rate_per_year": record.get("citation_rate_per_year", ""),
+        "review_selection_score": record.get("review_selection_score", ""),
+        "review_topic_evidence": record.get("review_topic_evidence", []),
+        "review_selection_reasons": record.get("review_selection_reasons", []),
         "open_access": open_access,
         "best_oa_location": best_oa_location,
     }

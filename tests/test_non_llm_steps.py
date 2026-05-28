@@ -8,8 +8,11 @@ from pathlib import Path
 
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
+    review_pool_size,
     run as run_fetch_review_overviews,
+    select_best_review_overviews,
 )
+from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,7 +110,8 @@ def test_fetch_review_overviews_builds_review_only_openalex_plan(tmp_path: Path)
     rows = read_jsonl_objects(output_path)
     assert rows[0]["provider_id"] == "W1"
     assert result.row_counts["review_overviews"] == 1
-    assert provider.max_results == 5
+    assert result.row_counts["review_overview_candidates"] == 1
+    assert provider.max_results == review_pool_size(5)
     assert provider.plan is not None
     assert provider.plan["filters"] == {
         "publication_types": ["review"],
@@ -116,6 +120,35 @@ def test_fetch_review_overviews_builds_review_only_openalex_plan(tmp_path: Path)
         "has_full_text": True,
     }
     assert provider.plan["search_queries"][0]["query"].endswith("review overview")
+
+
+def test_review_seed_selection_prefers_topic_fit_over_citations() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    candidates = [
+        {
+            "provider_id": "nursing-review",
+            "title": "Application Scenarios for Artificial Intelligence in Nursing Care",
+            "year": 2024,
+            "abstract": "A rapid review of AI applications in nursing care.",
+            "raw_record": {"cited_by_count": 500},
+        },
+        {
+            "provider_id": "education-review",
+            "title": "Systematic review of artificial intelligence in education",
+            "year": 2022,
+            "abstract": (
+                "This review examines AI in education, student learning, "
+                "teaching, classroom use, and learning outcomes."
+            ),
+            "raw_record": {"cited_by_count": 35},
+        },
+    ]
+
+    selected = select_best_review_overviews(contract, candidates, max_results=1)
+
+    assert selected[0]["provider_id"] == "education-review"
+    assert selected[0]["review_selection_score"] > 0
+    assert selected[0]["review_topic_evidence"]
 
 
 def test_screen_scope_preserves_metadata_and_appends_contract_fields(
@@ -179,7 +212,7 @@ def test_screen_scope_preserves_metadata_and_appends_contract_fields(
     assert rows[2]["scope_matched_exclude_terms"] == "drug repurposing; treatment"
 
 
-def test_screen_scope_exclude_wins_and_needs_decision(tmp_path: Path) -> None:
+def test_screen_scope_exclude_wins_and_defaults_to_include(tmp_path: Path) -> None:
     input_path = tmp_path / "normalized.csv"
     output_path = tmp_path / "screened.csv"
     write_csv(
@@ -220,7 +253,95 @@ def test_screen_scope_exclude_wins_and_needs_decision(tmp_path: Path) -> None:
     assert rows[0]["scope_matched_include_terms"] == "classification"
     assert rows[0]["scope_matched_exclude_terms"] == "treatment"
     assert rows[0]["authors"] == "A. Author"
-    assert rows[1]["scope_decision"] == "needs_decision"
+    assert rows[1]["scope_decision"] == "include"
+    assert rows[1]["scope_reason"] == (
+        "No exclude term matched; included for downstream tagging."
+    )
+
+
+def test_screen_scope_matches_abbreviations_and_tag_values(tmp_path: Path) -> None:
+    input_path = tmp_path / "normalized.csv"
+    output_path = tmp_path / "screened.csv"
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "ML tools for college student learning",
+                "year": "2024",
+                "doi": "",
+                "abstract": "The paper evaluates classroom outcomes.",
+                "authors": "A. Author",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Grade point average and wellbeing",
+                "year": "2024",
+                "doi": "",
+                "abstract": "The paper studies student GPA.",
+                "authors": "B. Author",
+            },
+        ],
+        ["paper_id", "title", "year", "doi", "abstract", "authors"],
+    )
+    contract_path.write_text(
+        """
+topic_id: education_test
+research_topic:
+  title: Education test
+  description: Test topic.
+scope:
+  include_criteria:
+    - Include education papers.
+  exclude_criteria:
+    - Exclude hard negatives.
+  boundary_rules:
+    - Include adjacent papers.
+rule_based_screening:
+  include_terms:
+    - machine learning
+  exclude_terms: []
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include
+  borderline_policy: include
+  human_review_policy: include
+tagging:
+  fallback_policy: {}
+  categories:
+    main_topic_category:
+      values:
+        - student_outcomes
+        - unclear
+    research_target:
+      values:
+        - grade_point_average
+        - unclear
+collection:
+  allowed_providers:
+    - openalex
+  preferred_provider: openalex
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    run_script(
+        "scripts/screen_scope.py",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--topic-contract",
+        str(contract_path),
+    )
+
+    rows = read_csv(output_path)
+    assert rows[0]["scope_decision"] == "include"
+    assert "machine learning" in rows[0]["scope_matched_include_terms"]
+    assert "student outcomes" in rows[0]["scope_matched_include_terms"]
+    assert rows[1]["scope_decision"] == "include"
+    assert rows[1]["scope_matched_include_terms"] == "grade point average"
 
 
 def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None:
@@ -428,7 +549,7 @@ def test_audit_extraction_writes_expected_issues(tmp_path: Path) -> None:
     ]
 
 
-def test_export_mantis_ready_uses_claim_and_first_category(tmp_path: Path) -> None:
+def test_export_mantis_ready_filters_to_core_and_adjacent_topics(tmp_path: Path) -> None:
     extraction_path = tmp_path / "extraction.csv"
     output_path = tmp_path / "mantis.csv"
     write_csv(
@@ -440,8 +561,28 @@ def test_export_mantis_ready_uses_claim_and_first_category(tmp_path: Path) -> No
                 "year": "2024",
                 "doi": "10.123/example",
                 "main_knowledge_claim": "The paper detects early AD.",
-                "main_topic_category": "mci_detection; early_ad_detection",
+                "main_topic_category": "core_topic",
                 "research_target": "mci",
+                "review_status": "ai_tagged",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Adjacent Study",
+                "year": "2023",
+                "doi": "",
+                "main_knowledge_claim": "The paper is adjacent but useful.",
+                "main_topic_category": "adjacent_but_relevant",
+                "research_target": "dementia",
+                "review_status": "ai_tagged",
+            },
+            {
+                "paper_id": "p3",
+                "title": "Weak Study",
+                "year": "2022",
+                "doi": "",
+                "main_knowledge_claim": "The paper is not close enough.",
+                "main_topic_category": "out_of_scope",
+                "research_target": "unclear",
                 "review_status": "ai_tagged",
             }
         ],
@@ -457,7 +598,7 @@ def test_export_mantis_ready_uses_claim_and_first_category(tmp_path: Path) -> No
         ],
     )
 
-    run_script(
+    result = run_script(
         "scripts/export_mantis_ready.py",
         "--input",
         str(extraction_path),
@@ -466,7 +607,11 @@ def test_export_mantis_ready_uses_claim_and_first_category(tmp_path: Path) -> No
     )
 
     rows = read_csv(output_path)
+    assert len(rows) == 2
     assert rows[0]["title"] == "Detection Study"
-    assert rows[0]["categoric"] == "mci_detection"
+    assert rows[0]["categoric"] == "core_topic"
     assert rows[0]["semantic"] == "The paper detects early AD."
     assert rows[0]["review_status"] == "ai_tagged"
+    assert rows[1]["title"] == "Adjacent Study"
+    assert rows[1]["categoric"] == "adjacent_but_relevant"
+    assert "Exported 2 Mantis rows" in result.stdout

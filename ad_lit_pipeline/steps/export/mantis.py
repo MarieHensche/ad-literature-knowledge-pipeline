@@ -27,6 +27,7 @@ CORE_COLUMNS = [
 
 MAIN_TOPIC_CATEGORY_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[0]
 RESEARCH_TARGET_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[1]
+MANTIS_EXPORT_TOPIC_CATEGORIES = {"core_topic", "adjacent_but_relevant"}
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
@@ -53,6 +54,15 @@ def make_semantic(row: dict[str, str]) -> str:
 
 def first_selected_value(value: str) -> str:
     return value.split(";")[0].strip() if value.strip() else ""
+
+
+def selected_values(value: str) -> list[str]:
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
+def is_mantis_exportable(row: dict[str, str]) -> bool:
+    values = selected_values(row.get(MAIN_TOPIC_CATEGORY_COLUMN, ""))
+    return any(value in MANTIS_EXPORT_TOPIC_CATEGORIES for value in values)
 
 
 def make_categoric(row: dict[str, str]) -> str:
@@ -124,14 +134,19 @@ def run(input_path: Path, output_path: Path) -> StepResult:
     tag_fields = tag_columns(fieldnames)
     output_fields = CORE_COLUMNS + tag_fields
 
-    output_rows = [export_row(row, tag_fields) for row in rows]
+    exportable_rows = [row for row in rows if is_mantis_exportable(row)]
+    output_rows = [export_row(row, tag_fields) for row in exportable_rows]
     write_rows(output_path, output_rows, output_fields)
 
     return StepResult(
         step_name=STEP.name,
         inputs={"extraction_filled_csv": input_path},
         outputs={"mantis_ready_csv": output_path},
-        row_counts={"mantis_rows": len(output_rows)},
+        row_counts={
+            "input_rows": len(rows),
+            "mantis_rows": len(output_rows),
+            "skipped_not_mantis_relevant": len(rows) - len(output_rows),
+        },
     )
 
 

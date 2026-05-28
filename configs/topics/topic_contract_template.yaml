@@ -36,13 +36,14 @@ tagging:
     prefer_mixed_or_unclear_when_unclear_missing: true
     missing_information_value: not_reported
     knowledge_confidence: very_low
-    review_status: needs_decision
+    review_status: ai_tagged
   categories:
     main_topic_category:
+      required: true
       values:
         - core_topic
-        - method_or_application
-        - adjacent_or_contextual
+        - adjacent_but_relevant
+        - out_of_scope
         - mixed_or_unclear
         - unclear
     research_target:
@@ -73,7 +74,6 @@ tagging:
       values:
         - ai_tagged
         - human_reviewed
-        - needs_decision
         - full_text_needed
         - excluded_from_scope
 

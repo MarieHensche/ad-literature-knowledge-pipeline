@@ -224,7 +224,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                         "prefer_mixed_or_unclear_when_unclear_missing": True,
                         "missing_information_value": "not_reported",
                         "knowledge_confidence": "very_low",
-                        "review_status": "needs_decision",
+                        "review_status": "ai_tagged",
                     },
                     "categories": [
                         {
@@ -300,14 +300,22 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     contract = load_topic_contract(output)
     assert contract["topic_id"] == "climate_health"
     assert "main_topic_category" in contract["tagging"]["categories"]
+    assert contract["tagging"]["categories"]["main_topic_category"]["required"] is True
+    assert contract["tagging"]["categories"]["main_topic_category"]["values"] == [
+        "core_topic",
+        "adjacent_but_relevant",
+        "out_of_scope",
+        "mixed_or_unclear",
+        "unclear",
+    ]
     assert contract["tagging"]["categories"]["review_status"]["required"] is True
     assert contract["tagging"]["categories"]["review_status"]["values"] == [
         "ai_tagged",
         "human_reviewed",
-        "needs_decision",
         "full_text_needed",
         "excluded_from_scope",
     ]
+    assert contract["tagging"]["fallback_policy"]["review_status"] == "ai_tagged"
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
@@ -392,7 +400,6 @@ def test_refine_topic_contract_adds_review_seeded_categories(
             "values": [
                 "ai_tagged",
                 "human_reviewed",
-                "needs_decision",
                 "full_text_needed",
                 "excluded_from_scope",
             ],
@@ -411,6 +418,13 @@ def test_refine_topic_contract_adds_review_seeded_categories(
 
     refined = load_topic_contract(contract_path)
     categories = refined["tagging"]["categories"]
+    assert categories["main_topic_category"]["values"] == [
+        "core_topic",
+        "adjacent_but_relevant",
+        "out_of_scope",
+        "mixed_or_unclear",
+        "unclear",
+    ]
     assert "knowledge_signal_family" in categories
     assert "knowledge_outcome_family" in categories
     assert result.row_counts["review_overviews"] == 1
@@ -520,7 +534,7 @@ def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
                 "required": True,
                 "allowed_values": [
                     {"value": "ai_tagged"},
-                    {"value": "needs_decision"},
+                    {"value": "human_reviewed"},
                 ],
             }
         ],
@@ -534,7 +548,7 @@ def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
                         "category_id": "review_status",
                         "selection": "single",
                         "required": True,
-                        "fallback_value": "needs_decision",
+                        "fallback_value": "ai_tagged",
                         "reason": "Review status is required.",
                     }
                 ]
@@ -553,7 +567,7 @@ def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
 
     assert result.row_counts["rules"] == 1
     assert json.loads(output_path.read_text(encoding="utf-8"))["rules_count"] == 1
-    assert '"review_status": "needs_decision"' in client.requests[0]["prompt"]
+    assert '"review_status": "ai_tagged"' in client.requests[0]["prompt"]
 
 
 def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:
@@ -669,7 +683,7 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
                 "required": True,
                 "allowed_values": [
                     {"value": "ai_tagged"},
-                    {"value": "needs_decision"},
+                    {"value": "full_text_needed"},
                 ],
             }
         ],
@@ -680,7 +694,7 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
                 "category_id": "review_status",
                 "selection": "single",
                 "required": True,
-                "fallback_value": "needs_decision",
+                "fallback_value": "ai_tagged",
                 "reason": "Required.",
             }
         ]

@@ -41,7 +41,7 @@ def test_generate_rules_prompt_uses_topic_fallback_policy() -> None:
     config = normalize_config(tagging_config_from_contract(contract))
     prompt = render_generate_tagging_rules_prompt(config, contract)
 
-    assert '"review_status": "needs_decision"' in prompt
+    assert '"review_status": "ai_tagged"' in prompt
     assert '"knowledge_confidence": "very_low"' in prompt
     assert "Follow category-specific fallback values" in prompt
 
@@ -57,6 +57,8 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "collection.search_queries" in prompt
     assert "multiple topic-specific knowledge tagging categories" in prompt
     assert "multiple allowed values" in prompt
+    assert "adjacent_but_relevant" in prompt
+    assert "common abbreviations or acronyms" in prompt
     assert "`review_status`" in prompt
     assert "climate change affect human health" in prompt
 
@@ -77,6 +79,7 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "Review and overview seed papers" in prompt
     assert "knowledge categories" in prompt
     assert "multiple allowed values" in prompt
+    assert "core_topic" in prompt
     assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
 

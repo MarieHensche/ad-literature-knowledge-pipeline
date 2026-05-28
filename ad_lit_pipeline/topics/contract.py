@@ -7,6 +7,27 @@ from ad_lit_pipeline.io.yaml_io import read_yaml_object
 
 
 REQUIRED_TOPIC_CATEGORY_IDS = ("main_topic_category", "research_target")
+SCREENING_TAG_CATEGORY_EXCLUDES = {"knowledge_confidence", "review_status"}
+SCREENING_TAG_VALUE_EXCLUDES = {
+    "adjacent_but_relevant",
+    "ai_tagged",
+    "conflict",
+    "core_topic",
+    "excluded_from_scope",
+    "full_text_needed",
+    "high",
+    "human_reviewed",
+    "low",
+    "medium",
+    "mixed_or_unclear",
+    "none",
+    "not_applicable",
+    "not_reported",
+    "other",
+    "out_of_scope",
+    "unclear",
+    "very_low",
+}
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -158,7 +179,48 @@ def tagging_config_from_contract(contract: dict[str, Any]) -> dict[str, Any]:
 def rule_based_screening_from_contract(contract: dict[str, Any]) -> dict[str, Any]:
     """Return rule-based screening settings from a validated topic contract."""
     validate_topic_contract(contract)
-    return require_mapping(contract["rule_based_screening"], "rule_based_screening")
+    rule_based = dict(
+        require_mapping(contract["rule_based_screening"], "rule_based_screening")
+    )
+    rule_based["include_terms"] = expanded_include_terms(contract)
+    return rule_based
+
+
+def expanded_include_terms(contract: dict[str, Any]) -> list[str]:
+    """Add useful tagging values to screening include terms."""
+    rule_based = require_mapping(contract["rule_based_screening"], "rule_based_screening")
+    include_terms = list(rule_based.get("include_terms", []))
+
+    tagging = require_mapping(contract.get("tagging"), "tagging")
+    categories = require_mapping(tagging.get("categories"), "tagging.categories")
+    for category_id, category in categories.items():
+        if category_id in SCREENING_TAG_CATEGORY_EXCLUDES:
+            continue
+
+        category_map = require_mapping(category, f"tagging.categories.{category_id}")
+        values = require_list(
+            category_map.get("values"), f"tagging.categories.{category_id}.values"
+        )
+        for value in values:
+            raw_term = str(value).strip()
+            normalized_term = raw_term.casefold()
+            term = raw_term.replace("_", " ").strip()
+            if (
+                not term
+                or normalized_term in SCREENING_TAG_VALUE_EXCLUDES
+                or term.casefold() in SCREENING_TAG_VALUE_EXCLUDES
+            ):
+                continue
+            include_terms.append(term)
+
+    deduped = []
+    seen = set()
+    for term in include_terms:
+        key = term.casefold()
+        if key not in seen:
+            deduped.append(term)
+            seen.add(key)
+    return deduped
 
 
 def collection_from_contract(contract: dict[str, Any]) -> dict[str, Any]:

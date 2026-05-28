@@ -26,5 +26,10 @@ Rules:
 - For multi-selection categories, return one or more values if relevant.
 - If the paper does not provide enough information, use the category fallback value from the fixed rules.
 - Do not invent new values.
+- If `main_topic_category` offers `core_topic`, `adjacent_but_relevant`, and
+  `out_of_scope`, use it as a strict topical-fit judgment: choose `core_topic`
+  only for papers directly about the research topic, `adjacent_but_relevant`
+  for papers that meaningfully support the topic but are not central, and
+  `out_of_scope` for weak or mismatched papers.
 - main_knowledge_claim should be one concise sentence describing what the paper contributes to the research topic.
 $review_status_instruction

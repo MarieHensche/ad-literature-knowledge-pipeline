@@ -9,6 +9,7 @@ import pytest
 
 from ad_lit_pipeline.topics.contract import (
     load_topic_contract,
+    rule_based_screening_from_contract,
     tagging_config_from_contract,
     validate_topic_contract,
 )
@@ -73,10 +74,21 @@ def test_topic_contract_converts_to_legacy_tagging_config() -> None:
     assert config["categories"]["review_status"]["values"] == [
         "ai_tagged",
         "human_reviewed",
-        "needs_decision",
         "full_text_needed",
         "excluded_from_scope",
     ]
+
+
+def test_rule_based_screening_uses_tag_values_as_include_terms() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    rule_based = rule_based_screening_from_contract(contract)
+
+    assert "ad" in rule_based["include_terms"]
+    assert "neuroimaging" in rule_based["include_terms"]
+    assert "core topic" not in rule_based["include_terms"]
+    assert "out of scope" not in rule_based["include_terms"]
+    assert "mixed or unclear" not in rule_based["include_terms"]
+    assert "ai tagged" not in rule_based["include_terms"]
 
 
 def test_normalize_tagging_config_accepts_topic_contract(tmp_path: Path) -> None:

@@ -61,7 +61,7 @@ tagging:
     prefer_mixed_or_unclear_when_unclear_missing: true
     missing_information_value: not_reported
     knowledge_confidence: very_low
-    review_status: needs_decision
+    review_status: ai_tagged
   categories:
     research_target:
       values:
@@ -75,15 +75,13 @@ tagging:
         - unclear
 
     main_topic_category:
+      required: true
       values:
-        - early_ad_detection
-        - mci_detection
-        - mci_ad_detection
-        - dementia_screening
-        - prodromal_detection
-        - preclinical_detection
-        - conversion_or_deterioration_detection
+        - core_topic
+        - adjacent_but_relevant
+        - out_of_scope
         - mixed_or_unclear
+        - unclear
 
     population_scope:
       values:
@@ -190,7 +188,6 @@ tagging:
       values:
         - ai_tagged
         - human_reviewed
-        - needs_decision
         - full_text_needed
         - excluded_from_scope
 

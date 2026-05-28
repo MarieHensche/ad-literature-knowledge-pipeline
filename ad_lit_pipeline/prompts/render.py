@@ -160,8 +160,8 @@ def render_tag_paper_prompt(
         }
     if "review_status" in category_ids:
         review_status_instruction = (
-            '- Set review_status to ["ai_tagged"] unless the paper clearly '
-            "needs a human decision."
+            '- Set review_status to ["ai_tagged"] unless another configured '
+            "review_status value such as full_text_needed clearly applies."
         )
     else:
         review_status_instruction = (
