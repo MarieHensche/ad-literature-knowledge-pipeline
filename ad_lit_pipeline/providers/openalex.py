@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import math
 import time
+from collections.abc import Iterator
 from datetime import date
 from typing import Any
 from urllib.parse import urlencode
@@ -276,16 +276,36 @@ class OpenAlexProvider:
         sleep_seconds: float,
     ) -> list[dict[str, Any]]:
         candidates = []
+        for candidate in self.iter_candidates(plan, per_page, mailto, sleep_seconds):
+            candidates.append(candidate)
+            if len(candidates) >= max_results:
+                break
+
+        return candidates
+
+    def iter_candidates(
+        self,
+        plan: dict[str, Any],
+        per_page: int,
+        mailto: str | None,
+        sleep_seconds: float,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield candidates page by page so callers can stop once targets are met."""
         search_queries = self.search_queries_from_plan(plan)
-        per_query_limit = max(1, math.ceil(max_results / len(search_queries)))
+        rank = 0
+        pages = [1 for _ in search_queries]
+        query_ranks = [0 for _ in search_queries]
+        exhausted: set[int] = set()
 
-        for query_index, query_entry in enumerate(search_queries, start=1):
-            page = 1
-            query_rank = 0
-            query = query_entry["query"]
-            query_reason = query_entry["reason"]
+        while len(exhausted) < len(search_queries):
+            for query_offset, query_entry in enumerate(search_queries):
+                if query_offset in exhausted:
+                    continue
 
-            while query_rank < per_query_limit and len(candidates) < max_results:
+                query_index = query_offset + 1
+                page = pages[query_offset]
+                query = query_entry["query"]
+                query_reason = query_entry["reason"]
                 query_url = build_openalex_url(
                     plan,
                     page,
@@ -299,36 +319,26 @@ class OpenAlexProvider:
                 results = response.get("results")
 
                 if not isinstance(results, list) or not results:
-                    break
+                    exhausted.add(query_offset)
+                    continue
 
                 for work in results:
                     if not isinstance(work, dict):
                         continue
 
-                    query_rank += 1
-                    rank = len(candidates) + 1
-                    candidates.append(
-                        candidate_from_work(
-                            work,
-                            plan,
-                            rank,
-                            query_url,
-                            query=query,
-                            query_index=query_index,
-                            query_rank=query_rank,
-                            query_reason=query_reason,
-                        )
+                    query_ranks[query_offset] += 1
+                    rank += 1
+                    yield candidate_from_work(
+                        work,
+                        plan,
+                        rank,
+                        query_url,
+                        query=query,
+                        query_index=query_index,
+                        query_rank=query_ranks[query_offset],
+                        query_reason=query_reason,
                     )
 
-                    if query_rank >= per_query_limit or len(candidates) >= max_results:
-                        break
+                pages[query_offset] += 1
 
-                page += 1
-
-                if query_rank < per_query_limit and len(candidates) < max_results:
-                    time.sleep(sleep_seconds)
-
-            if len(candidates) >= max_results:
-                break
-
-        return candidates
+                time.sleep(sleep_seconds)

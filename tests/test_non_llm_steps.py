@@ -744,12 +744,111 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
             "full_text_path": "",
             "notes": (
                 "provider=openalex; provider_id=W1; source_rank=1; "
-                "retrieval_date=2026-05-25; screening_confidence=high; "
+                "retrieval_date=2026-05-25; screening_topic_fit=; "
+                "screening_confidence=high; "
                 "screening_reason=Directly relevant.; dedupe_key=doi:10.123/example; "
                 "duplicate_count=1"
             ),
         }
     ]
+
+
+def test_export_included_candidates_prioritizes_core_before_adjacent(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    output_path = tmp_path / "papers.csv"
+    candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": "W1",
+            "doi": "10.123/adjacent",
+            "title": "Adjacent Study",
+            "year": 2024,
+            "abstract": "Adjacent abstract.",
+            "rank": 1,
+        },
+        {
+            "provider": "openalex",
+            "provider_id": "W2",
+            "doi": "10.123/core",
+            "title": "Core Study",
+            "year": 2024,
+            "abstract": "Core abstract.",
+            "rank": 2,
+        },
+    ]
+    candidates_path.write_text(
+        "".join(json.dumps(candidate) + "\n" for candidate in candidates),
+        encoding="utf-8",
+    )
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Adjacent Study",
+                "year": "2024",
+                "doi": "10.123/adjacent",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "source_rank": "1",
+                "source_query": "",
+                "source_query_reason": "",
+                "screening_decision": "include",
+                "screening_topic_fit": "adjacent_but_relevant",
+                "screening_confidence": "medium",
+                "screening_reason": "Adjacent.",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Core Study",
+                "year": "2024",
+                "doi": "10.123/core",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "source_rank": "2",
+                "source_query": "",
+                "source_query_reason": "",
+                "screening_decision": "include",
+                "screening_topic_fit": "core_topic",
+                "screening_confidence": "high",
+                "screening_reason": "Core.",
+            },
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "provider",
+            "provider_id",
+            "source_rank",
+            "source_query",
+            "source_query_reason",
+            "screening_decision",
+            "screening_topic_fit",
+            "screening_confidence",
+            "screening_reason",
+        ],
+    )
+
+    result = run_script(
+        "scripts/export_screened_candidates_to_csv.py",
+        "--candidates",
+        str(candidates_path),
+        "--screening",
+        str(screening_path),
+        "--output",
+        str(output_path),
+        "--target-results",
+        "1",
+    )
+
+    rows = read_csv(output_path)
+    assert [row["title"] for row in rows] == ["Core Study"]
+    assert "Included rows exported: 1" in result.stdout
 
 
 def test_audit_extraction_writes_expected_issues(tmp_path: Path) -> None:
@@ -827,7 +926,7 @@ def test_audit_extraction_writes_expected_issues(tmp_path: Path) -> None:
     ]
 
 
-def test_export_mantis_ready_filters_to_core_and_adjacent_topics(tmp_path: Path) -> None:
+def test_export_mantis_ready_filters_to_core_topics(tmp_path: Path) -> None:
     extraction_path = tmp_path / "extraction.csv"
     output_path = tmp_path / "mantis.csv"
     write_csv(
@@ -885,11 +984,9 @@ def test_export_mantis_ready_filters_to_core_and_adjacent_topics(tmp_path: Path)
     )
 
     rows = read_csv(output_path)
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert rows[0]["title"] == "Detection Study"
     assert rows[0]["categoric"] == "core_topic"
     assert rows[0]["semantic"] == "The paper detects early AD."
     assert rows[0]["review_status"] == "ai_tagged"
-    assert rows[1]["title"] == "Adjacent Study"
-    assert rows[1]["categoric"] == "adjacent_but_relevant"
-    assert "Exported 2 Mantis rows" in result.stdout
+    assert "Exported 1 Mantis rows" in result.stdout

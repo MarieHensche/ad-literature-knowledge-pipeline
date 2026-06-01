@@ -14,6 +14,11 @@ MAIN_PIPELINE = [
 
 COLLECTION_PIPELINE = [
     "plan_search",
+    "collect_targeted_candidates",
+]
+
+LEGACY_COLLECTION_PIPELINE = [
+    "plan_search",
     "fetch_candidates",
     "deduplicate_candidates",
     "screen_candidates",
@@ -29,4 +34,9 @@ CONTRACT_BOOTSTRAP_PIPELINE = [
 COLLECTION_WITH_CONTRACT_PIPELINE = [
     *CONTRACT_BOOTSTRAP_PIPELINE,
     *COLLECTION_PIPELINE,
+]
+
+LEGACY_COLLECTION_WITH_CONTRACT_PIPELINE = [
+    *CONTRACT_BOOTSTRAP_PIPELINE,
+    *LEGACY_COLLECTION_PIPELINE,
 ]

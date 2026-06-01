@@ -81,6 +81,7 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
         f"provider_id={candidate.get('provider_id', '')}",
         f"source_rank={candidate.get('rank', '')}",
         f"retrieval_date={candidate.get('retrieval_date', '')}",
+        f"screening_topic_fit={screening.get('screening_topic_fit', '')}",
         f"screening_confidence={screening.get('screening_confidence', '')}",
         f"screening_reason={screening.get('screening_reason', '')}",
     ]
@@ -126,10 +127,12 @@ def candidate_to_canonical_row(
 def export_included(
     candidates: list[dict[str, Any]],
     screening_rows: list[dict[str, str]],
+    target_results: int | None = None,
 ) -> list[dict[str, str]]:
     candidates_by_key = {candidate_key(candidate): candidate for candidate in candidates}
 
-    output_rows = []
+    core_rows = []
+    adjacent_rows = []
 
     for screening in screening_rows:
         if screening.get("screening_decision") != "include":
@@ -144,16 +147,42 @@ def export_included(
                 f"doi={key[0]} provider_id={key[1]}"
             )
 
-        output_rows.append(candidate_to_canonical_row(candidate, screening))
+        output_row = candidate_to_canonical_row(candidate, screening)
+        topic_fit = screening.get("screening_topic_fit")
+        if topic_fit == "core_topic":
+            core_rows.append(output_row)
+        elif topic_fit in {"adjacent_but_relevant", ""}:
+            adjacent_rows.append(output_row)
+
+    output_rows = core_rows + adjacent_rows
+    if target_results is not None:
+        output_rows = output_rows[:target_results]
 
     return output_rows
 
 
-def run(candidates_path: Path, screening_path: Path, output_path: Path) -> StepResult:
+def run(
+    candidates_path: Path,
+    screening_path: Path,
+    output_path: Path,
+    target_results: int | None = None,
+) -> StepResult:
     candidates = read_jsonl(candidates_path)
     screening_rows = read_csv(screening_path)
-    output_rows = export_included(candidates, screening_rows)
+    output_rows = export_included(candidates, screening_rows, target_results)
     write_csv(output_path, output_rows)
+    core_rows = [
+        row
+        for row in screening_rows
+        if row.get("screening_decision") == "include"
+        and row.get("screening_topic_fit") == "core_topic"
+    ]
+    adjacent_rows = [
+        row
+        for row in screening_rows
+        if row.get("screening_decision") == "include"
+        and row.get("screening_topic_fit") == "adjacent_but_relevant"
+    ]
 
     return StepResult(
         step_name=STEP.name,
@@ -165,6 +194,8 @@ def run(candidates_path: Path, screening_path: Path, output_path: Path) -> StepR
         row_counts={
             "screened_rows": len(screening_rows),
             "included_rows_exported": len(output_rows),
+            "core_topic_available": len(core_rows),
+            "adjacent_but_relevant_available": len(adjacent_rows),
         },
     )
 
@@ -176,9 +207,20 @@ def main() -> None:
     parser.add_argument("--candidates", required=True, help="Deduplicated candidates JSONL.")
     parser.add_argument("--screening", required=True, help="Candidate screening CSV.")
     parser.add_argument("--output", required=True, help="Output canonical paper CSV.")
+    parser.add_argument(
+        "--target-results",
+        type=int,
+        default=None,
+        help="Optional final paper target; exports core-topic rows first, then adjacent.",
+    )
     args = parser.parse_args()
 
-    result = run(Path(args.candidates), Path(args.screening), Path(args.output))
+    result = run(
+        Path(args.candidates),
+        Path(args.screening),
+        Path(args.output),
+        args.target_results,
+    )
 
     print(f"Screened rows: {result.row_counts['screened_rows']}")
     print(f"Included rows exported: {result.row_counts['included_rows_exported']}")

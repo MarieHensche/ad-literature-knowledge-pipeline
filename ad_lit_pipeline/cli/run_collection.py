@@ -10,6 +10,8 @@ from ad_lit_pipeline.core.registry import (
     COLLECTION_PIPELINE,
     COLLECTION_WITH_CONTRACT_PIPELINE,
     CONTRACT_BOOTSTRAP_PIPELINE,
+    LEGACY_COLLECTION_PIPELINE,
+    LEGACY_COLLECTION_WITH_CONTRACT_PIPELINE,
 )
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
 from ad_lit_pipeline.steps.collection import (
@@ -20,15 +22,23 @@ from ad_lit_pipeline.steps.collection import (
     generate_topic_contract,
     plan_search,
     refine_topic_contract,
+    targeted_collect,
 )
 from ad_lit_pipeline.steps.screening import llm_candidate_screening
 from ad_lit_pipeline.topics.contract import load_topic_contract
+
+
+LEGACY_ONLY_COLLECTION_STEPS = set(LEGACY_COLLECTION_PIPELINE) - {"plan_search"}
 
 
 def explain(collection: str) -> None:
     artifacts = collection_artifacts(collection)
     print("Collection pipeline steps:")
     for step in COLLECTION_PIPELINE:
+        print(f"  - {step}")
+    print()
+    print("Legacy/debug collection steps:")
+    for step in LEGACY_COLLECTION_PIPELINE:
         print(f"  - {step}")
     print()
     print("Optional preflight step:")
@@ -52,11 +62,15 @@ def resolve_topic_contract_path(args: argparse.Namespace) -> Path:
 
 
 def selected_collection_pipeline(args: argparse.Namespace) -> list[str]:
+    requested_step = args.only_step or args.from_step
     if args.contract_bootstrap_only:
         return CONTRACT_BOOTSTRAP_PIPELINE
+    if requested_step in LEGACY_ONLY_COLLECTION_STEPS:
+        if args.generate_topic_contract or not args.topic_contract:
+            return LEGACY_COLLECTION_WITH_CONTRACT_PIPELINE
+        return LEGACY_COLLECTION_PIPELINE
     if args.generate_topic_contract or not args.topic_contract:
         return COLLECTION_WITH_CONTRACT_PIPELINE
-    requested_step = args.only_step or args.from_step
     if requested_step in CONTRACT_BOOTSTRAP_PIPELINE:
         return COLLECTION_WITH_CONTRACT_PIPELINE
     return COLLECTION_PIPELINE
@@ -123,10 +137,25 @@ def build_step_functions(
             topic_contract_path,
             trace_dir=trace_dir,
         ),
+        "collect_targeted_candidates": lambda: targeted_collect.run(
+            artifacts.plan_json,
+            artifacts.candidates_jsonl,
+            artifacts.deduped_candidates_jsonl,
+            artifacts.candidate_screening_csv,
+            artifacts.papers_csv,
+            topic_description,
+            topic_contract_path,
+            args.model,
+            args.max_results,
+            args.candidate_budget,
+            mailto=args.mailto,
+            trace_dir=trace_dir,
+        ),
         "fetch_candidates": lambda: fetch_candidates.run(
             artifacts.plan_json,
             artifacts.candidates_jsonl,
             args.max_results,
+            mailto=args.mailto,
         ),
         "deduplicate_candidates": lambda: deduplicate.run(
             [artifacts.candidates_jsonl],
@@ -144,6 +173,7 @@ def build_step_functions(
             artifacts.deduped_candidates_jsonl,
             artifacts.candidate_screening_csv,
             artifacts.papers_csv,
+            args.max_results,
         ),
     }
 
@@ -223,7 +253,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-results",
         type=int,
         default=25,
-        help="Candidate count to fetch.",
+        help=(
+            "Target final unique paper count. Collection tries to fill this with "
+            "core-topic papers first, then adjacent-but-relevant papers if needed."
+        ),
+    )
+    run_parser.add_argument(
+        "--candidate-budget",
+        type=int,
+        default=None,
+        help=(
+            "Safety cap for raw candidates to inspect while searching. Defaults to "
+            "max-results plus an adaptive bounded buffer."
+        ),
+    )
+    run_parser.add_argument(
+        "--mailto",
+        default=None,
+        help="Optional email for provider polite pools such as OpenAlex.",
     )
     run_parser.add_argument(
         "--max-review-overviews",

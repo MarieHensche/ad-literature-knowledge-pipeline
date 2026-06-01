@@ -27,7 +27,7 @@ CORE_COLUMNS = [
 
 MAIN_TOPIC_CATEGORY_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[0]
 RESEARCH_TARGET_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[1]
-MANTIS_EXPORT_TOPIC_CATEGORIES = {"core_topic", "adjacent_but_relevant"}
+MANTIS_EXPORT_TOPIC_CATEGORIES = {"core_topic"}
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:

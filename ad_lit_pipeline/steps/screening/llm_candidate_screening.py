@@ -36,6 +36,7 @@ OUTPUT_COLUMNS = [
     "source_query",
     "source_query_reason",
     "screening_decision",
+    "screening_topic_fit",
     "screening_confidence",
     "screening_reason",
 ]
@@ -130,10 +131,17 @@ def call_llm(
         trace_writer=trace_writer,
     )
     parsed = result.parsed
+    topic_fit = str(parsed["topic_fit"])
+    decision = str(parsed["decision"])
+    if decision == "include" and topic_fit == "out_of_scope":
+        decision = "exclude"
+    if decision == "exclude":
+        topic_fit = "out_of_scope"
     output = {
-        "decision": str(parsed["decision"]),
+        "decision": decision,
         "reason": str(parsed["reason"]),
         "confidence": str(parsed["confidence"]),
+        "topic_fit": topic_fit,
     }
     trace_paths = result.trace_paths.as_list() if result.trace_paths else []
     return output, trace_paths
@@ -171,6 +179,7 @@ def screen_candidate(
             "source_query": str(candidate.get("query") or ""),
             "source_query_reason": str(candidate.get("query_reason") or ""),
             "screening_decision": result["decision"],
+            "screening_topic_fit": result["topic_fit"],
             "screening_confidence": result["confidence"],
             "screening_reason": result["reason"],
         },
@@ -244,6 +253,7 @@ def run(
                 "source_query": str(candidate.get("query") or ""),
                 "source_query_reason": str(candidate.get("query_reason") or ""),
                 "screening_decision": "exclude",
+                "screening_topic_fit": "out_of_scope",
                 "screening_confidence": "n/a",
                 "screening_reason": f"Auto-excluded due to LLM error: {error_msg}",
             }
@@ -252,6 +262,10 @@ def run(
     write_csv(output_path, rows)
     included = sum(1 for row in rows if row["screening_decision"] == "include")
     excluded = sum(1 for row in rows if row["screening_decision"] == "exclude")
+    core = sum(1 for row in rows if row["screening_topic_fit"] == "core_topic")
+    adjacent = sum(
+        1 for row in rows if row["screening_topic_fit"] == "adjacent_but_relevant"
+    )
     return StepResult(
         step_name=STEP.name,
         inputs={
@@ -263,6 +277,8 @@ def run(
             "screened_candidates": len(rows),
             "included": included,
             "excluded": excluded,
+            "core_topic": core,
+            "adjacent_but_relevant": adjacent,
         },
         trace_paths=all_trace_paths,
         warnings=warnings,
