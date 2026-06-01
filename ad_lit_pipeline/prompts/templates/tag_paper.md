@@ -9,6 +9,16 @@ $scope_text
 Paper:
 $paper_json
 
+Full-text use:
+- If `full_text_available_for_tagging` is "yes", base the tags primarily on
+  `full_text_evidence`, using title and abstract for context.
+- If full-text evidence is absent, tag from the available title and abstract,
+  and use `full_text_needed` for `review_status` when that value is configured
+  and the missing full text prevents confident tagging.
+- Pay special attention to methods, study design, data, analysis, results, and
+  conclusions in the full-text evidence. These fields will also support later
+  research-method tagging.
+
 Allowed categories and values:
 $categories_json
 

@@ -1,0 +1,70 @@
+{
+  "topic_description": "Green roofs and stormwater management in cities, including runoff reduction, water retention, urban flooding, vegetation, substrate depth, and climate adaptation.",
+  "recommended_provider": "openalex",
+  "provider_reason": "OpenAlex provides a broad scholarly search across multiple disciplines, making it suitable for interdisciplinary topics like green roofs and stormwater management.",
+  "search_goal": "Identify relevant scholarly papers investigating the role of green roofs in stormwater management and related aspects.",
+  "main_search_string": "green roofs stormwater management",
+  "alternate_search_strings": [
+    "living roofs runoff reduction",
+    "urban flooding green infrastructure",
+    "water retention green roofs",
+    "substrate depth and urban vegetation",
+    "climate adaptation urban landscapes"
+  ],
+  "search_queries": [
+    {
+      "query": "green roofs stormwater management",
+      "reason": "Direct inquiry into the core research question."
+    },
+    {
+      "query": "living roofs runoff reduction",
+      "reason": "Alternative phrasing focusing on runoff."
+    },
+    {
+      "query": "urban flooding green infrastructure",
+      "reason": "Explores the relationship between flooding and infrastructure."
+    },
+    {
+      "query": "water retention green roofs",
+      "reason": "Focuses on a specific aspect related to green roofs."
+    },
+    {
+      "query": "substrate depth and urban vegetation",
+      "reason": "Looks at the role of substrate in urban environments."
+    },
+    {
+      "query": "climate adaptation urban landscapes",
+      "reason": "Broader context of adaptation strategies."
+    },
+    {
+      "query": "green roofs empirical studies",
+      "reason": "Searches for applied research and studies."
+    },
+    {
+      "query": "effects of green roofs on water quality",
+      "reason": "Investigates a related outcome of green roofs."
+    }
+  ],
+  "filters": {
+    "year_from": null,
+    "year_to": null,
+    "publication_types": [],
+    "open_access_only": null,
+    "has_abstract": null,
+    "has_full_text": null,
+    "language": null,
+    "venue_or_source": [],
+    "field_or_domain": []
+  },
+  "provider_specific_plan": {
+    "provider": "openalex",
+    "query": "green roofs stormwater management",
+    "filters": [],
+    "sort": null,
+    "max_results_recommendation": 50
+  },
+  "screening_notes": "Focus on papers that address the role of green roofs in stormwater management and related aspects like runoff reduction and urban flooding. Exclude papers that do not focus on stormwater management or green roofs directly.",
+  "risks_or_ambiguities": [
+    "Papers may vary greatly in the methodology or focus within stormwater management and green roofs, requiring careful selection during screening."
+  ]
+}

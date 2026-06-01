@@ -7,11 +7,21 @@ import sys
 from pathlib import Path
 
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects
+from ad_lit_pipeline.providers.full_text import (
+    FullTextLocation,
+    NetworkFullTextResolver,
+)
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     review_pool_size,
     run as run_fetch_review_overviews,
     select_best_review_overviews,
 )
+from ad_lit_pipeline.steps.full_text.evidence import (
+    MIN_FULL_TEXT_CHARS,
+    build_full_text_evidence,
+    section_chunks,
+)
+from ad_lit_pipeline.steps.full_text.prepare import run as run_prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
@@ -257,6 +267,274 @@ def test_screen_scope_exclude_wins_and_defaults_to_include(tmp_path: Path) -> No
     assert rows[1]["scope_reason"] == (
         "No exclude term matched; included for downstream tagging."
     )
+
+
+def test_prepare_full_text_uses_local_text_cache_for_included_papers(
+    tmp_path: Path,
+) -> None:
+    full_text = tmp_path / "paper.txt"
+    full_text.write_text(
+        "Introduction\nThis paper studies MCI screening.\n\n"
+        "Methods\nThe study uses imaging and cognitive tests.\n\n"
+        "Results\nThe method improves detection.",
+        encoding="utf-8",
+    )
+    input_path = tmp_path / "scope.csv"
+    output_path = tmp_path / "scope_full_text.csv"
+    manifest_path = tmp_path / "manifest.csv"
+    cache_dir = tmp_path / "cache"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "MCI screening",
+                "year": "2024",
+                "doi": "10.123/example",
+                "abstract": "Screening for MCI.",
+                "full_text_path": str(full_text),
+                "scope_decision": "include",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Excluded paper",
+                "year": "2024",
+                "doi": "",
+                "abstract": "Treatment.",
+                "full_text_path": "",
+                "scope_decision": "exclude_or_route_elsewhere",
+            },
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "full_text_path",
+            "scope_decision",
+        ],
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir=cache_dir,
+        email="test@example.com",
+    )
+
+    rows = read_csv(output_path)
+    manifest = read_csv(manifest_path)
+    assert result.row_counts["included_papers"] == 1
+    assert result.row_counts["local_texts"] == 1
+    assert rows[0]["full_text_status"] == "local_text_extracted"
+    assert rows[0]["full_text_text_path"].startswith(str(cache_dir))
+    assert Path(rows[0]["full_text_text_path"]).read_text(encoding="utf-8")
+    assert rows[1]["full_text_status"] == "skipped_scope_excluded"
+    assert manifest[0]["paper_id"] == "p1"
+
+
+def test_prepare_full_text_tries_next_location_after_extraction_failure(
+    tmp_path: Path,
+) -> None:
+    valid_full_text = tmp_path / "valid.txt"
+    valid_full_text.write_text(
+        "Full text evidence. " * ((MIN_FULL_TEXT_CHARS // 20) + 5),
+        encoding="utf-8",
+    )
+    missing_full_text = tmp_path / "missing.pdf"
+    input_path = tmp_path / "scope.csv"
+    output_path = tmp_path / "scope_full_text.csv"
+    manifest_path = tmp_path / "manifest.csv"
+    cache_dir = tmp_path / "cache"
+
+    class FallbackResolver:
+        def resolve(self, row: dict[str, str]) -> FullTextLocation:
+            return self.resolve_all(row)[0]
+
+        def resolve_all(self, row: dict[str, str]) -> list[FullTextLocation]:
+            return [
+                FullTextLocation(
+                    status="local_full_text_found",
+                    source="stale_source",
+                    local_path=str(missing_full_text),
+                ),
+                FullTextLocation(
+                    status="local_full_text_found",
+                    source="working_source",
+                    local_path=str(valid_full_text),
+                ),
+            ]
+
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Fallback full text",
+                "year": "2024",
+                "doi": "10.123/fallback",
+                "abstract": "Fallback test.",
+                "scope_decision": "include",
+            }
+        ],
+        ["paper_id", "title", "year", "doi", "abstract", "scope_decision"],
+    )
+
+    run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir=cache_dir,
+        resolver=FallbackResolver(),
+    )
+
+    rows = read_csv(output_path)
+    assert rows[0]["full_text_status"] == "local_text_extracted"
+    assert rows[0]["full_text_source"] == "working_source"
+    assert rows[0]["full_text_error"] == ""
+
+
+def test_network_full_text_resolver_collects_all_provider_locations() -> None:
+    class FakeNetworkResolver(NetworkFullTextResolver):
+        def get_json(
+            self,
+            url: str,
+            headers: dict[str, str] | None = None,
+        ) -> dict[str, object]:
+            if "api.openalex.org" in url:
+                return {
+                    "results": [
+                        {
+                            "open_access": {"is_oa": True},
+                            "best_oa_location": {
+                                "pdf_url": "https://openalex.test/best.pdf",
+                            },
+                            "locations": [
+                                {
+                                    "is_oa": True,
+                                    "pdf_url": "https://openalex.test/alt.pdf",
+                                },
+                                {
+                                    "is_oa": True,
+                                    "landing_page_url": (
+                                        "https://openalex.test/article"
+                                    ),
+                                },
+                            ],
+                        }
+                    ]
+                }
+            if "api.unpaywall.org" in url:
+                return {
+                    "is_oa": True,
+                    "best_oa_location": {
+                        "url_for_pdf": "https://unpaywall.test/best.pdf",
+                    },
+                    "oa_locations": [
+                        {
+                            "url_for_pdf": "https://unpaywall.test/alt.pdf",
+                            "url": "https://unpaywall.test/article",
+                        }
+                    ],
+                }
+            if "europepmc" in url:
+                return {
+                    "resultList": {
+                        "result": [
+                            {
+                                "fullTextUrlList": {
+                                    "fullTextUrl": [
+                                        {
+                                            "url": "https://pmc.test/paper.pdf",
+                                            "documentStyle": "pdf",
+                                        },
+                                        {
+                                            "url": "https://pmc.test/article",
+                                            "documentStyle": "html",
+                                        },
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            if "api.core.ac.uk" in url:
+                return {
+                    "results": [
+                        {
+                            "downloadUrl": "https://core.test/one.pdf",
+                            "links": [{"url": "https://core.test/two.pdf"}],
+                            "url": "https://core.test/article",
+                        }
+                    ]
+                }
+            return {}
+
+    resolver = FakeNetworkResolver(email="test@example.com", core_api_key="key")
+
+    locations = resolver.resolve_all(
+        {"doi": "10.123/example", "title": "Example paper"}
+    )
+    urls = [location.url for location in locations if location.url]
+
+    assert "https://openalex.test/best.pdf" in urls
+    assert "https://openalex.test/alt.pdf" in urls
+    assert "https://unpaywall.test/best.pdf" in urls
+    assert "https://unpaywall.test/alt.pdf" in urls
+    assert "https://pmc.test/paper.pdf" in urls
+    assert "https://core.test/one.pdf" in urls
+    assert "https://core.test/two.pdf" in urls
+    assert locations[-1].status == "manual_lookup_needed"
+
+
+def test_full_text_section_detection_accepts_flexible_heading_wording() -> None:
+    chunks = section_chunks(
+        "\n".join(
+            [
+                "1. Research methods",
+                "The method body.",
+                "*Conclusion*",
+                "The conclusion body.",
+                "2.3 RESULTS AND FINDINGS",
+                "The results body.",
+                "Policy implications",
+                "The implications body.",
+                "....method",
+                "Another method body.",
+            ]
+        )
+    )
+
+    assert [section for section, _ in chunks] == [
+        "methods",
+        "conclusion",
+        "results",
+        "implications",
+        "methods",
+    ]
+
+
+def test_full_text_evidence_prefers_knowledge_sections_over_methods() -> None:
+    text = "\n".join(
+        [
+            "Research methods",
+            "Methods body. " * 20,
+            "Conclusion",
+            "Conclusion body. " * 10,
+            "Results and findings",
+            "Results body. " * 10,
+            "Discussion",
+            "Discussion body. " * 10,
+        ]
+    )
+
+    evidence = build_full_text_evidence(text, max_chars=300)
+
+    assert evidence.startswith("CONCLUSION")
+    assert "RESULTS" in evidence
+    assert evidence.find("CONCLUSION") < evidence.find("RESULTS")
 
 
 def test_screen_scope_matches_abbreviations_and_tag_values(tmp_path: Path) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 MAIN_PIPELINE = [
     "normalize_metadata",
     "screen_scope",
+    "prepare_full_text",
     "normalize_tagging_config",
     "generate_tagging_rules",
     "tag_papers",

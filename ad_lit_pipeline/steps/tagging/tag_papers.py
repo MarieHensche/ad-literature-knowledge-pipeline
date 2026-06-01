@@ -11,6 +11,10 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import paper_tags_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_tag_paper_prompt
+from ad_lit_pipeline.steps.full_text.evidence import (
+    MIN_FULL_TEXT_CHARS,
+    build_full_text_evidence,
+)
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
@@ -23,6 +27,7 @@ STEP = StepSpec(
 )
 
 SYSTEM_MESSAGE = "You tag scientific papers using fixed ontology rules as strict JSON."
+MAX_FULL_TEXT_EVIDENCE_CHARS = 24000
 
 
 def load_dotenv(env_path: Path = Path(".env")) -> None:
@@ -81,6 +86,7 @@ def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]
 
 
 def paper_text(paper: dict[str, str]) -> dict[str, str]:
+    full_text = full_text_evidence_from_paper(paper)
     return {
         "paper_id": paper.get("paper_id", ""),
         "title": paper.get("title", ""),
@@ -91,7 +97,35 @@ def paper_text(paper: dict[str, str]) -> dict[str, str]:
         "venue": paper.get("venue", ""),
         "source": paper.get("source", ""),
         "full_text_path": paper.get("full_text_path", ""),
+        "full_text_status": paper.get("full_text_status", ""),
+        "full_text_source": paper.get("full_text_source", ""),
+        "full_text_url": paper.get("full_text_url", ""),
+        "full_text_text_path": paper.get("full_text_text_path", ""),
+        "full_text_available_for_tagging": "yes" if full_text else "no",
+        "full_text_evidence": full_text,
     }
+
+
+def full_text_path_from_paper(paper: dict[str, str]) -> Path | None:
+    for column in ["full_text_text_path", "local_text_path", "full_text_path"]:
+        value = paper.get(column, "").strip()
+        if value and not value.startswith(("http://", "https://")):
+            return Path(value).expanduser()
+    return None
+
+
+def full_text_evidence_from_paper(paper: dict[str, str]) -> str:
+    path = full_text_path_from_paper(paper)
+    if path is None or not path.exists() or path.suffix.lower() == ".pdf":
+        return ""
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+    if len(text.strip()) < MIN_FULL_TEXT_CHARS:
+        return ""
+    return build_full_text_evidence(text, MAX_FULL_TEXT_EVIDENCE_CHARS)
 
 
 def call_llm(

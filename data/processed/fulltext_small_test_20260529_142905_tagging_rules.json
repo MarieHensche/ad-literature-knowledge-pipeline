@@ -1,0 +1,56 @@
+{
+  "source_config": "data/processed/fulltext_small_test_20260529_142905_tagging_config_normalized.json",
+  "model": "gpt-4o-mini",
+  "rules_count": 7,
+  "rules": [
+    {
+      "category_id": "main_topic_category",
+      "selection": "single",
+      "required": true,
+      "fallback_value": "unclear",
+      "reason": "The main topic is focused on green roofs and their relation to stormwater management; hence, the fallback value is unclear as it captures uncertainty."
+    },
+    {
+      "category_id": "research_target",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The target of the research is not clearly defined, leading to a fallback of unclear."
+    },
+    {
+      "category_id": "study_type",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The study type is not specified, thus unclear is used as the fallback."
+    },
+    {
+      "category_id": "climate_adaptation",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "Climate adaptation strategies aren't detailed in the description, leading to unclear as the fallback."
+    },
+    {
+      "category_id": "vegetation_type",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The specific type of vegetation used on the roofs is not identified, resulting in unclear as the fallback."
+    },
+    {
+      "category_id": "outcome_type",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "While outcomes may be inferred, they are not explicitly stated, leading to unclear as the fallback."
+    },
+    {
+      "category_id": "review_status",
+      "selection": "single",
+      "required": true,
+      "fallback_value": "ai_tagged",
+      "reason": "As a required field, the review status defaults to ai_tagged for initial classification."
+    }
+  ]
+}

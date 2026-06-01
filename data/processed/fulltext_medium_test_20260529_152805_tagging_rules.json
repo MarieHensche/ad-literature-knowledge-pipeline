@@ -1,0 +1,49 @@
+{
+  "source_config": "data/processed/fulltext_medium_test_20260529_152805_tagging_config_normalized.json",
+  "model": "gpt-4o-mini",
+  "rules_count": 6,
+  "rules": [
+    {
+      "category_id": "main_topic_category",
+      "selection": "single",
+      "required": true,
+      "fallback_value": "unclear",
+      "reason": "Unclear due to ambiguous context regarding core topics in urban green spaces and heat resilience."
+    },
+    {
+      "category_id": "research_target",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": "climate adaptation",
+      "reason": "Climate adaptation is a relevant theme, even if the specifics of the paper are not clear."
+    },
+    {
+      "category_id": "study_type",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The type of study is not clearly defined in the context and therefore will default to 'unclear'."
+    },
+    {
+      "category_id": "location_type",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The specific location type is ambiguous within the provided context."
+    },
+    {
+      "category_id": "knowledge_confidence",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "very_low",
+      "reason": "There is inadequate information available to provide a confident assessment."
+    },
+    {
+      "category_id": "review_status",
+      "selection": "single",
+      "required": true,
+      "fallback_value": "ai_tagged",
+      "reason": "This category is marked as required and defaults to AI-tagged for processing."
+    }
+  ]
+}

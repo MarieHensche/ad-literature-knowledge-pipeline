@@ -1,0 +1,148 @@
+{
+  "topic_description": "Exploration of the role of urban green spaces, such as parks and street trees, in enhancing heat resilience in cities, along with their impacts on public health, thermal comfort, and urban heat island effects.",
+  "recommended_provider": "openalex",
+  "provider_reason": "OpenAlex provides a broad scholarly search across disciplines, which is suitable for comprehensive literature searches like this one.",
+  "search_goal": "Identify scholarly articles relevant to the influence of urban green spaces on heat resilience and related public health outcomes in urban environments.",
+  "main_search_string": "urban green spaces heat resilience public health",
+  "alternate_search_strings": [
+    "green infrastructure urban heat",
+    "parks green spaces urban health",
+    "street trees and city temperatures",
+    "urban vegetation climate adaptation",
+    "heat exposure urban public health",
+    "urban heat islands and greenery"
+  ],
+  "search_queries": [
+    {
+      "query": "impact of urban green spaces on heat resilience",
+      "reason": "Direct inquiry into the key relationship of the research topic."
+    },
+    {
+      "query": "effects of parks on urban thermal comfort",
+      "reason": "Focus on parks' role in providing thermal comfort in urban areas."
+    },
+    {
+      "query": "urban heat islands and the role of vegetation",
+      "reason": "Look at how greenery affects urban heat island phenomena."
+    },
+    {
+      "query": "association between public health and urban green spaces",
+      "reason": "Explore public health outcomes related to urban greenery."
+    },
+    {
+      "query": "cooling effects of street trees in cities",
+      "reason": "Examine specific in-city cooling contributions of street trees."
+    },
+    {
+      "query": "strategies for mitigating urban heat exposure",
+      "reason": "Identify methods and strategies to alleviate heat exposure in cities."
+    },
+    {
+      "query": "systematic reviews on urban greenery and health",
+      "reason": "Gather insights from broader analyses in the field."
+    },
+    {
+      "query": "integrating heat resilience in urban planning",
+      "reason": "Consider strategies in urban design for improved heat resilience."
+    },
+    {
+      "query": "urban green spaces heat resilience public health",
+      "reason": "Provider-specific primary query."
+    },
+    {
+      "query": "green infrastructure urban heat",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "parks green spaces urban health",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "street trees and city temperatures",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "urban vegetation climate adaptation",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "heat exposure urban public health",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "urban heat islands and greenery",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "urban green spaces and heat resilience",
+      "reason": "Direct inquiry into the main research question."
+    },
+    {
+      "query": "effects of parks on urban heat islands",
+      "reason": "Exploration of specific applications related to urban heat islands."
+    },
+    {
+      "query": "street trees thermal comfort urban areas",
+      "reason": "Focus on how street trees influence thermal comfort."
+    },
+    {
+      "query": "public health climate adaptation green spaces",
+      "reason": "Connection between public health outcomes and green spaces in climate adaptation."
+    },
+    {
+      "query": "vegetation cooling effects in cities",
+      "reason": "Examination of how vegetation contributes to cooling."
+    },
+    {
+      "query": "urban heat exposure mitigation strategies",
+      "reason": "Related strategies to reduce heat exposure in urban areas."
+    },
+    {
+      "query": "meta-analysis on urban greenery and health",
+      "reason": "Interest in systematic reviews and meta-analyses in this field."
+    },
+    {
+      "query": "heat resilience initiatives in urban planning",
+      "reason": "Broader look at initiatives that integrate heat resilience in urban design."
+    }
+  ],
+  "filters": {
+    "year_from": null,
+    "year_to": null,
+    "publication_types": [],
+    "open_access_only": null,
+    "has_abstract": null,
+    "has_full_text": null,
+    "language": null,
+    "venue_or_source": [],
+    "field_or_domain": []
+  },
+  "provider_specific_plan": {
+    "provider": "openalex",
+    "query": "urban green spaces heat resilience public health",
+    "filters": [
+      {
+        "name": "year_from",
+        "value": "",
+        "reason": "No specific year filter was provided."
+      },
+      {
+        "name": "year_to",
+        "value": "",
+        "reason": "No specific year filter was provided."
+      },
+      {
+        "name": "open_access",
+        "value": "false",
+        "reason": "No preference stated for open access."
+      }
+    ],
+    "sort": null,
+    "max_results_recommendation": 50
+  },
+  "screening_notes": "Evaluate relevance of titles and abstracts to ensure they fit within the defined inclusion criteria for urban green spaces and heat resilience. Pay close attention to the clarity of connections expressed in the papers between the topics.",
+  "risks_or_ambiguities": [
+    "Potential for irrelevant results if titles are vaguely related.",
+    "Abstracts may not clarify the primary focus of the study, leading to misclassification."
+  ]
+}

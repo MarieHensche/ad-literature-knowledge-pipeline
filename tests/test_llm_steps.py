@@ -646,6 +646,16 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     config_path = tmp_path / "config.json"
     rules_path = tmp_path / "rules.json"
     output_path = tmp_path / "filled.csv"
+    full_text_path = tmp_path / "p1_full_text.txt"
+    full_text_path.write_text(
+        (
+            "Introduction\nThe study concerns MCI screening.\n\n"
+            "Methods\nParticipants completed cognitive tests and imaging.\n\n"
+            "Results\nThe model improved early detection.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
     write_csv(
         papers_path,
         [
@@ -659,6 +669,8 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
                 "venue": "Journal",
                 "source": "test",
                 "full_text_path": "",
+                "full_text_text_path": str(full_text_path),
+                "full_text_status": "local_text_extracted",
                 "scope_decision": "include",
             }
         ],
@@ -672,6 +684,8 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
             "venue",
             "source",
             "full_text_path",
+            "full_text_text_path",
+            "full_text_status",
             "scope_decision",
         ],
     )
@@ -726,6 +740,10 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert result.row_counts["tagged_papers"] == 1
     assert rows[0]["main_knowledge_claim"] == "The paper screens for MCI."
     assert rows[0]["review_status"] == "ai_tagged"
+    assert "full_text_evidence" in client.requests[0]["prompt"]
+    assert "Participants completed cognitive tests and imaging" in client.requests[0][
+        "prompt"
+    ]
 
 
 def test_paper_tags_schema_constrains_category_values() -> None:
