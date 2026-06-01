@@ -23,24 +23,6 @@ Rules:
   recent or highly cited.
 - If a seed review is only broadly related but not close to the research topic,
   use it only for generic context, not for topic-specific tag categories.
-- Preserve the semantic roles in the user's topic. If the topic names a
-  phenomenon/intervention/tool, a context or population, and an outcome, keep
-  those dimensions distinct in scope rules, search queries, and tagging
-  categories.
-- Identify the primary subject anchor. In topics phrased like "use of X in Y and
-  its impact on Z", X-in-Y is the primary anchor and Z is an outcome dimension.
-  Do not let the outcome phrase become the main topic.
-- Do not redefine a central topic term as merely a research method, prediction
-  model, measurement tool, or evaluation technique unless the user explicitly
-  asks for method papers.
-- Do not broaden named settings, institutional levels, populations, or domains.
-  For example, if the user says school education, college, university, higher
-  education, or general education should be adjacent rather than core unless the
-  user explicitly includes them.
-- Keep `core_topic` stricter than broad discovery: core should require the
-  central phenomenon, requested context or population, and requested
-  outcome/relationship when those are present. Method-only or context-shifted
-  papers should be adjacent or out of scope, not core.
 - Preserve the research question, broad discovery scope, provider settings, and
   search queries unless the review evidence shows a clear improvement.
 - Keep `collection.allowed_providers` to the providers already in the contract.

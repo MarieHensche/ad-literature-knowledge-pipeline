@@ -6,13 +6,12 @@ from collections.abc import Callable
 from pathlib import Path
 from dotenv import load_dotenv
 
-from ad_lit_pipeline.core.artifacts import MainPipelineArtifacts, main_pipeline_artifacts
+from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
 from ad_lit_pipeline.core.registry import MAIN_PIPELINE
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
-from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
 from ad_lit_pipeline.steps.metadata import normalize
 from ad_lit_pipeline.steps.screening import rule_based_scope
@@ -74,13 +73,6 @@ def explain(collection: str) -> None:
         print(f"  {field}: {value}")
 
 
-def tagging_input_path(artifacts: MainPipelineArtifacts) -> Path:
-    full_text_path = artifacts.full_text_screened_csv
-    if full_text_path.exists():
-        return full_text_path
-    return artifacts.scope_screened_csv
-
-
 def build_step_functions(
     args: argparse.Namespace,
     trace_dir: Path,
@@ -97,15 +89,6 @@ def build_step_functions(
             artifacts.scope_screened_csv,
             topic_contract_path,
         ),
-        "prepare_full_text": lambda: prepare_full_text.run(
-            artifacts.scope_screened_csv,
-            artifacts.full_text_screened_csv,
-            artifacts.full_text_manifest_csv,
-            Path(args.full_text_cache_dir).expanduser()
-            if args.full_text_cache_dir
-            else None,
-            args.full_text_email,
-        ),
         "normalize_tagging_config": lambda: normalize_config.run(
             artifacts.tagging_config_normalized_json,
             config_path,
@@ -119,7 +102,7 @@ def build_step_functions(
             trace_dir=trace_dir,
         ),
         "tag_papers": lambda: tag_papers.run(
-            tagging_input_path(artifacts),
+            artifacts.scope_screened_csv,
             artifacts.tagging_config_normalized_json,
             artifacts.tagging_rules_json,
             artifacts.extraction_filled_csv,
@@ -222,19 +205,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--trace-dir",
         default=None,
         help="Optional directory where LLM prompt/response traces are written.",
-    )
-    run_parser.add_argument(
-        "--full-text-cache-dir",
-        default=None,
-        help=(
-            "External cache directory for extracted full-text .txt files. "
-            "Defaults to AD_LIT_FULL_TEXT_CACHE or ~/.cache/ad_lit_pipeline/full_text."
-        ),
-    )
-    run_parser.add_argument(
-        "--full-text-email",
-        default=None,
-        help="Email used for polite full-text resolver API requests.",
     )
 
     explain_parser = subparsers.add_parser("explain", help="Explain pipeline steps.")

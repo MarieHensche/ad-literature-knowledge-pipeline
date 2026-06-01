@@ -14,8 +14,6 @@ from ad_lit_pipeline.steps.collection.plan_search import (
     ensure_search_queries,
     run as run_plan_search,
 )
-from ad_lit_pipeline.steps.collection.targeted_collect import run as run_targeted_collect
-from ad_lit_pipeline.steps.collection import fetch_candidates as fetch_candidates_step
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     run as run_generate_topic_contract,
 )
@@ -503,14 +501,7 @@ def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     client = StaticJSONClient(
-        [
-            {
-                "decision": "include",
-                "topic_fit": "core_topic",
-                "reason": "Directly relevant.",
-                "confidence": "high",
-            }
-        ]
+        [{"decision": "include", "reason": "Directly relevant.", "confidence": "high"}]
     )
 
     result = run_screening(
@@ -525,126 +516,11 @@ def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
 
     rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
     assert result.row_counts["included"] == 1
-    assert result.row_counts["core_topic"] == 1
     assert rows[0]["screening_decision"] == "include"
-    assert rows[0]["screening_topic_fit"] == "core_topic"
     assert rows[0]["source_query"] == "MCI screening"
     assert "detecting MCI or cognitive impairment" in client.requests[0]["prompt"]
     assert "recall-oriented candidate-screening pass" in client.requests[0]["prompt"]
     assert "Adjacent screening query." in client.requests[0]["prompt"]
-
-
-def test_targeted_collection_keeps_fetching_until_core_target(
-    tmp_path: Path,
-) -> None:
-    class FakeProvider:
-        name = "fake_provider"
-
-        def validate_plan(self, plan: dict[str, object]) -> None:
-            return None
-
-        def iter_candidates(
-            self,
-            plan: dict[str, object],
-            per_page: int,
-            mailto: str | None,
-            sleep_seconds: float,
-        ):
-            yield {
-                "title": "Adjacent Study",
-                "year": 2024,
-                "doi": "10.123/adjacent",
-                "provider": "fake_provider",
-                "provider_id": "A1",
-                "rank": 1,
-                "abstract": "Adjacent topic.",
-            }
-            yield {
-                "title": "Core Study",
-                "year": 2024,
-                "doi": "10.123/core",
-                "provider": "fake_provider",
-                "provider_id": "C1",
-                "rank": 2,
-                "abstract": "Core topic.",
-            }
-            yield {
-                "title": "Duplicate Core Study",
-                "year": 2024,
-                "doi": "10.123/core",
-                "provider": "fake_provider",
-                "provider_id": "C2",
-                "rank": 3,
-                "abstract": "Duplicate core topic.",
-            }
-
-        def fetch_candidates(
-            self,
-            plan: dict[str, object],
-            max_results: int,
-            per_page: int,
-            mailto: str | None,
-            sleep_seconds: float,
-        ) -> list[dict[str, object]]:
-            return list(self.iter_candidates(plan, per_page, mailto, sleep_seconds))
-
-    plan_path = tmp_path / "plan.json"
-    candidates_path = tmp_path / "candidates.jsonl"
-    deduped_path = tmp_path / "deduped.jsonl"
-    screening_path = tmp_path / "screening.csv"
-    output_path = tmp_path / "papers.csv"
-    plan_path.write_text(
-        json.dumps(
-            {
-                "recommended_provider": "fake_provider",
-                "provider_specific_plan": {"provider": "fake_provider"},
-            }
-        ),
-        encoding="utf-8",
-    )
-    client = StaticJSONClient(
-        [
-            {
-                "decision": "include",
-                "topic_fit": "adjacent_but_relevant",
-                "reason": "Adjacent.",
-                "confidence": "medium",
-            },
-            {
-                "decision": "include",
-                "topic_fit": "core_topic",
-                "reason": "Core.",
-                "confidence": "high",
-            },
-        ]
-    )
-    original_provider = fetch_candidates_step.PROVIDERS.get("fake_provider")
-    fetch_candidates_step.PROVIDERS["fake_provider"] = FakeProvider()
-    try:
-        result = run_targeted_collect(
-            plan_path,
-            candidates_path,
-            deduped_path,
-            screening_path,
-            output_path,
-            "early detection",
-            TOPIC_CONTRACT,
-            "test-model",
-            target_results=1,
-            candidate_budget=10,
-            client=client,
-            trace_dir=tmp_path / "traces",
-        )
-    finally:
-        if original_provider is None:
-            fetch_candidates_step.PROVIDERS.pop("fake_provider", None)
-        else:
-            fetch_candidates_step.PROVIDERS["fake_provider"] = original_provider
-
-    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
-    assert result.row_counts["raw_candidates_seen"] == 2
-    assert result.row_counts["core_topic_found"] == 1
-    assert rows[0]["title"] == "Core Study"
 
 
 def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
@@ -770,16 +646,6 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     config_path = tmp_path / "config.json"
     rules_path = tmp_path / "rules.json"
     output_path = tmp_path / "filled.csv"
-    full_text_path = tmp_path / "p1_full_text.txt"
-    full_text_path.write_text(
-        (
-            "Introduction\nThe study concerns MCI screening.\n\n"
-            "Methods\nParticipants completed cognitive tests and imaging.\n\n"
-            "Results\nThe model improved early detection.\n\n"
-        )
-        * 20,
-        encoding="utf-8",
-    )
     write_csv(
         papers_path,
         [
@@ -793,8 +659,6 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
                 "venue": "Journal",
                 "source": "test",
                 "full_text_path": "",
-                "full_text_text_path": str(full_text_path),
-                "full_text_status": "local_text_extracted",
                 "scope_decision": "include",
             }
         ],
@@ -808,8 +672,6 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
             "venue",
             "source",
             "full_text_path",
-            "full_text_text_path",
-            "full_text_status",
             "scope_decision",
         ],
     )
@@ -864,10 +726,6 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert result.row_counts["tagged_papers"] == 1
     assert rows[0]["main_knowledge_claim"] == "The paper screens for MCI."
     assert rows[0]["review_status"] == "ai_tagged"
-    assert "full_text_evidence" in client.requests[0]["prompt"]
-    assert "Participants completed cognitive tests and imaging" in client.requests[0][
-        "prompt"
-    ]
 
 
 def test_paper_tags_schema_constrains_category_values() -> None:

@@ -79,18 +79,6 @@ Steps:
 | `fetch_review_overviews` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` | `data/raw/<collection>_review_overviews.jsonl` |
 | `refine_topic_contract` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
 | `plan_search` | `ad_lit_pipeline/steps/collection/plan_search.py` | `data/collection_plans/<collection>_plan.json` |
-| `collect_targeted_candidates` | `ad_lit_pipeline/steps/collection/targeted_collect.py` | `data/raw/<collection>_papers.csv` plus raw, deduped, and screening artifacts |
-
-`collect_targeted_candidates` fetches provider results incrementally,
-deduplicates each batch as it arrives, screens each new unique candidate as
-`core_topic`, `adjacent_but_relevant`, or `out_of_scope`, and fills the final
-paper CSV with core-topic papers first. Adjacent-but-relevant papers are used
-only when the core-topic pool is smaller than `--max-results`.
-
-The legacy/debug steps are still available with `--only-step` or `--from-step`:
-
-| Legacy step | Module | Output |
-| --- | --- | --- |
 | `fetch_candidates` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` | `data/raw/<collection>_openalex_candidates.jsonl` |
 | `deduplicate_candidates` | `ad_lit_pipeline/steps/collection/deduplicate.py` | `data/raw/<collection>_openalex_candidates_deduped.jsonl` |
 | `screen_candidates` | `ad_lit_pipeline/steps/screening/llm_candidate_screening.py` | `data/raw/<collection>_candidate_screening.csv` |
@@ -101,25 +89,6 @@ fetches review/overview seed papers, refines the contract's knowledge
 categories, and then continues into search planning. The planner can describe
 multiple provider types, but the current fetch layer implements only OpenAlex.
 Unsupported provider selections fail before any network fetch.
-
-In collection, `--max-results` means the target final unique paper count, not
-the raw candidate fetch count. The targeted collector keeps searching until it
-finds that many core-topic papers, exhausts provider results, or reaches the
-raw-candidate safety cap set by `--candidate-budget`. The default safety cap is
-adaptive: it adds a bounded buffer to the requested paper count, so small tests
-stay small and very large requests do not scale by a large fixed multiplier.
-
-Topic screening and final tagging now preserve the roles implied by the user
-topic. If a topic asks about a phenomenon or tool used in a specific context and
-its impact on an outcome, `core_topic` should require that same phenomenon,
-context, and outcome relation. Papers where the key topic term appears only as a
-research method, prediction model, measurement tool, or evaluation technique are
-treated as adjacent or out of scope rather than core.
-
-For Mantis export, the final quality bar is intentionally stricter than broad
-collection: only papers tagged `core_topic` are exported. Adjacent papers can
-still be collected and tagged for inspection, but they no longer enter the
-Mantis-ready CSV.
 
 Passing `--contract-bootstrap-only` runs only the three contract-bootstrap steps
 and stops before search planning, so a user can review the generated contract
@@ -227,7 +196,7 @@ manifest. `--only-step`, `--from-step`, and `--dry-run` are implemented by
 
 ## Current Limits
 
-- OpenAlex is the only implemented candidate provider.
+- OpenAlex is the only implemented provider in `fetch_candidates`.
 - The Mantis export step requires at least one tagged extraction row.
 - Legacy schema files remain separate from topic contracts and can drift.
 - Generated files under `data/processed/`, `data/raw/`, and `runs/` should be

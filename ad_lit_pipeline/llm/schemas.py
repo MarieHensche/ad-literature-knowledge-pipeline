@@ -307,12 +307,8 @@ SCREENING_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["high", "medium", "low"],
         },
-        "topic_fit": {
-            "type": "string",
-            "enum": ["core_topic", "adjacent_but_relevant", "out_of_scope"],
-        },
     },
-    "required": ["decision", "reason", "confidence", "topic_fit"],
+    "required": ["decision", "reason", "confidence"],
     "additionalProperties": False,
 }
 
