@@ -89,6 +89,7 @@ def test_run_collection_explain_lists_steps() -> None:
 
     assert "plan_search" in result.stdout
     assert "fetch_candidates" in result.stdout
+    assert "screen_title_relevance" in result.stdout
     assert "generate_topic_contract" in result.stdout
     assert "example_openalex_candidates.jsonl" in result.stdout
 
@@ -162,6 +163,8 @@ def test_run_collection_with_contract_does_not_require_topic() -> None:
         "configs/topics/early_detection_ad.yaml",
         "--only-step",
         "plan_search",
+        "--mailto",
+        "tester@example.com",
         "--dry-run",
         "--run-id",
         "pytest-existing-contract-dry-run",

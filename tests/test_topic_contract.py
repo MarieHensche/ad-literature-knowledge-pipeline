@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,7 @@ def test_early_detection_topic_contract_loads() -> None:
     assert contract["collection"]["exclude_openalex_review_type"] is True
     assert contract["rule_based_screening"]["exclude_wins"] is True
     assert contract["candidate_screening"]["borderline_policy"] == "include"
+    assert contract["topic_structure"]["anchor_topic_id"] == "early_detection"
     assert "mild cognitive impairment" in contract["rule_based_screening"][
         "include_terms"
     ]
@@ -50,12 +52,14 @@ def test_non_ad_topic_contract_loads() -> None:
     assert "main_topic_category" in contract["tagging"]["categories"]
     assert "research_target" in contract["tagging"]["categories"]
     assert contract["collection"]["exclude_openalex_review_type"] is False
+    assert contract["topic_structure"]["anchor_topic_id"] == "ai"
 
 
 def test_topic_contract_template_loads() -> None:
     contract = load_topic_contract(ROOT / "configs/topics/topic_contract_template.yaml")
 
     assert contract["topic_id"] == "generated_topic_template"
+    assert contract["topic_structure"]["anchor_topic_id"] == "primary_topic"
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert contract["collection"]["exclude_openalex_review_type"] is False
     assert contract["collection"]["search_queries"] == []
@@ -83,7 +87,7 @@ def test_rule_based_screening_uses_tag_values_as_include_terms() -> None:
     contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
     rule_based = rule_based_screening_from_contract(contract)
 
-    assert "ad" in rule_based["include_terms"]
+    assert "AD" in rule_based["include_terms"]
     assert "neuroimaging" in rule_based["include_terms"]
     assert "core topic" not in rule_based["include_terms"]
     assert "out of scope" not in rule_based["include_terms"]
@@ -119,4 +123,20 @@ def test_topic_contract_requires_generic_mantis_categories() -> None:
     del contract["tagging"]["categories"]["main_topic_category"]
 
     with pytest.raises(ValueError, match="main_topic_category"):
+        validate_topic_contract(contract)
+
+
+def test_topic_contract_requires_valid_anchor_topic() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "missing_topic"
+
+    with pytest.raises(ValueError, match="anchor_topic_id"):
+        validate_topic_contract(contract)
+
+
+def test_topic_contract_rejects_unknown_secondary_topic_key() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["secondary_topics"]["unknown_topic"] = ["related term"]
+
+    with pytest.raises(ValueError, match="unknown main topic id"):
         validate_topic_contract(contract)

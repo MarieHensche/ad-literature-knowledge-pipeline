@@ -11,12 +11,17 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import paper_tags_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_tag_paper_prompt
+from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
 STEP = StepSpec(
     name="tag_papers",
-    inputs=["scope_screened_csv", "tagging_config_json", "tagging_rules_json"],
+    inputs=[
+        "scope_screened_full_text_csv",
+        "tagging_config_json",
+        "tagging_rules_json",
+    ],
     outputs=["extraction_filled_csv"],
     uses_llm=True,
     description="Tag included papers with fixed knowledge tags using an LLM.",
@@ -81,6 +86,7 @@ def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]
 
 
 def paper_text(paper: dict[str, str]) -> dict[str, str]:
+    full_text_evidence = read_text_evidence(paper.get("full_text_text_path", ""))
     return {
         "paper_id": paper.get("paper_id", ""),
         "title": paper.get("title", ""),
@@ -91,6 +97,12 @@ def paper_text(paper: dict[str, str]) -> dict[str, str]:
         "venue": paper.get("venue", ""),
         "source": paper.get("source", ""),
         "full_text_path": paper.get("full_text_path", ""),
+        "full_text_status": paper.get("full_text_status", ""),
+        "full_text_source": paper.get("full_text_source", ""),
+        "full_text_url": paper.get("full_text_url", ""),
+        "full_text_text_path": paper.get("full_text_text_path", ""),
+        "full_text_available_for_tagging": "yes" if full_text_evidence else "no",
+        "full_text_evidence": full_text_evidence,
     }
 
 
@@ -247,7 +259,7 @@ def run(
     return StepResult(
         step_name=STEP.name,
         inputs={
-            "scope_screened_csv": papers_path,
+            "scope_screened_full_text_csv": papers_path,
             "tagging_config_json": config_path,
             "tagging_rules_json": rules_path,
         },

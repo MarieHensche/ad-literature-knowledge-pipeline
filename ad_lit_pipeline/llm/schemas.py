@@ -137,6 +137,33 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
         "required": ["category_id", "required", "values"],
         "additionalProperties": False,
     }
+    main_topic_schema = {
+        "type": "object",
+        "properties": {
+            "topic_id": {"type": "string"},
+            "label": {"type": "string"},
+            "terms": {
+                "type": "array",
+                "minItems": 2,
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["topic_id", "label", "terms"],
+        "additionalProperties": False,
+    }
+    secondary_topic_schema = {
+        "type": "object",
+        "properties": {
+            "main_topic_id": {"type": "string"},
+            "terms": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["main_topic_id", "terms"],
+        "additionalProperties": False,
+    }
 
     return {
         "type": "object",
@@ -149,6 +176,29 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
                     "description": {"type": "string"},
                 },
                 "required": ["title", "description"],
+                "additionalProperties": False,
+            },
+            "topic_structure": {
+                "type": "object",
+                "properties": {
+                    "anchor_topic_id": {"type": "string"},
+                    "anchor_reason": {"type": "string"},
+                    "main_topics": {
+                        "type": "array",
+                        "minItems": 2,
+                        "items": main_topic_schema,
+                    },
+                    "secondary_topics": {
+                        "type": "array",
+                        "items": secondary_topic_schema,
+                    },
+                },
+                "required": [
+                    "anchor_topic_id",
+                    "anchor_reason",
+                    "main_topics",
+                    "secondary_topics",
+                ],
                 "additionalProperties": False,
             },
             "scope": {
@@ -285,11 +335,64 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
         "required": [
             "topic_id",
             "research_topic",
+            "topic_structure",
             "scope",
             "rule_based_screening",
             "candidate_screening",
             "tagging",
             "collection",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def title_relevance_schema(main_topic_ids: list[str]) -> dict[str, Any]:
+    """Build the candidate title relevance response schema."""
+    topic_id_schema: dict[str, Any] = {"type": "string"}
+    if main_topic_ids:
+        topic_id_schema["enum"] = main_topic_ids
+
+    return {
+        "type": "object",
+        "properties": {
+            "anchor_present": {"type": "boolean"},
+            "matched_main_topics": {
+                "type": "array",
+                "items": topic_id_schema,
+            },
+            "matched_secondary_topics": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "main_topic_id": topic_id_schema,
+                        "terms": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": ["main_topic_id", "terms"],
+                    "additionalProperties": False,
+                },
+            },
+            "missing_main_topics": {
+                "type": "array",
+                "items": topic_id_schema,
+            },
+            "relevance_tier": {"type": "integer"},
+            "decision": {"type": "string", "enum": ["include", "exclude"]},
+            "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+            "reason": {"type": "string"},
+        },
+        "required": [
+            "anchor_present",
+            "matched_main_topics",
+            "matched_secondary_topics",
+            "missing_main_topics",
+            "relevance_tier",
+            "decision",
+            "confidence",
+            "reason",
         ],
         "additionalProperties": False,
     }

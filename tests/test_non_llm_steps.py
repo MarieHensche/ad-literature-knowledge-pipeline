@@ -12,6 +12,9 @@ from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     run as run_fetch_review_overviews,
     select_best_review_overviews,
 )
+from ad_lit_pipeline.steps.full_text import prepare as full_text_prepare
+from ad_lit_pipeline.steps.full_text.evidence import build_knowledge_evidence
+from ad_lit_pipeline.steps.full_text.prepare import run as run_prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
@@ -208,7 +211,7 @@ def test_screen_scope_preserves_metadata_and_appends_contract_fields(
     assert "Matched exclude term(s): drug repurposing, treatment" in rows[2][
         "scope_reason"
     ]
-    assert rows[2]["scope_matched_include_terms"] == "screening"
+    assert "screening" in rows[2]["scope_matched_include_terms"]
     assert rows[2]["scope_matched_exclude_terms"] == "drug repurposing; treatment"
 
 
@@ -259,6 +262,142 @@ def test_screen_scope_exclude_wins_and_defaults_to_include(tmp_path: Path) -> No
     )
 
 
+def test_prepare_full_text_uses_local_text_and_writes_manifest(
+    tmp_path: Path,
+) -> None:
+    full_text = tmp_path / "paper.txt"
+    full_text.write_text(
+        (
+            "Introduction\nThis paper studies AI use in schools.\n\n"
+            "Results\nStudents improved academic performance.\n\n"
+            "Conclusion\nAI classroom use supported learning outcomes.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
+    input_path = tmp_path / "scope_screened.csv"
+    output_path = tmp_path / "scope_screened_full_text.csv"
+    manifest_path = tmp_path / "full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "AI in schools",
+                "year": "2024",
+                "doi": "10.123/example",
+                "abstract": "AI use in schools.",
+                "full_text_path": str(full_text),
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "full_text_path",
+            "scope_decision",
+        ],
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    rows = read_csv(output_path)
+    manifest_rows = read_csv(manifest_path)
+    text_path = Path(rows[0]["full_text_text_path"])
+    assert result.row_counts["local_texts"] == 1
+    assert rows[0]["full_text_status"] == "local_text_extracted"
+    assert rows[0]["full_text_source"] == "local_file"
+    assert text_path.exists()
+    assert manifest_rows[0]["paper_id"] == "p1"
+    assert int(manifest_rows[0]["full_text_chars"]) >= 1000
+
+
+def test_prepare_full_text_continues_after_invalid_pdf_response(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "scope_screened.csv"
+    output_path = tmp_path / "scope_screened_full_text.csv"
+    manifest_path = tmp_path / "full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    html_text = (
+        "<html><body>"
+        + "<p>Microplastics in drinking water exposure and human health risk.</p>"
+        * 40
+        + "</body></html>"
+    ).encode("utf-8")
+
+    def fake_request_bytes(url: str) -> tuple[bytes, str, str]:
+        if url == "https://example.org/bad.pdf":
+            return b"\n\n\n\n<html>not a pdf</html>", "application/pdf", url
+        return html_text, "text/html", "https://example.org/full-text"
+
+    monkeypatch.setattr(full_text_prepare, "request_bytes", fake_request_bytes)
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Microplastics in drinking water and health risk",
+                "year": "2024",
+                "doi": "",
+                "abstract": "Microplastics in drinking water.",
+                "full_text_path": "",
+                "full_text_url": "https://example.org/bad.pdf",
+                "pdf_url": "https://example.org/full-text",
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "full_text_path",
+            "full_text_url",
+            "pdf_url",
+            "scope_decision",
+        ],
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    rows = read_csv(output_path)
+    assert result.row_counts["local_texts"] == 1
+    assert rows[0]["full_text_status"] == "html_text_extracted"
+    assert rows[0]["full_text_url"] == "https://example.org/full-text"
+    assert int(rows[0]["full_text_chars"]) >= 1000
+
+
+def test_knowledge_evidence_uses_flexible_section_headings() -> None:
+    text = (
+        "1. Methods\nParticipants completed a classroom intervention.\n\n"
+        "2. Results\nStudents improved grades after AI-supported lessons.\n\n"
+        "CONCLUSIONS\nAI use in school education improved learning outcomes.\n\n"
+    )
+
+    evidence = build_knowledge_evidence(text, max_chars=500)
+
+    assert "[CONCLUSIONS]" in evidence
+    assert "[2. Results]" in evidence
+    assert evidence.index("[CONCLUSIONS]") < evidence.index("[1. Methods]")
+
+
 def test_screen_scope_matches_abbreviations_and_tag_values(tmp_path: Path) -> None:
     input_path = tmp_path / "normalized.csv"
     output_path = tmp_path / "screened.csv"
@@ -291,6 +430,23 @@ topic_id: education_test
 research_topic:
   title: Education test
   description: Test topic.
+topic_structure:
+  anchor_topic_id: ai
+  anchor_reason: AI is the required intervention focus.
+  main_topics:
+    - topic_id: ai
+      label: Artificial intelligence
+      terms:
+        - machine learning
+        - ML
+    - topic_id: education
+      label: Education
+      terms:
+        - student learning
+        - classroom outcomes
+  secondary_topics:
+    education:
+      - wellbeing
 scope:
   include_criteria:
     - Include education papers.
@@ -322,6 +478,7 @@ collection:
   allowed_providers:
     - openalex
   preferred_provider: openalex
+  search_queries: []
 """.lstrip(),
         encoding="utf-8",
     )
@@ -341,7 +498,7 @@ collection:
     assert "machine learning" in rows[0]["scope_matched_include_terms"]
     assert "student outcomes" in rows[0]["scope_matched_include_terms"]
     assert rows[1]["scope_decision"] == "include"
-    assert rows[1]["scope_matched_include_terms"] == "grade point average"
+    assert "grade point average" in rows[1]["scope_matched_include_terms"]
 
 
 def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None:
@@ -425,6 +582,11 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
                 "screening_decision": "include",
                 "screening_confidence": "high",
                 "screening_reason": "Directly relevant.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "0",
+                "title_matched_main_topics": "early_detection; disease_state",
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "",
             }
         ],
         [
@@ -438,6 +600,11 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
             "screening_decision",
             "screening_confidence",
             "screening_reason",
+            "title_anchor_present",
+            "title_relevance_tier",
+            "title_matched_main_topics",
+            "title_matched_secondary_topics",
+            "title_missing_main_topics",
         ],
     )
 
@@ -467,11 +634,105 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
             "notes": (
                 "provider=openalex; provider_id=W1; source_rank=1; "
                 "retrieval_date=2026-05-25; screening_confidence=high; "
-                "screening_reason=Directly relevant.; dedupe_key=doi:10.123/example; "
+                "screening_reason=Directly relevant.; title_anchor_present=yes; "
+                "title_relevance_tier=0; "
+                "title_matched_main_topics=early_detection; disease_state; "
+                "dedupe_key=doi:10.123/example; "
                 "duplicate_count=1"
             ),
         }
     ]
+
+
+def test_export_included_candidates_orders_by_title_tier_and_caps(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    output_path = tmp_path / "papers.csv"
+    candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": "W1",
+            "doi": "10.123/tier1",
+            "title": "Tier One",
+            "year": 2024,
+            "rank": 1,
+        },
+        {
+            "provider": "openalex",
+            "provider_id": "W2",
+            "doi": "10.123/tier0",
+            "title": "Tier Zero",
+            "year": 2024,
+            "rank": 2,
+        },
+    ]
+    candidates_path.write_text(
+        "".join(json.dumps(candidate) + "\n" for candidate in candidates),
+        encoding="utf-8",
+    )
+    fieldnames = [
+        "paper_id",
+        "title",
+        "year",
+        "doi",
+        "provider",
+        "provider_id",
+        "source_rank",
+        "screening_decision",
+        "screening_confidence",
+        "screening_reason",
+        "title_relevance_tier",
+    ]
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "tier_1",
+                "title": "Tier One",
+                "year": "2024",
+                "doi": "10.123/tier1",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "source_rank": "1",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Adjacent replacement.",
+                "title_relevance_tier": "1",
+            },
+            {
+                "paper_id": "tier_0",
+                "title": "Tier Zero",
+                "year": "2024",
+                "doi": "10.123/tier0",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "source_rank": "2",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "All main topics.",
+                "title_relevance_tier": "0",
+            },
+        ],
+        fieldnames,
+    )
+
+    run_script(
+        "scripts/export_screened_candidates_to_csv.py",
+        "--candidates",
+        str(candidates_path),
+        "--screening",
+        str(screening_path),
+        "--output",
+        str(output_path),
+        "--max-results",
+        "1",
+    )
+
+    rows = read_csv(output_path)
+    assert len(rows) == 1
+    assert rows[0]["paper_id"] == "tier_0"
 
 
 def test_audit_extraction_writes_expected_issues(tmp_path: Path) -> None:

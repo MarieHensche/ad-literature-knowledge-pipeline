@@ -26,6 +26,17 @@ Rules:
 - Preserve the research question, broad discovery scope, provider settings, and
   search queries unless the review evidence shows a clear improvement.
 - Keep `collection.allowed_providers` to the providers already in the contract.
+- Preserve `topic_structure.anchor_topic_id` unless the current anchor clearly
+  contradicts the user's research question.
+- Improve `topic_structure.main_topics[].terms` when review evidence shows
+  better synonyms, abbreviations, subtypes, concrete platforms/tools, or
+  narrower indicators that still represent the same topic component.
+- Keep the anchor non-replaceable: do not add anchor replacements to
+  `topic_structure.secondary_topics`.
+- Use `topic_structure.secondary_topics` only for related concepts that can
+  substitute for non-anchor main topics during fallback selection.
+- In the JSON response, return `topic_structure.secondary_topics` as an array of
+  objects with `main_topic_id` and `terms`.
 - Include `research_target`, `main_topic_category`, and `review_status` in
   `tagging.categories`.
 - For `main_topic_category`, use exactly these values: `core_topic`,

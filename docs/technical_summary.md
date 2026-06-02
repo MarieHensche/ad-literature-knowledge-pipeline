@@ -47,6 +47,7 @@ Steps:
 | --- | --- | --- |
 | `normalize_metadata` | `ad_lit_pipeline/steps/metadata/normalize.py` | `data/processed/<collection>_papers_normalized.csv` |
 | `screen_scope` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` | `data/processed/<collection>_scope_screened.csv` |
+| `prepare_full_text` | `ad_lit_pipeline/steps/full_text/prepare.py` | `data/processed/<collection>_scope_screened_full_text.csv`, `data/processed/<collection>_full_text_manifest.csv` |
 | `normalize_tagging_config` | `ad_lit_pipeline/steps/tagging/normalize_config.py` | `data/processed/<collection>_tagging_config_normalized.json` |
 | `generate_tagging_rules` | `ad_lit_pipeline/steps/tagging/generate_rules.py` | `data/processed/<collection>_tagging_rules.json` |
 | `tag_papers` | `ad_lit_pipeline/steps/tagging/tag_papers.py` | `data/processed/<collection>_extraction_filled.csv` |
@@ -56,6 +57,14 @@ Steps:
 Supported `--papers` formats are `.csv`, `.bib`, `.bibtex`, `.json`, `.jsonl`,
 and `.ris`. Non-CSV formats are imported to the canonical paper CSV before
 normalization.
+
+The `prepare_full_text` step resolves and extracts full text for included papers
+before LLM tagging. It uses local full-text paths when present, then tries open
+full-text locations from provider metadata, Unpaywall, Europe PMC, and CORE when
+configured. Extracted text is cached outside the project via
+`--full-text-cache-dir` or `AD_LIT_FULL_TEXT_CACHE`; the project stores only a
+manifest and text-path metadata. `tag_papers` reads the extracted text and sends
+a bounded, knowledge-focused evidence view to the LLM.
 
 ## Collection Pipeline
 
@@ -81,7 +90,7 @@ Steps:
 | `plan_search` | `ad_lit_pipeline/steps/collection/plan_search.py` | `data/collection_plans/<collection>_plan.json` |
 | `fetch_candidates` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` | `data/raw/<collection>_openalex_candidates.jsonl` |
 | `deduplicate_candidates` | `ad_lit_pipeline/steps/collection/deduplicate.py` | `data/raw/<collection>_openalex_candidates_deduped.jsonl` |
-| `screen_candidates` | `ad_lit_pipeline/steps/screening/llm_candidate_screening.py` | `data/raw/<collection>_candidate_screening.csv` |
+| `screen_title_relevance` | `ad_lit_pipeline/steps/screening/title_relevance.py` | `data/raw/<collection>_candidate_screening.csv` |
 | `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
 
 When no topic contract is supplied, collection first generates a draft contract,
@@ -97,6 +106,13 @@ before candidate collection.
 When a reviewed topic contract is supplied, `--topic` is optional. Collection
 steps derive the planner and candidate-screening topic text from the contract's
 `research_topic` fields.
+
+Generated topic contracts include `topic_structure`, which defines one
+non-replaceable title anchor, main topic components with broad equivalent terms,
+and secondary replacement terms for non-anchor components. Collection fetches a
+scaled raw-candidate budget for the requested `--max-results`, screens candidate
+titles against this structure, and exports selected papers in tier order: anchor
+plus all main topics first, then anchor plus secondary substitutions.
 
 ## Script-To-Module Map
 
@@ -122,6 +138,7 @@ The original script names are kept as wrappers or direct CLIs:
 | `scripts/plan_library_search.py` | `ad_lit_pipeline/steps/collection/plan_search.py` |
 | `scripts/fetch_openalex_candidates.py` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` and `ad_lit_pipeline/providers/openalex.py` |
 | `scripts/deduplicate_candidates.py` | `ad_lit_pipeline/steps/collection/deduplicate.py` |
+| `scripts/screen_title_relevance.py` | `ad_lit_pipeline/steps/screening/title_relevance.py` |
 | `scripts/screen_candidates_with_llm.py` | `ad_lit_pipeline/steps/screening/llm_candidate_screening.py` |
 | `scripts/export_screened_candidates_to_csv.py` | `ad_lit_pipeline/steps/collection/export_included.py` |
 

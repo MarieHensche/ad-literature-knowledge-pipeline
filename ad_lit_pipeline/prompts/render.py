@@ -58,6 +58,7 @@ def render_plan_search_prompt(
     if topic_contract is not None:
         topic_contract_guidance = {
             "research_topic": topic_contract.get("research_topic", {}),
+            "topic_structure": topic_contract.get("topic_structure", {}),
             "scope": topic_contract.get("scope", {}),
             "collection": topic_contract.get("collection", {}),
         }
@@ -87,6 +88,20 @@ def render_screen_candidate_prompt(
             "candidate_screening_json": json_block(
                 topic_contract.get("candidate_screening", {})
             ),
+            "candidate_json": json_block(candidate),
+        },
+    )
+
+
+def render_screen_title_relevance_prompt(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+) -> str:
+    return render_template(
+        "screen_title_relevance.md",
+        {
+            "research_topic_json": json_block(topic_contract["research_topic"]),
+            "topic_structure_json": json_block(topic_contract["topic_structure"]),
             "candidate_json": json_block(candidate),
         },
     )

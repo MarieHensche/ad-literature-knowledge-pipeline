@@ -4,6 +4,25 @@ research_topic:
   title: Generated research topic
   description: Replace with a concise description of the research direction.
 
+topic_structure:
+  anchor_topic_id: primary_topic
+  anchor_reason: The primary topic is the non-replaceable concept in the research direction.
+  main_topics:
+    - topic_id: primary_topic
+      label: Primary topic
+      terms:
+        - replace with primary topic
+        - replace with synonym
+    - topic_id: secondary_focus
+      label: Secondary focus
+      terms:
+        - replace with secondary focus
+        - replace with close variant
+  secondary_topics:
+    secondary_focus:
+      - replace with adjacent secondary focus
+      - replace with related context
+
 scope:
   include_criteria:
     - Papers directly studying the research question

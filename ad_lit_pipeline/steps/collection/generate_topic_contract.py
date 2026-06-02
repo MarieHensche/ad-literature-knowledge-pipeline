@@ -70,6 +70,7 @@ def read_topic(args: argparse.Namespace) -> str:
 def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Convert the model-friendly categories list into contract YAML shape."""
     contract = deepcopy(payload)
+    normalize_topic_structure(contract)
     tagging = contract.get("tagging")
     if not isinstance(tagging, dict):
         raise ValueError("Generated topic contract must contain tagging.")
@@ -105,6 +106,41 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
     tagging["categories"] = category_map
     ensure_required_categories(contract)
     return contract
+
+
+def normalize_topic_structure(contract: dict[str, Any]) -> None:
+    topic_structure = contract.get("topic_structure")
+    if not isinstance(topic_structure, dict):
+        return
+
+    anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
+    secondary_topics = topic_structure.get("secondary_topics")
+    normalized: dict[str, Any] = {}
+    if isinstance(secondary_topics, dict):
+        for main_topic_id, terms in secondary_topics.items():
+            if not isinstance(terms, list):
+                normalized[str(main_topic_id).strip()] = terms
+                continue
+            normalized[str(main_topic_id).strip()] = [
+                str(term).strip() for term in terms if str(term).strip()
+            ]
+    elif isinstance(secondary_topics, list):
+        for item in secondary_topics:
+            if not isinstance(item, dict):
+                continue
+            main_topic_id = str(item.get("main_topic_id") or "").strip()
+            terms = item.get("terms")
+            if not main_topic_id or not isinstance(terms, list):
+                continue
+            normalized[main_topic_id] = [
+                str(term).strip() for term in terms if str(term).strip()
+            ]
+    else:
+        return
+
+    if anchor_topic_id:
+        normalized.pop(anchor_topic_id, None)
+    topic_structure["secondary_topics"] = normalized
 
 
 def ensure_required_categories(contract: dict[str, Any]) -> None:

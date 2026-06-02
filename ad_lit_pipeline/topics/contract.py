@@ -65,6 +65,85 @@ def validate_required_topic_categories(categories: dict[str, Any]) -> None:
         )
 
 
+def validate_topic_structure(contract: dict[str, Any]) -> None:
+    """Validate title-selection topic decomposition."""
+    topic_structure = require_mapping(
+        contract.get("topic_structure"), "topic_structure"
+    )
+    anchor_topic_id = require_non_empty_string(
+        topic_structure.get("anchor_topic_id"), "topic_structure.anchor_topic_id"
+    )
+    require_non_empty_string(
+        topic_structure.get("anchor_reason"), "topic_structure.anchor_reason"
+    )
+
+    main_topics = require_list(
+        topic_structure.get("main_topics"), "topic_structure.main_topics"
+    )
+    if len(main_topics) < 2:
+        raise ValueError("topic_structure.main_topics must contain at least two topics.")
+
+    main_topic_ids = set()
+    for index, topic in enumerate(main_topics, start=1):
+        topic_map = require_mapping(
+            topic, f"topic_structure.main_topics[{index}]"
+        )
+        topic_id = require_non_empty_string(
+            topic_map.get("topic_id"),
+            f"topic_structure.main_topics[{index}].topic_id",
+        )
+        if topic_id in main_topic_ids:
+            raise ValueError(f"Duplicate topic_structure main topic id: {topic_id}")
+        main_topic_ids.add(topic_id)
+        require_non_empty_string(
+            topic_map.get("label"),
+            f"topic_structure.main_topics[{index}].label",
+        )
+        terms = require_list(
+            topic_map.get("terms"),
+            f"topic_structure.main_topics[{index}].terms",
+        )
+        if not terms:
+            raise ValueError(
+                f"topic_structure.main_topics[{index}].terms must not be empty."
+            )
+        if not all(isinstance(term, str) and term.strip() for term in terms):
+            raise ValueError(
+                f"topic_structure.main_topics[{index}].terms must contain strings."
+            )
+
+    if anchor_topic_id not in main_topic_ids:
+        raise ValueError(
+            "topic_structure.anchor_topic_id must match one main topic id."
+        )
+
+    secondary_topics = require_mapping(
+        topic_structure.get("secondary_topics"), "topic_structure.secondary_topics"
+    )
+    for topic_id, terms_value in secondary_topics.items():
+        if topic_id not in main_topic_ids:
+            raise ValueError(
+                "topic_structure.secondary_topics contains unknown main topic id: "
+                f"{topic_id}"
+            )
+        terms = require_list(
+            terms_value, f"topic_structure.secondary_topics.{topic_id}"
+        )
+        if topic_id == anchor_topic_id and terms:
+            raise ValueError(
+                "topic_structure.secondary_topics must not define replacements "
+                "for the anchor topic."
+            )
+        if not terms:
+            raise ValueError(
+                f"topic_structure.secondary_topics.{topic_id} must not be empty."
+            )
+        if not all(isinstance(term, str) and term.strip() for term in terms):
+            raise ValueError(
+                f"topic_structure.secondary_topics.{topic_id} must contain strings."
+            )
+
+
 def validate_topic_contract(contract: dict[str, Any]) -> None:
     """Validate the topic contract shape needed by current pipeline steps."""
     require_non_empty_string(contract.get("topic_id"), "topic_id")
@@ -74,6 +153,7 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
     require_non_empty_string(
         research_topic.get("description"), "research_topic.description"
     )
+    validate_topic_structure(contract)
 
     scope = require_mapping(contract.get("scope"), "scope")
     require_list(scope.get("include_criteria"), "scope.include_criteria")
@@ -191,6 +271,24 @@ def expanded_include_terms(contract: dict[str, Any]) -> list[str]:
     """Add useful tagging values to screening include terms."""
     rule_based = require_mapping(contract["rule_based_screening"], "rule_based_screening")
     include_terms = list(rule_based.get("include_terms", []))
+
+    topic_structure = require_mapping(
+        contract.get("topic_structure"), "topic_structure"
+    )
+    main_topics = require_list(
+        topic_structure.get("main_topics"), "topic_structure.main_topics"
+    )
+    for topic in main_topics:
+        topic_map = require_mapping(topic, "topic_structure.main_topics[]")
+        terms = require_list(topic_map.get("terms"), "topic_structure main terms")
+        include_terms.extend(str(term).strip() for term in terms if str(term).strip())
+
+    secondary_topics = require_mapping(
+        topic_structure.get("secondary_topics"), "topic_structure.secondary_topics"
+    )
+    for terms_value in secondary_topics.values():
+        terms = require_list(terms_value, "topic_structure secondary terms")
+        include_terms.extend(str(term).strip() for term in terms if str(term).strip())
 
     tagging = require_mapping(contract.get("tagging"), "tagging")
     categories = require_mapping(tagging.get("categories"), "tagging.categories")

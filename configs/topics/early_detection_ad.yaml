@@ -7,6 +7,56 @@ research_topic:
     mild cognitive impairment, dementia, or dementia-related cognitive impairment.
     The focus is on what early disease state, impairment, or signal is identified.
 
+topic_structure:
+  anchor_topic_id: early_detection
+  anchor_reason: >
+    The detection or screening task is the non-replaceable focus; papers about
+    Alzheimer's disease without early detection are not close to this topic.
+  main_topics:
+    - topic_id: early_detection
+      label: Early detection or screening
+      terms:
+        - early detection
+        - early diagnosis
+        - screening
+        - detection
+        - diagnosis
+        - classification
+        - prediction
+    - topic_id: disease_state
+      label: Alzheimer's disease or related impairment
+      terms:
+        - Alzheimer's disease
+        - AD
+        - mild cognitive impairment
+        - MCI
+        - dementia
+        - cognitive impairment
+        - prodromal Alzheimer's disease
+        - preclinical Alzheimer's disease
+    - topic_id: evidence_signal
+      label: Diagnostic evidence or signal
+      terms:
+        - biomarker
+        - neuroimaging
+        - cognitive test
+        - speech
+        - EEG
+        - retinal imaging
+        - omics
+        - sensor
+        - multimodal
+  secondary_topics:
+    disease_state:
+      - neurodegenerative disease
+      - cognitive decline
+      - memory impairment
+    evidence_signal:
+      - clinical data
+      - behavioral data
+      - electronic health record
+      - digital marker
+
 scope:
   include_criteria:
     - detecting Alzheimer's disease or dementia

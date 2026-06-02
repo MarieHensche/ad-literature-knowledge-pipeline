@@ -21,6 +21,7 @@ from ad_lit_pipeline.steps.collection.refine_topic_contract import (
     run as run_refine_topic_contract,
 )
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
+from ad_lit_pipeline.steps.screening.title_relevance import run as run_title_relevance
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
 from ad_lit_pipeline.steps.tagging.tag_papers import run as run_tag_papers
 from ad_lit_pipeline.topics.contract import load_topic_contract
@@ -185,6 +186,43 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                         "exposure, adaptation, and human health outcomes."
                     ),
                 },
+                "topic_structure": {
+                    "anchor_topic_id": "climate_change",
+                    "anchor_reason": (
+                        "Climate change is the non-replaceable exposure focus."
+                    ),
+                    "main_topics": [
+                        {
+                            "topic_id": "climate_change",
+                            "label": "Climate change",
+                            "terms": [
+                                "climate change",
+                                "global warming",
+                                "climate-related exposure",
+                            ],
+                        },
+                        {
+                            "topic_id": "human_health",
+                            "label": "Human health",
+                            "terms": [
+                                "human health",
+                                "health outcomes",
+                                "mortality",
+                                "morbidity",
+                            ],
+                        },
+                    ],
+                    "secondary_topics": {
+                        "climate_change": [
+                            "weather",
+                            "environmental change",
+                        ],
+                        "human_health": [
+                            "well-being",
+                            "public health adaptation",
+                        ],
+                    },
+                },
                 "scope": {
                     "include_criteria": [
                         "Studies directly examining climate-related health outcomes",
@@ -317,6 +355,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     ]
     assert contract["tagging"]["fallback_policy"]["review_status"] == "ai_tagged"
     assert contract["candidate_screening"]["borderline_policy"] == "include"
+    assert "climate_change" not in contract["topic_structure"]["secondary_topics"]
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
 
@@ -523,6 +562,128 @@ def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
     assert "Adjacent screening query." in client.requests[0]["prompt"]
 
 
+def test_title_relevance_screening_applies_anchor_and_tiers(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/core",
+                "title": "ChatGPT in school education improves student grades",
+                "year": 2024,
+                "rank": 1,
+                "query": "AI school performance",
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W2",
+                "doi": "10.1/adjacent",
+                "title": "ChatGPT in university improves student grades",
+                "year": 2024,
+                "rank": 2,
+                "query": "AI university performance",
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W3",
+                "doi": "10.1/no-anchor",
+                "title": "Tablet use in schools improves student grades",
+                "year": 2024,
+                "rank": 3,
+                "query": "school performance",
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W4",
+                "doi": "10.1/no-replacement",
+                "title": "ChatGPT and student well-being",
+                "year": 2024,
+                "rank": 4,
+                "query": "AI wellbeing",
+            },
+        ],
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "Title contains all main topic components.",
+            },
+            {
+                "anchor_present": True,
+                "matched_main_topics": ["ai", "learning_impact"],
+                "matched_secondary_topics": [
+                    {"main_topic_id": "formal_education", "terms": ["university"]}
+                ],
+                "missing_main_topics": ["formal_education"],
+                "relevance_tier": 1,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "University replaces the formal education setting.",
+            },
+            {
+                "anchor_present": False,
+                "matched_main_topics": ["formal_education", "learning_impact"],
+                "matched_secondary_topics": [],
+                "missing_main_topics": ["ai"],
+                "relevance_tier": 999,
+                "decision": "exclude",
+                "confidence": "high",
+                "reason": "The AI anchor is absent.",
+            },
+            {
+                "anchor_present": True,
+                "matched_main_topics": ["ai"],
+                "matched_secondary_topics": [
+                    {"main_topic_id": "learning_impact", "terms": ["well-being"]}
+                ],
+                "missing_main_topics": ["formal_education", "learning_impact"],
+                "relevance_tier": 2,
+                "decision": "include",
+                "confidence": "medium",
+                "reason": "The title misses a setting component.",
+            },
+        ]
+    )
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert result.row_counts["included"] == 2
+    assert rows[0]["screening_decision"] == "include"
+    assert rows[0]["title_relevance_tier"] == "0"
+    assert rows[1]["screening_decision"] == "include"
+    assert rows[1]["title_relevance_tier"] == "1"
+    assert rows[2]["screening_decision"] == "exclude"
+    assert rows[2]["title_anchor_present"] == "no"
+    assert rows[3]["screening_decision"] == "exclude"
+    assert "formal_education" in rows[3]["screening_reason"]
+    assert "Topic structure" in client.requests[0]["prompt"]
+    assert client.requests[0]["schema_name"] == "title_relevance_screening"
+
+
 def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
     config_path = tmp_path / "config.json"
     output_path = tmp_path / "rules.json"
@@ -646,6 +807,16 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     config_path = tmp_path / "config.json"
     rules_path = tmp_path / "rules.json"
     output_path = tmp_path / "filled.csv"
+    full_text_path = tmp_path / "p1_full_text.txt"
+    full_text_path.write_text(
+        (
+            "Introduction\nThe study concerns MCI screening.\n\n"
+            "Methods\nParticipants completed cognitive tests and imaging.\n\n"
+            "Results\nThe model improved early detection.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
     write_csv(
         papers_path,
         [
@@ -659,6 +830,8 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
                 "venue": "Journal",
                 "source": "test",
                 "full_text_path": "",
+                "full_text_text_path": str(full_text_path),
+                "full_text_status": "local_text_extracted",
                 "scope_decision": "include",
             }
         ],
@@ -672,6 +845,8 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
             "venue",
             "source",
             "full_text_path",
+            "full_text_text_path",
+            "full_text_status",
             "scope_decision",
         ],
     )
@@ -726,6 +901,10 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert result.row_counts["tagged_papers"] == 1
     assert rows[0]["main_knowledge_claim"] == "The paper screens for MCI."
     assert rows[0]["review_status"] == "ai_tagged"
+    assert "full_text_evidence" in client.requests[0]["prompt"]
+    assert "model improved early detection" in client.requests[0][
+        "prompt"
+    ]
 
 
 def test_paper_tags_schema_constrains_category_values() -> None:

@@ -84,6 +84,16 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
         f"screening_confidence={screening.get('screening_confidence', '')}",
         f"screening_reason={screening.get('screening_reason', '')}",
     ]
+    for key in [
+        "title_anchor_present",
+        "title_relevance_tier",
+        "title_matched_main_topics",
+        "title_matched_secondary_topics",
+        "title_missing_main_topics",
+    ]:
+        value = screening.get(key)
+        if value:
+            notes.append(f"{key}={value}")
 
     query = candidate.get("query")
     if query:
@@ -126,12 +136,13 @@ def candidate_to_canonical_row(
 def export_included(
     candidates: list[dict[str, Any]],
     screening_rows: list[dict[str, str]],
+    limit: int | None = None,
 ) -> list[dict[str, str]]:
     candidates_by_key = {candidate_key(candidate): candidate for candidate in candidates}
 
     output_rows = []
 
-    for screening in screening_rows:
+    for screening in sorted(screening_rows, key=screening_sort_key):
         if screening.get("screening_decision") != "include":
             continue
 
@@ -145,14 +156,35 @@ def export_included(
             )
 
         output_rows.append(candidate_to_canonical_row(candidate, screening))
+        if limit is not None and len(output_rows) >= limit:
+            break
 
     return output_rows
 
 
-def run(candidates_path: Path, screening_path: Path, output_path: Path) -> StepResult:
+def parse_int(value: str, default: int = 999999) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def screening_sort_key(row: dict[str, str]) -> tuple[int, int]:
+    return (
+        parse_int(row.get("title_relevance_tier", "")),
+        parse_int(row.get("source_rank", "")),
+    )
+
+
+def run(
+    candidates_path: Path,
+    screening_path: Path,
+    output_path: Path,
+    max_results: int | None = None,
+) -> StepResult:
     candidates = read_jsonl(candidates_path)
     screening_rows = read_csv(screening_path)
-    output_rows = export_included(candidates, screening_rows)
+    output_rows = export_included(candidates, screening_rows, max_results)
     write_csv(output_path, output_rows)
 
     return StepResult(
@@ -166,6 +198,7 @@ def run(candidates_path: Path, screening_path: Path, output_path: Path) -> StepR
             "screened_rows": len(screening_rows),
             "included_rows_exported": len(output_rows),
         },
+        metadata={"max_results": max_results},
     )
 
 
@@ -176,9 +209,20 @@ def main() -> None:
     parser.add_argument("--candidates", required=True, help="Deduplicated candidates JSONL.")
     parser.add_argument("--screening", required=True, help="Candidate screening CSV.")
     parser.add_argument("--output", required=True, help="Output canonical paper CSV.")
+    parser.add_argument(
+        "--max-results",
+        type=int,
+        default=None,
+        help="Optional maximum number of included rows to export.",
+    )
     args = parser.parse_args()
 
-    result = run(Path(args.candidates), Path(args.screening), Path(args.output))
+    result = run(
+        Path(args.candidates),
+        Path(args.screening),
+        Path(args.output),
+        args.max_results,
+    )
 
     print(f"Screened rows: {result.row_counts['screened_rows']}")
     print(f"Included rows exported: {result.row_counts['included_rows_exported']}")

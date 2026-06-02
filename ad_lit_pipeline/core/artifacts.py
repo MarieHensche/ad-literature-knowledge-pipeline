@@ -11,6 +11,8 @@ class MainPipelineArtifacts:
     raw_papers_csv: Path
     normalized_papers_csv: Path
     scope_screened_csv: Path
+    scope_screened_full_text_csv: Path
+    full_text_manifest_csv: Path
     tagging_config_normalized_json: Path
     tagging_rules_json: Path
     extraction_filled_csv: Path
@@ -56,6 +58,12 @@ def main_pipeline_artifacts(
             collection, "papers_normalized.csv", base_dir
         ),
         scope_screened_csv=processed_path(collection, "scope_screened.csv", base_dir),
+        scope_screened_full_text_csv=processed_path(
+            collection, "scope_screened_full_text.csv", base_dir
+        ),
+        full_text_manifest_csv=processed_path(
+            collection, "full_text_manifest.csv", base_dir
+        ),
         tagging_config_normalized_json=processed_path(
             collection, "tagging_config_normalized.json", base_dir
         ),

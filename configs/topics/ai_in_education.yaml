@@ -15,6 +15,68 @@ research_topic:
     implementation details of AI systems rather than their educational use and
     effects.
 
+topic_structure:
+  anchor_topic_id: ai
+  anchor_reason: >
+    AI use is the non-replaceable focus; papers about non-AI educational tools
+    are not close to this topic even when they study learning outcomes.
+  main_topics:
+    - topic_id: ai
+      label: Artificial intelligence
+      terms:
+        - artificial intelligence
+        - AI
+        - machine learning
+        - ML
+        - generative AI
+        - ChatGPT
+        - chatbot
+        - large language model
+        - LLM
+        - intelligent tutoring system
+        - adaptive learning system
+        - AI tutor
+        - automated feedback
+        - algorithmic personalization
+    - topic_id: formal_education
+      label: Formal education setting
+      terms:
+        - education
+        - school
+        - classroom
+        - primary school
+        - secondary school
+        - high school
+        - K-12
+        - course
+        - teaching
+        - learning
+    - topic_id: learning_impact
+      label: Learning or student impact
+      terms:
+        - academic performance
+        - learning outcomes
+        - student achievement
+        - grades
+        - test scores
+        - engagement
+        - motivation
+        - participation
+        - learning experience
+  secondary_topics:
+    formal_education:
+      - higher education
+      - university
+      - college
+      - vocational education
+      - workplace training
+    learning_impact:
+      - well-being
+      - mental health
+      - productivity
+      - study habits
+      - self-efficacy
+
 scope:
   include_criteria:
     - Studies on AI use during teaching, learning, studying, or course activities

@@ -12,6 +12,7 @@ from ad_lit_pipeline.core.registry import MAIN_PIPELINE
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
+from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
 from ad_lit_pipeline.steps.metadata import normalize
 from ad_lit_pipeline.steps.screening import rule_based_scope
@@ -89,6 +90,14 @@ def build_step_functions(
             artifacts.scope_screened_csv,
             topic_contract_path,
         ),
+        "prepare_full_text": lambda: prepare_full_text.run(
+            artifacts.scope_screened_csv,
+            artifacts.scope_screened_full_text_csv,
+            artifacts.full_text_manifest_csv,
+            Path(args.full_text_cache_dir).expanduser(),
+            args.full_text_email,
+            args.core_api_key,
+        ),
         "normalize_tagging_config": lambda: normalize_config.run(
             artifacts.tagging_config_normalized_json,
             config_path,
@@ -102,7 +111,7 @@ def build_step_functions(
             trace_dir=trace_dir,
         ),
         "tag_papers": lambda: tag_papers.run(
-            artifacts.scope_screened_csv,
+            artifacts.scope_screened_full_text_csv,
             artifacts.tagging_config_normalized_json,
             artifacts.tagging_rules_json,
             artifacts.extraction_filled_csv,
@@ -195,6 +204,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         default=None,
         help="OpenAI model. Defaults to OPENAI_MODEL or gpt-4o-mini.",
+    )
+    run_parser.add_argument(
+        "--full-text-email",
+        default=os.getenv("UNPAYWALL_EMAIL"),
+        help="Email for Unpaywall full-text lookup. Defaults to UNPAYWALL_EMAIL.",
+    )
+    run_parser.add_argument(
+        "--full-text-cache-dir",
+        default=str(prepare_full_text.default_cache_dir()),
+        help=(
+            "External directory for extracted full-text cache. Defaults to "
+            "AD_LIT_FULL_TEXT_CACHE or ~/.cache/ad_lit_pipeline/full_text."
+        ),
+    )
+    run_parser.add_argument(
+        "--core-api-key",
+        default=os.getenv("CORE_API_KEY"),
+        help="Optional CORE API key for additional full-text lookup.",
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")
     run_parser.add_argument("--dry-run", action="store_true", help="Print selected steps.")

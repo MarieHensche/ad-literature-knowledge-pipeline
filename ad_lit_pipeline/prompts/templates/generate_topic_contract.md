@@ -14,6 +14,19 @@ Rules:
 - Use general, reusable language; do not hard-code assumptions from unrelated example topics.
 - Set `topic_id` to a lowercase snake_case identifier.
 - Keep `collection.allowed_providers` to the providers available in the template.
+- Add `topic_structure` with:
+  - `anchor_topic_id`: one of the main topic ids. This is the non-replaceable
+    title-selection anchor.
+  - `anchor_reason`: a short explanation of why this component is mandatory.
+  - `main_topics`: at least two topic components that define the research topic.
+    Each must have `topic_id`, `label`, and broad `terms`.
+  - `secondary_topics`: an array of objects with `main_topic_id` and `terms`.
+    Use non-anchor main topic ids and related replacement terms. Do not define
+    secondary replacements for the anchor.
+- Make main-topic `terms` broad enough for title-only matching: include true
+  synonyms, common abbreviations, subtypes, concrete platforms/tools, and
+  narrower indicators that still represent the same topic component.
+- Put related-but-not-same concepts in `secondary_topics`, not in the anchor.
 - Include `research_target`, `main_topic_category`, and `review_status` in `tagging.categories`.
 - For `main_topic_category`, use exactly these values: `core_topic`, `adjacent_but_relevant`, `out_of_scope`, `mixed_or_unclear`, and `unclear`. This category controls Mantis export eligibility.
 - For `review_status`, use values `ai_tagged`, `human_reviewed`, `full_text_needed`, and `excluded_from_scope`, and mark it required.

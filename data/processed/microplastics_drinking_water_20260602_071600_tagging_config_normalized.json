@@ -1,0 +1,155 @@
+{
+  "source_config": "data/collection_plans/microplastics_drinking_water_20260602_071600_topic_contract.yaml",
+  "research_topic": {
+    "title": "Microplastics in Drinking Water: Assessing Human Health Risks",
+    "description": "This research focuses on the prevalence of microplastics in drinking water, including sources, exposure pathways, possible human health risks, and implications for public health."
+  },
+  "category_count": 5,
+  "categories": [
+    {
+      "category_id": "main_topic_category",
+      "label": "main topic category",
+      "description": "",
+      "required": true,
+      "allowed_values": [
+        {
+          "value": "core_topic",
+          "label": "core_topic"
+        },
+        {
+          "value": "adjacent_but_relevant",
+          "label": "adjacent_but_relevant"
+        },
+        {
+          "value": "out_of_scope",
+          "label": "out_of_scope"
+        },
+        {
+          "value": "mixed_or_unclear",
+          "label": "mixed_or_unclear"
+        },
+        {
+          "value": "unclear",
+          "label": "unclear"
+        }
+      ]
+    },
+    {
+      "category_id": "research_target",
+      "label": "research target",
+      "description": "",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "human_health",
+          "label": "human_health"
+        },
+        {
+          "value": "environmental_health",
+          "label": "environmental_health"
+        },
+        {
+          "value": "populations_at_risk",
+          "label": "populations_at_risk"
+        },
+        {
+          "value": "chemical_exposure",
+          "label": "chemical_exposure"
+        },
+        {
+          "value": "mixed_or_unclear",
+          "label": "mixed_or_unclear"
+        },
+        {
+          "value": "unclear",
+          "label": "unclear"
+        }
+      ]
+    },
+    {
+      "category_id": "study_type",
+      "label": "study type",
+      "description": "",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "empirical",
+          "label": "empirical"
+        },
+        {
+          "value": "review",
+          "label": "review"
+        },
+        {
+          "value": "method",
+          "label": "method"
+        },
+        {
+          "value": "dataset_or_resource",
+          "label": "dataset_or_resource"
+        },
+        {
+          "value": "mixed_or_unclear",
+          "label": "mixed_or_unclear"
+        },
+        {
+          "value": "unclear",
+          "label": "unclear"
+        }
+      ]
+    },
+    {
+      "category_id": "knowledge_confidence",
+      "label": "knowledge confidence",
+      "description": "",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "high",
+          "label": "high"
+        },
+        {
+          "value": "medium",
+          "label": "medium"
+        },
+        {
+          "value": "low",
+          "label": "low"
+        },
+        {
+          "value": "very_low",
+          "label": "very_low"
+        },
+        {
+          "value": "conflict",
+          "label": "conflict"
+        }
+      ]
+    },
+    {
+      "category_id": "review_status",
+      "label": "review status",
+      "description": "",
+      "required": true,
+      "allowed_values": [
+        {
+          "value": "ai_tagged",
+          "label": "ai_tagged"
+        },
+        {
+          "value": "human_reviewed",
+          "label": "human_reviewed"
+        },
+        {
+          "value": "full_text_needed",
+          "label": "full_text_needed"
+        },
+        {
+          "value": "excluded_from_scope",
+          "label": "excluded_from_scope"
+        }
+      ]
+    }
+  ],
+  "source_type": "topic_contract"
+}

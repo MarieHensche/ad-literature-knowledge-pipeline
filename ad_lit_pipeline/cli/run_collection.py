@@ -21,8 +21,17 @@ from ad_lit_pipeline.steps.collection import (
     plan_search,
     refine_topic_contract,
 )
-from ad_lit_pipeline.steps.screening import llm_candidate_screening
+from ad_lit_pipeline.steps.screening import title_relevance
 from ad_lit_pipeline.topics.contract import load_topic_contract
+
+
+SEARCH_BUDGET_HARD_CAP = 5000
+
+
+def candidate_search_budget(max_results: int | None) -> int | None:
+    if max_results is None:
+        return None
+    return min(max(100, max_results * 10), SEARCH_BUDGET_HARD_CAP)
 
 
 def explain(collection: str) -> None:
@@ -107,6 +116,7 @@ def build_step_functions(
             topic_contract_path,
             artifacts.review_overviews_jsonl,
             args.max_review_overviews,
+            mailto=args.mailto,
         ),
         "refine_topic_contract": lambda: refine_topic_contract.run(
             topic_description,
@@ -126,15 +136,15 @@ def build_step_functions(
         "fetch_candidates": lambda: fetch_candidates.run(
             artifacts.plan_json,
             artifacts.candidates_jsonl,
-            args.max_results,
+            candidate_search_budget(args.max_results),
+            mailto=args.mailto,
         ),
         "deduplicate_candidates": lambda: deduplicate.run(
             [artifacts.candidates_jsonl],
             artifacts.deduped_candidates_jsonl,
         ),
-        "screen_candidates": lambda: llm_candidate_screening.run(
+        "screen_title_relevance": lambda: title_relevance.run(
             artifacts.deduped_candidates_jsonl,
-            topic_description,
             artifacts.candidate_screening_csv,
             args.model,
             topic_contract_path,
@@ -144,6 +154,7 @@ def build_step_functions(
             artifacts.deduped_candidates_jsonl,
             artifacts.candidate_screening_csv,
             artifacts.papers_csv,
+            args.max_results,
         ),
     }
 
@@ -223,13 +234,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-results",
         type=int,
         default=25,
-        help="Candidate count to fetch.",
+        help="Target selected paper count. Raw candidate search uses a scaled budget.",
     )
     run_parser.add_argument(
         "--max-review-overviews",
         type=int,
         default=fetch_review_overviews.DEFAULT_MAX_REVIEWS,
         help="Review/overview seed count used when generating a contract.",
+    )
+    run_parser.add_argument(
+        "--mailto",
+        default=None,
+        help="Optional email for OpenAlex polite pool requests.",
     )
     run_parser.add_argument(
         "--model",

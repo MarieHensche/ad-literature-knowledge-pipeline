@@ -1,0 +1,42 @@
+{
+  "source_config": "data/processed/microplastics_drinking_water_20260602_071600_tagging_config_normalized.json",
+  "model": "gpt-4o-mini",
+  "rules_count": 5,
+  "rules": [
+    {
+      "category_id": "main_topic_category",
+      "selection": "single",
+      "required": true,
+      "fallback_value": "unclear",
+      "reason": "The research focuses on microplastics in drinking water, which is a core topic but does not allow for definitive categorization."
+    },
+    {
+      "category_id": "research_target",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The paper discusses potential human health risks, but without more details, it's unclear which specific target is emphasized."
+    },
+    {
+      "category_id": "study_type",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "unclear",
+      "reason": "The research nature (empirical, review, method) isn't specified in the description."
+    },
+    {
+      "category_id": "knowledge_confidence",
+      "selection": "single",
+      "required": false,
+      "fallback_value": "very_low",
+      "reason": "Without further evidence or findings, the confidence in the knowledge is low."
+    },
+    {
+      "category_id": "review_status",
+      "selection": "single",
+      "required": true,
+      "fallback_value": "ai_tagged",
+      "reason": "This is a necessary field for all papers, and with the lack of explicit review process information, it defaults to ai_tagged."
+    }
+  ]
+}
