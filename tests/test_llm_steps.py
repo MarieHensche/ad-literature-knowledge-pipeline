@@ -23,7 +23,10 @@ from ad_lit_pipeline.steps.collection.refine_topic_contract import (
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
 from ad_lit_pipeline.steps.screening.title_relevance import run as run_title_relevance
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
-from ad_lit_pipeline.steps.tagging.tag_papers import run as run_tag_papers
+from ad_lit_pipeline.steps.tagging.tag_papers import (
+    run as run_tag_papers,
+    validate_tagged_row,
+)
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
@@ -261,23 +264,28 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                         "prefer_unclear_when_allowed": True,
                         "prefer_mixed_or_unclear_when_unclear_missing": True,
                         "missing_information_value": "not_reported",
-                        "knowledge_confidence": "very_low",
-                        "review_status": "ai_tagged",
                     },
                     "categories": [
                         {
-                            "category_id": "main_topic_category",
+                            "category_id": "climate_exposure",
+                            "description": "Climate-related exposures examined in the paper.",
                             "required": False,
+                            "selection": "multi",
                             "values": [
-                                "health_impact",
-                                "adaptation",
-                                "mixed_or_unclear",
+                                "heat",
+                                "wildfire_smoke",
+                                "flooding",
+                                "extreme_weather",
+                                "not_reported",
                                 "unclear",
                             ],
+                            "applies_when": None,
                         },
                         {
-                            "category_id": "research_target",
+                            "category_id": "health_outcome",
+                            "description": "Health outcomes studied in climate-health papers.",
                             "required": False,
+                            "selection": "multi",
                             "values": [
                                 "mortality",
                                 "morbidity",
@@ -285,21 +293,54 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                                 "mixed_or_unclear",
                                 "unclear",
                             ],
+                            "applies_when": None,
                         },
                         {
-                            "category_id": "study_type",
+                            "category_id": "adaptation_strategy",
+                            "description": "Adaptation or response strategies discussed.",
                             "required": False,
-                            "values": ["empirical", "review", "unclear"],
+                            "selection": "multi",
+                            "values": [
+                                "heat_action_plan",
+                                "wildfire_preparedness",
+                                "health_system_adaptation",
+                                "not_reported",
+                                "mixed_or_unclear",
+                                "unclear",
+                            ],
+                            "applies_when": None,
                         },
                         {
-                            "category_id": "knowledge_confidence",
+                            "category_id": "study_design",
+                            "description": "Study designs used to examine climate-health evidence.",
                             "required": False,
-                            "values": ["high", "medium", "low", "very_low"],
+                            "selection": "multi",
+                            "values": [
+                                "observational",
+                                "modeling",
+                                "review",
+                                "mixed_methods",
+                                "not_reported",
+                                "unclear",
+                            ],
+                            "applies_when": None,
                         },
                         {
-                            "category_id": "exposure_type",
+                            "category_id": "heat_adaptation_detail",
+                            "description": "Details used only when heat adaptation is tagged.",
                             "required": False,
-                            "values": ["heat", "wildfire", "unclear"],
+                            "selection": "multi",
+                            "values": [
+                                "cooling_center",
+                                "early_warning",
+                                "urban_greening",
+                                "not_reported",
+                                "unclear",
+                            ],
+                            "applies_when": {
+                                "category_id": "adaptation_strategy",
+                                "values": ["heat_action_plan"],
+                            },
                         },
                     ],
                 },
@@ -337,23 +378,12 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
 
     contract = load_topic_contract(output)
     assert contract["topic_id"] == "climate_health"
-    assert "main_topic_category" in contract["tagging"]["categories"]
-    assert contract["tagging"]["categories"]["main_topic_category"]["required"] is True
-    assert contract["tagging"]["categories"]["main_topic_category"]["values"] == [
-        "core_topic",
-        "adjacent_but_relevant",
-        "out_of_scope",
-        "mixed_or_unclear",
-        "unclear",
-    ]
-    assert contract["tagging"]["categories"]["review_status"]["required"] is True
-    assert contract["tagging"]["categories"]["review_status"]["values"] == [
-        "ai_tagged",
-        "human_reviewed",
-        "full_text_needed",
-        "excluded_from_scope",
-    ]
-    assert contract["tagging"]["fallback_policy"]["review_status"] == "ai_tagged"
+    assert "main_topic_category" not in contract["tagging"]["categories"]
+    assert "review_status" not in contract["tagging"]["categories"]
+    assert contract["tagging"]["categories"]["health_outcome"]["selection"] == "multi"
+    assert contract["tagging"]["categories"]["heat_adaptation_detail"][
+        "applies_when"
+    ] == {"category_id": "adaptation_strategy", "values": ["heat_action_plan"]}
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert "climate_change" not in contract["topic_structure"]["secondary_topics"]
     assert result.row_counts["search_queries"] == 3
@@ -395,25 +425,13 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     )
 
     refined_payload = deepcopy(contract)
+    refined_payload["research_topic"]["title"] = "Changed outside tagging"
     refined_payload["tagging"]["categories"] = [
         {
-            "category_id": "main_topic_category",
+            "category_id": "evidence_signal_family",
+            "description": "Evidence signal families used for early AD detection.",
             "required": False,
-            "values": [
-                "early_detection",
-                "screening",
-                "mixed_or_unclear",
-                "unclear",
-            ],
-        },
-        {
-            "category_id": "research_target",
-            "required": False,
-            "values": ["ad", "mci", "dementia", "mixed_or_unclear", "unclear"],
-        },
-        {
-            "category_id": "knowledge_signal_family",
-            "required": False,
+            "selection": "multi",
             "values": [
                 "neuroimaging",
                 "speech_language",
@@ -421,10 +439,13 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                 "mixed_or_unclear",
                 "unclear",
             ],
+            "applies_when": None,
         },
         {
-            "category_id": "knowledge_outcome_family",
+            "category_id": "detection_outcome",
+            "description": "Detection outcomes emphasized by review evidence.",
             "required": False,
+            "selection": "multi",
             "values": [
                 "diagnostic_accuracy",
                 "conversion_prediction",
@@ -432,16 +453,37 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                 "not_reported",
                 "unclear",
             ],
+            "applies_when": None,
         },
         {
-            "category_id": "review_status",
-            "required": True,
+            "category_id": "modeling_approach",
+            "description": "Analytic modeling approaches used for early detection.",
+            "required": False,
+            "selection": "multi",
             "values": [
-                "ai_tagged",
-                "human_reviewed",
-                "full_text_needed",
-                "excluded_from_scope",
+                "machine_learning",
+                "deep_learning",
+                "statistical_modeling",
+                "clinical_rule",
+                "not_reported",
+                "unclear",
             ],
+            "applies_when": None,
+        },
+        {
+            "category_id": "validation_context",
+            "description": "Validation settings reported for detection evidence.",
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "internal_validation",
+                "external_validation",
+                "cross_validation",
+                "clinical_validation",
+                "not_reported",
+                "unclear",
+            ],
+            "applies_when": None,
         },
     ]
     client = StaticJSONClient([refined_payload])
@@ -457,17 +499,13 @@ def test_refine_topic_contract_adds_review_seeded_categories(
 
     refined = load_topic_contract(contract_path)
     categories = refined["tagging"]["categories"]
-    assert categories["main_topic_category"]["values"] == [
-        "core_topic",
-        "adjacent_but_relevant",
-        "out_of_scope",
-        "mixed_or_unclear",
-        "unclear",
-    ]
-    assert "knowledge_signal_family" in categories
-    assert "knowledge_outcome_family" in categories
+    assert "main_topic_category" not in categories
+    assert refined["research_topic"] == contract["research_topic"]
+    assert refined["topic_structure"] == contract["topic_structure"]
+    assert "evidence_signal_family" in categories
+    assert "detection_outcome" in categories
     assert result.row_counts["review_overviews"] == 1
-    assert result.row_counts["tagging_categories"] == 5
+    assert result.row_counts["tagging_categories"] == 4
     assert result.trace_paths
     assert "Review and overview seed papers" in client.requests[0]["prompt"]
     assert "AI biomarkers" in client.requests[0]["prompt"]
@@ -900,11 +938,73 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
     assert result.row_counts["tagged_papers"] == 1
     assert rows[0]["main_knowledge_claim"] == "The paper screens for MCI."
+    assert rows[0]["abstract"] == "Screening for MCI."
     assert rows[0]["review_status"] == "ai_tagged"
     assert "full_text_evidence" in client.requests[0]["prompt"]
     assert "model improved early detection" in client.requests[0][
         "prompt"
     ]
+
+
+def test_validate_tagged_row_allows_optional_and_clears_inapplicable_values() -> None:
+    config = {
+        "categories": [
+            {
+                "category_id": "ai_method",
+                "required": False,
+                "selection": "multi",
+                "allowed_values": [
+                    {"value": "machine_learning"},
+                    {"value": "deep_learning"},
+                    {"value": "unclear"},
+                ],
+            },
+            {
+                "category_id": "deep_learning_architecture",
+                "required": False,
+                "selection": "multi",
+                "allowed_values": [
+                    {"value": "cnn"},
+                    {"value": "transformer"},
+                    {"value": "unclear"},
+                ],
+                "applies_when": {
+                    "category_id": "ai_method",
+                    "values": ["deep_learning"],
+                },
+            },
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "ai_method",
+                "selection": "multi",
+                "required": False,
+                "fallback_value": "unclear",
+                "reason": "Optional method tag.",
+            },
+            {
+                "category_id": "deep_learning_architecture",
+                "selection": "multi",
+                "required": False,
+                "fallback_value": "unclear",
+                "reason": "Only applies to deep learning papers.",
+                "applies_when": {
+                    "category_id": "ai_method",
+                    "values": ["deep_learning"],
+                },
+            },
+        ]
+    }
+    tagged = {
+        "ai_method": ["machine_learning"],
+        "deep_learning_architecture": ["cnn"],
+    }
+
+    validate_tagged_row(tagged, config, rules)
+
+    assert tagged["deep_learning_architecture"] == []
 
 
 def test_paper_tags_schema_constrains_category_values() -> None:

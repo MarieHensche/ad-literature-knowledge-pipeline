@@ -398,7 +398,7 @@ def test_knowledge_evidence_uses_flexible_section_headings() -> None:
     assert evidence.index("[CONCLUSIONS]") < evidence.index("[1. Methods]")
 
 
-def test_screen_scope_matches_abbreviations_and_tag_values(tmp_path: Path) -> None:
+def test_screen_scope_matches_abbreviations_without_tag_values(tmp_path: Path) -> None:
     input_path = tmp_path / "normalized.csv"
     output_path = tmp_path / "screened.csv"
     contract_path = tmp_path / "topic_contract.yaml"
@@ -496,9 +496,9 @@ collection:
     rows = read_csv(output_path)
     assert rows[0]["scope_decision"] == "include"
     assert "machine learning" in rows[0]["scope_matched_include_terms"]
-    assert "student outcomes" in rows[0]["scope_matched_include_terms"]
+    assert "student outcomes" not in rows[0]["scope_matched_include_terms"]
     assert rows[1]["scope_decision"] == "include"
-    assert "grade point average" in rows[1]["scope_matched_include_terms"]
+    assert "grade point average" not in rows[1]["scope_matched_include_terms"]
 
 
 def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None:

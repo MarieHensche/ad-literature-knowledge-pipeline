@@ -54,47 +54,30 @@ tagging:
     prefer_unclear_when_allowed: true
     prefer_mixed_or_unclear_when_unclear_missing: true
     missing_information_value: not_reported
-    knowledge_confidence: very_low
-    review_status: ai_tagged
   categories:
-    main_topic_category:
-      required: true
+    example_knowledge_dimension:
+      description: Example only. Replace with a review-derived knowledge dimension.
+      selection: single
       values:
-        - core_topic
-        - adjacent_but_relevant
-        - out_of_scope
-        - mixed_or_unclear
-        - unclear
-    research_target:
-      values:
-        - primary_target
-        - related_target
-        - population_or_setting
-        - outcome_or_effect
-        - mixed_or_unclear
-        - unclear
-    study_type:
-      values:
-        - empirical
-        - review
         - method
-        - dataset_or_resource
+        - population
+        - outcome
         - mixed_or_unclear
         - unclear
-    knowledge_confidence:
+    example_method_subtype:
+      description: Example only. Use conditional sub-categories when a value requires more detail.
+      selection: multi
+      applies_when:
+        category_id: example_knowledge_dimension
+        values:
+          - method
       values:
-        - high
-        - medium
-        - low
-        - very_low
-        - conflict
-    review_status:
-      required: true
-      values:
-        - ai_tagged
-        - human_reviewed
-        - full_text_needed
-        - excluded_from_scope
+        - statistical_model
+        - machine_learning
+        - qualitative_framework
+        - not_reported
+        - mixed_or_unclear
+        - unclear
 
 collection:
   allowed_providers:

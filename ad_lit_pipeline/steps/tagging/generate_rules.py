@@ -10,7 +10,7 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import RULE_RESPONSE_SCHEMA
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_tagging_rules_prompt
-from ad_lit_pipeline.topics.contract import load_topic_contract
+from ad_lit_pipeline.topics.contract import VALID_CATEGORY_SELECTIONS, load_topic_contract
 
 
 STEP = StepSpec(
@@ -64,6 +64,30 @@ def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]
 def required_by_category(config: dict[str, object]) -> dict[str, bool]:
     return {
         category["category_id"]: bool(category.get("required", False))
+        for category in config["categories"]
+    }
+
+
+def selection_by_category(config: dict[str, object]) -> dict[str, str | None]:
+    return {
+        category["category_id"]: (
+            str(category.get("selection"))
+            if category.get("selection") in VALID_CATEGORY_SELECTIONS
+            else None
+        )
+        for category in config["categories"]
+    }
+
+
+def applies_when_by_category(
+    config: dict[str, object],
+) -> dict[str, dict[str, object] | None]:
+    return {
+        str(category["category_id"]): (
+            category.get("applies_when")
+            if isinstance(category.get("applies_when"), dict)
+            else None
+        )
         for category in config["categories"]
     }
 
@@ -165,6 +189,8 @@ def repair_rules(
     """Repair semantically invalid LLM rules using deterministic config policy."""
     allowed = allowed_values_by_category(config)
     required_flags = required_by_category(config)
+    configured_selection = selection_by_category(config)
+    category_dependencies = applies_when_by_category(config)
     recommended = fallback_recommendations(config, topic_contract)
     rule_list = result.get("rules")
     if not isinstance(rule_list, list):
@@ -194,12 +220,28 @@ def repair_rules(
         if rule is None:
             rule = {
                 "category_id": category_id,
-                "selection": "single",
+                "selection": configured_selection[category_id] or "single",
                 "required": required_flags[category_id],
                 "fallback_value": recommended[category_id],
                 "reason": "Defaulted by pipeline because the LLM omitted this category.",
             }
             warnings.append(f"Added missing rule for category: {category_id}")
+
+        selection = rule.get("selection")
+        if selection not in VALID_CATEGORY_SELECTIONS:
+            repaired_selection = configured_selection[category_id] or "single"
+            rule["selection"] = repaired_selection
+            warnings.append(
+                f"Repaired invalid selection for category: {category_id}"
+            )
+
+        if configured_selection[category_id] is not None:
+            configured = configured_selection[category_id]
+            if rule.get("selection") != configured:
+                rule["selection"] = configured
+                warnings.append(
+                    f"Repaired selection from category config for: {category_id}"
+                )
 
         fallback_value = rule.get("fallback_value")
         if fallback_value not in allowed[category_id]:
@@ -218,6 +260,10 @@ def repair_rules(
         if required_flags[category_id] and not rule.get("required"):
             rule["required"] = True
             warnings.append(f"Repaired required flag for category: {category_id}")
+
+        applies_when = category_dependencies[category_id]
+        if applies_when is not None:
+            rule["applies_when"] = applies_when
 
         repaired_rules.append(rule)
 
@@ -246,6 +292,9 @@ def validate_rules(config: dict[str, object], result: dict[str, object]) -> None
         fallback_value = rule.get("fallback_value")
         if fallback_value not in allowed[category_id]:
             raise ValueError(f"Invalid fallback_value for {category_id}: {fallback_value}")
+
+        if rule.get("selection") not in VALID_CATEGORY_SELECTIONS:
+            raise ValueError(f"Invalid selection for {category_id}: {rule.get('selection')}")
 
         if required_flags[category_id] and not rule.get("required"):
             raise ValueError(f"Required category cannot be made optional: {category_id}")

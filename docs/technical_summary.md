@@ -157,9 +157,10 @@ when no contract is supplied. A contract includes:
 - allowed category values
 - enabled collection providers
 
-Every contract must include the generic categories `main_topic_category` and
-`research_target`. The Mantis export uses these fields to populate its core
-`categoric` column without depending on any specific research topic.
+Tagging categories are topic-specific knowledge dimensions. Generated contracts
+start from example placeholders, then the review-seeded refinement step replaces
+or improves them from review/overview evidence. Category values do not expand
+rule-based screening terms.
 
 The legacy `configs/early_detection_tagging_config.yaml` is still supported by
 the direct normalization step, but orchestrated runs require `--topic-contract`.

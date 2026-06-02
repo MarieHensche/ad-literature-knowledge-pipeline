@@ -16,12 +16,13 @@ $fallback_recommendations_json
 
 For each category, decide:
 - selection: "single" if exactly one value should usually be chosen, or "multi" if more than one value may be valid.
-- required: true if the category should be filled for every included paper, otherwise false.
-- fallback_value: one allowed value from that category to use when the paper is unclear or not enough information is available.
+- required: true if the category should be filled for every applicable included paper, otherwise false.
+- fallback_value: one allowed value from that category to use when the category applies but the paper is unclear or not enough information is available.
 
 Rules:
 - Return exactly one rule per category.
 - Use only the provided category_id values.
+- If a category includes `selection`, use that exact selection.
 - Use the exact fallback_value shown in the per-category fallback recommendations when one is provided.
 - fallback_value must be one of the allowed values for that exact category.
 - Never use "unclear" as fallback_value unless "unclear" is explicitly listed as an allowed value for that category.
@@ -30,4 +31,8 @@ Rules:
 - If "not_reported" is allowed, use it when missing information is the likely issue.
 - Follow category-specific fallback values in the topic fallback policy.
 - If a category is marked required in the input config, keep it required.
+- A category with `applies_when` is a conditional sub-category. It should be
+  empty when its parent category does not contain one of the triggering values.
+- Optional categories may be empty when they are not applicable or not supported
+  by the paper evidence.
 - Do not invent new categories or values.

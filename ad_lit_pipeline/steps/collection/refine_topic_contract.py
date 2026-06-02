@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -14,10 +15,16 @@ from ad_lit_pipeline.llm.schemas import topic_contract_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_refine_topic_contract_prompt
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
+    MAX_CONTRACT_VALIDATION_ATTEMPTS,
     SUPPORTED_PROVIDERS,
     contract_from_model_payload,
+    prompt_with_validation_feedback,
 )
-from ad_lit_pipeline.topics.contract import load_topic_contract, validate_topic_contract
+from ad_lit_pipeline.topics.contract import (
+    load_topic_contract,
+    validate_generated_tagging_quality,
+    validate_topic_contract,
+)
 
 
 STEP = StepSpec(
@@ -66,6 +73,20 @@ def compact_review_overviews(records: list[dict[str, Any]]) -> list[dict[str, An
     return [compact_review_overview(record) for record in records]
 
 
+def merge_refined_tagging(
+    current_contract: dict[str, Any],
+    proposed_contract: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply only review-derived tagging updates to the current contract."""
+    refined = deepcopy(current_contract)
+    proposed_tagging = proposed_contract.get("tagging")
+    if not isinstance(proposed_tagging, dict):
+        raise ValueError("Refined topic contract must contain tagging.")
+
+    refined["tagging"] = deepcopy(proposed_tagging)
+    return refined
+
+
 def call_llm(
     topic_description: str,
     current_contract: dict[str, Any],
@@ -79,20 +100,52 @@ def call_llm(
         current_contract,
         compact_review_overviews(review_overviews),
     )
-    result = client.create_json(
-        model=model,
-        system_message=SYSTEM_MESSAGE,
-        prompt=prompt,
-        schema_name="topic_contract",
-        schema=topic_contract_schema(SUPPORTED_PROVIDERS),
-        step_name=STEP.name,
-        call_id="contract_refinement",
-        trace_writer=trace_writer,
-    )
-    contract = contract_from_model_payload(result.parsed)
-    validate_topic_contract(contract)
-    trace_paths = result.trace_paths.as_list() if result.trace_paths else []
-    return contract, trace_paths
+    trace_paths: list[Path] = []
+    last_error: ValueError | None = None
+
+    for attempt in range(1, MAX_CONTRACT_VALIDATION_ATTEMPTS + 1):
+        attempt_prompt = (
+            prompt
+            if last_error is None
+            else prompt_with_validation_feedback(prompt, last_error)
+        )
+        call_id = (
+            "contract_refinement"
+            if attempt == 1
+            else f"contract_refinement_retry_{attempt}"
+        )
+        result = client.create_json(
+            model=model,
+            system_message=SYSTEM_MESSAGE,
+            prompt=attempt_prompt,
+            schema_name="topic_contract",
+            schema=topic_contract_schema(SUPPORTED_PROVIDERS),
+            step_name=STEP.name,
+            call_id=call_id,
+            trace_writer=trace_writer,
+        )
+        if result.trace_paths:
+            trace_paths.extend(result.trace_paths.as_list())
+
+        try:
+            proposed_contract = contract_from_model_payload(result.parsed)
+            validate_topic_contract(proposed_contract)
+            contract = merge_refined_tagging(current_contract, proposed_contract)
+            validate_topic_contract(contract)
+            validate_generated_tagging_quality(
+                contract,
+                label="Refined topic contract",
+            )
+            return contract, trace_paths
+        except ValueError as error:
+            last_error = error
+            if attempt == MAX_CONTRACT_VALIDATION_ATTEMPTS:
+                raise ValueError(
+                    "Refined topic contract failed validation after "
+                    f"{MAX_CONTRACT_VALIDATION_ATTEMPTS} attempts: {error}"
+                ) from error
+
+    raise ValueError("Refined topic contract failed validation.")
 
 
 def run(

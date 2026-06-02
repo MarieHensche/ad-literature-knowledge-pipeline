@@ -5,7 +5,10 @@ import csv
 from pathlib import Path
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
-from ad_lit_pipeline.topics.contract import REQUIRED_TOPIC_CATEGORY_IDS
+from ad_lit_pipeline.topics.contract import (
+    LEGACY_RESEARCH_TARGET_CATEGORY_ID,
+    LEGACY_TOPIC_FIT_CATEGORY_ID,
+)
 
 
 STEP = StepSpec(
@@ -25,8 +28,8 @@ CORE_COLUMNS = [
     "doi",
 ]
 
-MAIN_TOPIC_CATEGORY_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[0]
-RESEARCH_TARGET_COLUMN = REQUIRED_TOPIC_CATEGORY_IDS[1]
+MAIN_TOPIC_CATEGORY_COLUMN = LEGACY_TOPIC_FIT_CATEGORY_ID
+RESEARCH_TARGET_COLUMN = LEGACY_RESEARCH_TARGET_CATEGORY_ID
 MANTIS_EXPORT_TOPIC_CATEGORIES = {"core_topic", "adjacent_but_relevant"}
 
 
@@ -36,14 +39,10 @@ def read_rows(path: Path) -> list[dict[str, str]]:
 
 
 def tag_columns(fieldnames: list[str]) -> list[str]:
-    excluded = {
-        "paper_id",
-        "title",
-        "year",
-        "doi",
-        "main_knowledge_claim",
-    }
+    if "main_knowledge_claim" in fieldnames:
+        return fieldnames[fieldnames.index("main_knowledge_claim") + 1 :]
 
+    excluded = {"paper_id", "title", "year", "doi"}
     return [field for field in fieldnames if field not in excluded]
 
 
@@ -61,11 +60,14 @@ def selected_values(value: str) -> list[str]:
 
 
 def is_mantis_exportable(row: dict[str, str]) -> bool:
+    if MAIN_TOPIC_CATEGORY_COLUMN not in row:
+        return True
+
     values = selected_values(row.get(MAIN_TOPIC_CATEGORY_COLUMN, ""))
     return any(value in MANTIS_EXPORT_TOPIC_CATEGORIES for value in values)
 
 
-def make_categoric(row: dict[str, str]) -> str:
+def make_categoric(row: dict[str, str], tag_fields: list[str]) -> str:
     category = first_selected_value(row.get(MAIN_TOPIC_CATEGORY_COLUMN, ""))
     target = first_selected_value(row.get(RESEARCH_TARGET_COLUMN, ""))
 
@@ -75,29 +77,29 @@ def make_categoric(row: dict[str, str]) -> str:
     if target:
         return target
 
+    for field in tag_fields:
+        value = first_selected_value(row.get(field, ""))
+        if value:
+            return value
+
     paper_id = row.get("paper_id", "<unknown>")
     raise ValueError(
-        "Mantis export requires a value in "
-        f"{MAIN_TOPIC_CATEGORY_COLUMN} or {RESEARCH_TARGET_COLUMN} "
+        "Mantis export requires at least one knowledge tag value "
         f"for paper_id={paper_id}"
     )
 
 
 def validate_required_columns(fieldnames: list[str], input_path: Path) -> None:
-    missing = [
-        column for column in REQUIRED_TOPIC_CATEGORY_IDS if column not in fieldnames
-    ]
+    required = ["paper_id", "title"]
+    missing = [column for column in required if column not in fieldnames]
     if missing:
-        raise ValueError(
-            f"Mantis export input {input_path} is missing required generic "
-            f"topic column(s): {', '.join(missing)}"
-        )
+        raise ValueError(f"Mantis export input {input_path} is missing: {missing}")
 
 
 def export_row(row: dict[str, str], tag_fields: list[str]) -> dict[str, str]:
     output = {
         "title": row.get("title", ""),
-        "categoric": make_categoric(row),
+        "categoric": make_categoric(row, tag_fields),
         "semantic": make_semantic(row),
         "paper_id": row.get("paper_id", ""),
         "year": row.get("year", ""),

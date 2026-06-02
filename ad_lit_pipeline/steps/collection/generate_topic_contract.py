@@ -13,7 +13,10 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import topic_contract_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_topic_contract_prompt
-from ad_lit_pipeline.topics.contract import validate_topic_contract
+from ad_lit_pipeline.topics.contract import (
+    validate_generated_tagging_quality,
+    validate_topic_contract,
+)
 
 
 STEP = StepSpec(
@@ -25,6 +28,7 @@ STEP = StepSpec(
 )
 
 SYSTEM_MESSAGE = "You draft configurable literature-pipeline topic contracts as strict JSON."
+MAX_CONTRACT_VALIDATION_ATTEMPTS = 2
 
 DEFAULT_BASE_CONTRACT = (
     Path(__file__).resolve().parents[3]
@@ -35,26 +39,17 @@ DEFAULT_BASE_CONTRACT = (
 
 SUPPORTED_PROVIDERS = ["openalex"]
 
-REVIEW_STATUS_CATEGORY = {
-    "values": [
-        "ai_tagged",
-        "human_reviewed",
-        "full_text_needed",
-        "excluded_from_scope",
-    ],
-    "required": True,
-}
 
-MAIN_TOPIC_CATEGORY = {
-    "values": [
-        "core_topic",
-        "adjacent_but_relevant",
-        "out_of_scope",
-        "mixed_or_unclear",
-        "unclear",
-    ],
-    "required": True,
-}
+def prompt_with_validation_feedback(prompt: str, error: ValueError) -> str:
+    """Append semantic validation feedback for one LLM correction attempt."""
+    return (
+        prompt
+        + "\n\nYour previous JSON response failed validation:\n"
+        + str(error)
+        + "\n\nReturn a corrected complete JSON response. For knowledge tagging, "
+        "replace weak or meta categories with concrete topic-specific categories "
+        "and values that can be answered from individual papers."
+    )
 
 
 def read_topic(args: argparse.Namespace) -> str:
@@ -77,7 +72,6 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     categories = tagging.get("categories")
     if isinstance(categories, dict):
-        ensure_required_categories(contract)
         return contract
 
     if not isinstance(categories, list):
@@ -98,13 +92,22 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(values, list):
             raise ValueError(f"Generated category {category_id} needs values.")
 
-        category_payload: dict[str, Any] = {"values": values}
-        if bool(category.get("required")):
-            category_payload["required"] = True
+        category_payload: dict[str, Any] = {
+            "required": bool(category.get("required", False)),
+            "values": values,
+        }
+        description = str(category.get("description") or "").strip()
+        if description:
+            category_payload["description"] = description
+        selection = str(category.get("selection") or "").strip()
+        if selection:
+            category_payload["selection"] = selection
+        applies_when = category.get("applies_when")
+        if isinstance(applies_when, dict):
+            category_payload["applies_when"] = applies_when
         category_map[category_id] = category_payload
 
     tagging["categories"] = category_map
-    ensure_required_categories(contract)
     return contract
 
 
@@ -143,23 +146,6 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
     topic_structure["secondary_topics"] = normalized
 
 
-def ensure_required_categories(contract: dict[str, Any]) -> None:
-    tagging = contract.get("tagging")
-    if not isinstance(tagging, dict):
-        raise ValueError("Generated topic contract must contain tagging.")
-
-    categories = tagging.get("categories")
-    if not isinstance(categories, dict):
-        raise ValueError("Generated tagging.categories must be a mapping.")
-
-    categories["main_topic_category"] = deepcopy(MAIN_TOPIC_CATEGORY)
-    categories["review_status"] = deepcopy(REVIEW_STATUS_CATEGORY)
-
-    fallback_policy = tagging.get("fallback_policy")
-    if isinstance(fallback_policy, dict):
-        fallback_policy["review_status"] = "ai_tagged"
-
-
 def call_llm(
     topic_description: str,
     base_contract: dict[str, Any],
@@ -168,20 +154,43 @@ def call_llm(
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, Any], list[Path]]:
     prompt = render_generate_topic_contract_prompt(topic_description, base_contract)
-    result = client.create_json(
-        model=model,
-        system_message=SYSTEM_MESSAGE,
-        prompt=prompt,
-        schema_name="topic_contract",
-        schema=topic_contract_schema(SUPPORTED_PROVIDERS),
-        step_name=STEP.name,
-        call_id="contract",
-        trace_writer=trace_writer,
-    )
-    contract = contract_from_model_payload(result.parsed)
-    validate_topic_contract(contract)
-    trace_paths = result.trace_paths.as_list() if result.trace_paths else []
-    return contract, trace_paths
+    trace_paths: list[Path] = []
+    last_error: ValueError | None = None
+
+    for attempt in range(1, MAX_CONTRACT_VALIDATION_ATTEMPTS + 1):
+        attempt_prompt = (
+            prompt
+            if last_error is None
+            else prompt_with_validation_feedback(prompt, last_error)
+        )
+        call_id = "contract" if attempt == 1 else f"contract_retry_{attempt}"
+        result = client.create_json(
+            model=model,
+            system_message=SYSTEM_MESSAGE,
+            prompt=attempt_prompt,
+            schema_name="topic_contract",
+            schema=topic_contract_schema(SUPPORTED_PROVIDERS),
+            step_name=STEP.name,
+            call_id=call_id,
+            trace_writer=trace_writer,
+        )
+        if result.trace_paths:
+            trace_paths.extend(result.trace_paths.as_list())
+
+        try:
+            contract = contract_from_model_payload(result.parsed)
+            validate_topic_contract(contract)
+            validate_generated_tagging_quality(contract)
+            return contract, trace_paths
+        except ValueError as error:
+            last_error = error
+            if attempt == MAX_CONTRACT_VALIDATION_ATTEMPTS:
+                raise ValueError(
+                    "Generated topic contract failed validation after "
+                    f"{MAX_CONTRACT_VALIDATION_ATTEMPTS} attempts: {error}"
+                ) from error
+
+    raise ValueError("Generated topic contract failed validation.")
 
 
 def run(

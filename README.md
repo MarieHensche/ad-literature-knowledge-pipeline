@@ -75,9 +75,10 @@ configs/topics/
 
 Topic contracts define the research topic, scope criteria, rule-based screening
 terms, candidate-screening policy, tagging categories, fallback policy, enabled
-providers, and optional seed search queries. Each contract must include the
-generic categories `main_topic_category` and `research_target`; the Mantis
-export uses them to populate its core `categoric` field.
+providers, and optional seed search queries. Tagging categories are
+topic-specific knowledge dimensions. New generated contracts should replace the
+template examples with categories and values inferred from review/overview seed
+papers.
 
 For a new research direction, start from a plain research question and generate
 a draft contract. The generator uses:

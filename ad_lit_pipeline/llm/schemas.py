@@ -123,18 +123,46 @@ def plan_schema(provider_names: list[str]) -> dict[str, Any]:
 
 def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
     """Build the JSON schema for generated topic contract drafts."""
+    category_dependency_schema = {
+        "type": "object",
+        "properties": {
+            "category_id": {"type": "string"},
+            "values": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["category_id", "values"],
+        "additionalProperties": False,
+    }
     category_schema = {
         "type": "object",
         "properties": {
             "category_id": {"type": "string"},
+            "description": {"type": "string"},
             "required": {"type": "boolean"},
+            "selection": {"type": "string", "enum": ["single", "multi"]},
             "values": {
                 "type": "array",
                 "minItems": 2,
                 "items": {"type": "string"},
             },
+            "applies_when": {
+                "type": ["object", "null"],
+                "properties": category_dependency_schema["properties"],
+                "required": category_dependency_schema["required"],
+                "additionalProperties": False,
+            },
         },
-        "required": ["category_id", "required", "values"],
+        "required": [
+            "category_id",
+            "description",
+            "required",
+            "selection",
+            "values",
+            "applies_when",
+        ],
         "additionalProperties": False,
     }
     main_topic_schema = {
@@ -273,15 +301,11 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
                                 "type": "boolean"
                             },
                             "missing_information_value": {"type": "string"},
-                            "knowledge_confidence": {"type": "string"},
-                            "review_status": {"type": "string"},
                         },
                         "required": [
                             "prefer_unclear_when_allowed",
                             "prefer_mixed_or_unclear_when_unclear_missing",
                             "missing_information_value",
-                            "knowledge_confidence",
-                            "review_status",
                         ],
                         "additionalProperties": False,
                     },

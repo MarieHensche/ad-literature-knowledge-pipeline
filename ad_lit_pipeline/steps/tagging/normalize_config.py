@@ -9,9 +9,9 @@ import yaml
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.topics.contract import (
+    VALID_CATEGORY_SELECTIONS,
     load_topic_contract,
     tagging_config_from_contract,
-    validate_required_topic_categories,
 )
 
 
@@ -44,6 +44,33 @@ def normalize_values(values: object) -> list[dict[str, str]]:
     return normalized
 
 
+def normalize_applies_when(
+    category_id: str,
+    applies_when: object,
+) -> dict[str, object] | None:
+    if applies_when in (None, {}):
+        return None
+
+    if not isinstance(applies_when, dict):
+        raise ValueError(f"applies_when must be a dictionary: {category_id}")
+
+    parent_id = clean_text(applies_when.get("category_id"))
+    values = applies_when.get("values")
+    if not parent_id:
+        raise ValueError(f"applies_when.category_id is required: {category_id}")
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"applies_when.values must be a non-empty list: {category_id}")
+
+    normalized_values = [clean_text(value) for value in values]
+    if not all(normalized_values):
+        raise ValueError(f"applies_when.values must contain strings: {category_id}")
+
+    return {
+        "category_id": parent_id,
+        "values": normalized_values,
+    }
+
+
 def normalize_category(category_id: str, category: object) -> dict[str, object]:
     if not isinstance(category, dict):
         raise ValueError(f"Category must be a dictionary: {category_id}")
@@ -53,13 +80,64 @@ def normalize_category(category_id: str, category: object) -> dict[str, object]:
     if not values:
         raise ValueError(f"Category has no values: {category_id}")
 
-    return {
+    selection = clean_text(category.get("selection"))
+    if selection and selection not in VALID_CATEGORY_SELECTIONS:
+        allowed = ", ".join(sorted(VALID_CATEGORY_SELECTIONS))
+        raise ValueError(
+            f"Category selection must be one of {allowed}: {category_id}"
+        )
+
+    normalized: dict[str, object] = {
         "category_id": clean_text(category_id),
         "label": clean_text(category.get("label") or category_id.replace("_", " ")),
         "description": clean_text(category.get("description")),
         "required": bool(category.get("required", False)),
         "allowed_values": values,
     }
+
+    if selection:
+        normalized["selection"] = selection
+
+    applies_when = normalize_applies_when(category_id, category.get("applies_when"))
+    if applies_when is not None:
+        normalized["applies_when"] = applies_when
+
+    return normalized
+
+
+def validate_normalized_dependencies(categories: list[dict[str, object]]) -> None:
+    allowed_by_category = {
+        str(category["category_id"]): {
+            str(value["value"]) for value in category.get("allowed_values", [])
+        }
+        for category in categories
+    }
+
+    for category in categories:
+        category_id = str(category["category_id"])
+        applies_when = category.get("applies_when")
+        if not isinstance(applies_when, dict):
+            continue
+
+        parent_id = str(applies_when["category_id"])
+        if parent_id == category_id:
+            raise ValueError(f"applies_when cannot reference itself: {category_id}")
+        if parent_id not in allowed_by_category:
+            raise ValueError(
+                f"applies_when references unknown category for {category_id}: "
+                f"{parent_id}"
+            )
+
+        invalid_values = [
+            value
+            for value in applies_when.get("values", [])
+            if value not in allowed_by_category[parent_id]
+        ]
+        if invalid_values:
+            raise ValueError(
+                f"applies_when references invalid value(s) for {category_id}: "
+                f"{invalid_values}"
+            )
 
 
 def load_config(config_path: Path) -> dict[str, object]:
@@ -83,7 +161,6 @@ def normalize_config(config: dict[str, object]) -> dict[str, object]:
     categories = config["categories"]
     if not isinstance(categories, dict):
         raise ValueError("Tagging config must contain categories.")
-    validate_required_topic_categories(categories)
 
     normalized_topic = {
         "title": clean_text(topic.get("title")),
@@ -100,6 +177,7 @@ def normalize_config(config: dict[str, object]) -> dict[str, object]:
         normalize_category(category_id, category)
         for category_id, category in categories.items()
     ]
+    validate_normalized_dependencies(normalized_categories)
 
     return {
         "research_topic": normalized_topic,
