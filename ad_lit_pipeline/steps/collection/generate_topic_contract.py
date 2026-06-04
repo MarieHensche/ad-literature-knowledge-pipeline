@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from copy import deepcopy
 from pathlib import Path
@@ -14,6 +15,7 @@ from ad_lit_pipeline.llm.schemas import topic_contract_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_topic_contract_prompt
 from ad_lit_pipeline.topics.contract import (
+    normalize_tagging_label,
     validate_generated_tagging_quality,
     validate_topic_contract,
 )
@@ -28,7 +30,7 @@ STEP = StepSpec(
 )
 
 SYSTEM_MESSAGE = "You draft configurable literature-pipeline topic contracts as strict JSON."
-MAX_CONTRACT_VALIDATION_ATTEMPTS = 2
+MAX_CONTRACT_VALIDATION_ATTEMPTS = 3
 
 DEFAULT_BASE_CONTRACT = (
     Path(__file__).resolve().parents[3]
@@ -40,16 +42,55 @@ DEFAULT_BASE_CONTRACT = (
 SUPPORTED_PROVIDERS = ["openalex"]
 
 
-def prompt_with_validation_feedback(prompt: str, error: ValueError) -> str:
+def prompt_with_validation_feedback(
+    prompt: str,
+    error: ValueError,
+    best_contract: dict[str, Any] | None = None,
+) -> str:
     """Append semantic validation feedback for one LLM correction attempt."""
-    return (
+    feedback = (
         prompt
         + "\n\nYour previous JSON response failed validation:\n"
         + str(error)
-        + "\n\nReturn a corrected complete JSON response. For knowledge tagging, "
-        "replace weak or meta categories with concrete topic-specific categories "
-        "and values that can be answered from individual papers."
+        + "\n\nReturn a corrected complete JSON response. Before returning, "
+        "check every validation path above and make sure the rejected category "
+        "ids and values are gone or corrected.\n"
+        "- Replace weak, meta, or generic boilerplate categories with concrete "
+        "topic-specific knowledge categories that can be answered from "
+        "individual papers.\n"
+        "- Do not keep generic category ids such as `target_population`, "
+        "`study_design`, `study_type`, or `data_source_type`. If the distinction "
+        "is truly central, replace it with a review-derived category id whose "
+        "words name the topic concept, setting, signal, intervention, exposure, "
+        "or outcome.\n"
+        "- Use compact lowercase snake_case category ids and values. Convert "
+        "hyphens, spaces, slashes, punctuation, and title case; for example, "
+        "`self-help_resources` must become `self_help_resources` or a more "
+        "specific topic-derived value.\n"
+        "- The `knowledge_goal` category must be an exhaustive root partition "
+        "with role-like values, not vague benefit phrases such as "
+        "`improving_x`, `enhancing_y`, or `supporting_z`."
     )
+    if best_contract is None:
+        return feedback
+
+    return (
+        feedback
+        + "\n\nBest response so far, after deterministic snake_case cleanup:\n"
+        + json.dumps(best_contract, indent=2, ensure_ascii=False)
+        + "\n\nRepair this best response minimally. Keep the valid topic-specific "
+        "categories and replace only the categories or values named in the "
+        "validation feedback above."
+    )
+
+
+def validation_error_score(error: ValueError) -> int:
+    """Prefer retry feedback from the smallest semantic validation failure."""
+    message = str(error)
+    issue_count = message.count("\n- ")
+    if issue_count:
+        return issue_count
+    return 1000
 
 
 def read_topic(args: argparse.Namespace) -> str:
@@ -82,7 +123,7 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(category, dict):
             raise ValueError("Each generated tagging category must be an object.")
 
-        category_id = str(category.get("category_id") or "").strip()
+        category_id = normalize_tagging_label(str(category.get("category_id") or ""))
         if not category_id:
             raise ValueError("Each generated tagging category needs category_id.")
         if category_id in category_map:
@@ -91,10 +132,14 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         values = category.get("values")
         if not isinstance(values, list):
             raise ValueError(f"Generated category {category_id} needs values.")
+        normalized_values = [
+            normalize_tagging_label(value) if isinstance(value, str) else value
+            for value in values
+        ]
 
         category_payload: dict[str, Any] = {
             "required": bool(category.get("required", False)),
-            "values": values,
+            "values": normalized_values,
         }
         description = str(category.get("description") or "").strip()
         if description:
@@ -104,7 +149,17 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
             category_payload["selection"] = selection
         applies_when = category.get("applies_when")
         if isinstance(applies_when, dict):
-            category_payload["applies_when"] = applies_when
+            normalized_applies_when = dict(applies_when)
+            normalized_applies_when["category_id"] = normalize_tagging_label(
+                str(applies_when.get("category_id") or "")
+            )
+            trigger_values = applies_when.get("values")
+            if isinstance(trigger_values, list):
+                normalized_applies_when["values"] = [
+                    normalize_tagging_label(value) if isinstance(value, str) else value
+                    for value in trigger_values
+                ]
+            category_payload["applies_when"] = normalized_applies_when
         category_map[category_id] = category_payload
 
     tagging["categories"] = category_map
@@ -156,12 +211,15 @@ def call_llm(
     prompt = render_generate_topic_contract_prompt(topic_description, base_contract)
     trace_paths: list[Path] = []
     last_error: ValueError | None = None
+    best_error: ValueError | None = None
+    best_error_score = 1000
+    best_contract: dict[str, Any] | None = None
 
     for attempt in range(1, MAX_CONTRACT_VALIDATION_ATTEMPTS + 1):
         attempt_prompt = (
             prompt
-            if last_error is None
-            else prompt_with_validation_feedback(prompt, last_error)
+            if best_error is None
+            else prompt_with_validation_feedback(prompt, best_error, best_contract)
         )
         call_id = "contract" if attempt == 1 else f"contract_retry_{attempt}"
         result = client.create_json(
@@ -178,16 +236,24 @@ def call_llm(
             trace_paths.extend(result.trace_paths.as_list())
 
         try:
+            contract: dict[str, Any] | None = None
             contract = contract_from_model_payload(result.parsed)
             validate_topic_contract(contract)
             validate_generated_tagging_quality(contract)
             return contract, trace_paths
         except ValueError as error:
             last_error = error
+            score = validation_error_score(error)
+            if score < best_error_score:
+                best_error = error
+                best_error_score = score
+                if contract is not None:
+                    best_contract = contract
             if attempt == MAX_CONTRACT_VALIDATION_ATTEMPTS:
                 raise ValueError(
                     "Generated topic contract failed validation after "
-                    f"{MAX_CONTRACT_VALIDATION_ATTEMPTS} attempts: {error}"
+                    f"{MAX_CONTRACT_VALIDATION_ATTEMPTS} attempts: "
+                    f"{best_error or error}"
                 ) from error
 
     raise ValueError("Generated topic contract failed validation.")

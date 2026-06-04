@@ -12,7 +12,9 @@ LEGACY_TOPIC_FIT_CATEGORY_ID = "main_topic_category"
 LEGACY_RESEARCH_TARGET_CATEGORY_ID = "research_target"
 REQUIRED_TOPIC_CATEGORY_IDS: tuple[str, ...] = ()
 VALID_CATEGORY_SELECTIONS = {"single", "multi"}
-GENERATED_TAGGING_MIN_CATEGORIES = 4
+GENERATED_TAGGING_MIN_CATEGORIES = 6
+KNOWLEDGE_GOAL_CATEGORY_ID = "knowledge_goal"
+GENERATED_TAG_LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 
 FALLBACK_TAG_VALUES = {
     "ambiguous",
@@ -67,6 +69,67 @@ META_TAGGING_VALUES = {
     "technology",
     "tool",
 }
+BOILERPLATE_CATEGORY_IDS = {
+    "data_source",
+    "data_source_type",
+    "participant_population",
+    "participants",
+    "population",
+    "population_group",
+    "research_design",
+    "study_population",
+    "study_design",
+    "study_type",
+    "target_population",
+}
+BOILERPLATE_CATEGORY_VALUES = {
+    "adolescents",
+    "adults",
+    "case_control",
+    "children",
+    "cohort",
+    "cross_sectional",
+    "elderly",
+    "experimental",
+    "general_population",
+    "humans",
+    "longitudinal",
+    "meta_analysis",
+    "mixed_methods",
+    "observational",
+    "patients",
+    "qualitative",
+    "quantitative",
+    "review",
+    "survey",
+    "systematic_review",
+}
+GENERATED_CATCHALL_TAG_VALUES = {
+    *FALLBACK_TAG_VALUES,
+    "miscellaneous",
+    "other",
+    "not_specified",
+}
+WEAK_KNOWLEDGE_GOAL_PREFIXES = (
+    "addressing_",
+    "assessing_",
+    "decreasing_",
+    "enhancing_",
+    "evaluating_",
+    "exploring_",
+    "facilitating_",
+    "improving_",
+    "increasing_",
+    "investigating_",
+    "measuring_",
+    "optimizing_",
+    "promoting_",
+    "reducing_",
+    "strengthening_",
+    "studying_",
+    "supporting_",
+    "understanding_",
+)
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -344,6 +407,11 @@ def normalize_tagging_label(value: str) -> str:
     return re.sub(r"_+", "_", normalized)
 
 
+def is_generated_tag_label(value: str) -> bool:
+    """Return whether a generated tag id/value is stable lowercase snake_case."""
+    return GENERATED_TAG_LABEL_PATTERN.fullmatch(value) is not None
+
+
 def substantive_tag_values(values: list[Any]) -> list[str]:
     """Return non-fallback values from a category value list."""
     substantive = []
@@ -381,11 +449,21 @@ def generated_tagging_quality_issues(contract: dict[str, Any]) -> list[str]:
         values = require_list(
             category_map.get("values"), f"tagging.categories.{category_id}.values"
         )
+        normalized_all_values = [
+            normalize_tagging_label(value)
+            for value in values
+            if isinstance(value, str)
+        ]
         substantive_values = substantive_tag_values(values)
         normalized_values = [
             normalize_tagging_label(value)
             for value in substantive_values
             if isinstance(value, str)
+        ]
+        catchall_values = [
+            value
+            for value, normalized in zip(values, normalized_all_values)
+            if normalized in GENERATED_CATCHALL_TAG_VALUES
         ]
         meta_values = [
             value
@@ -398,11 +476,30 @@ def generated_tagging_quality_issues(contract: dict[str, Any]) -> list[str]:
                 f"tagging.categories.{category_id} is a meta-category. "
                 "Use separate concrete categories instead."
             )
-
+        if not is_generated_tag_label(str(category_id)):
+            issues.append(
+                f"tagging.categories.{category_id} must use lowercase snake_case "
+                "so generated tags stay stable in CSV exports and downstream "
+                "analysis."
+            )
+        if category_label in BOILERPLATE_CATEGORY_IDS:
+            issues.append(
+                f"tagging.categories.{category_id} is a generic boilerplate "
+                "category. Use a review-derived, topic-specific category id "
+                "and values instead, or omit the category."
+            )
         if len(substantive_values) < 2:
             issues.append(
                 f"tagging.categories.{category_id} needs at least two substantive "
                 "non-fallback values."
+            )
+        if catchall_values:
+            issues.append(
+                f"tagging.categories.{category_id}.values contains catch-all "
+                f"value(s) {catchall_values}. Generated knowledge category "
+                "values should be concrete, exhaustive, and mutually distinct; "
+                "make categories optional or conditional instead of adding "
+                "unclear/not_reported/other values."
             )
 
         if len(meta_values) >= 2 or (
@@ -413,7 +510,15 @@ def generated_tagging_quality_issues(contract: dict[str, Any]) -> list[str]:
                 f"category-type values {meta_values}. Split these into concrete "
                 "categories with topic-specific values."
             )
-
+        non_snake_values = [
+            value for value in substantive_values if not is_generated_tag_label(value)
+        ]
+        if non_snake_values:
+            issues.append(
+                f"tagging.categories.{category_id}.values contains non-snake-case "
+                f"value(s) {non_snake_values}. Use compact lowercase snake_case "
+                "values such as intervention_effectiveness."
+            )
         applies_when = category_map.get("applies_when")
         if applies_when in (None, {}):
             continue
@@ -444,7 +549,95 @@ def generated_tagging_quality_issues(contract: dict[str, Any]) -> list[str]:
                 "values for sub-category dependencies."
             )
 
+    knowledge_goal = categories.get(KNOWLEDGE_GOAL_CATEGORY_ID)
+    if not isinstance(knowledge_goal, dict):
+        issues.append(
+            f"tagging.categories must include `{KNOWLEDGE_GOAL_CATEGORY_ID}` as "
+            "the required single-selection root category. Its values should be "
+            "the main exhaustive, mutually exclusive knowledge-goal partition "
+            "for the topic."
+        )
+    else:
+        applies_when = knowledge_goal.get("applies_when")
+        if (
+            knowledge_goal.get("required") is not True
+            or knowledge_goal.get("selection") != "single"
+            or applies_when not in (None, {})
+        ):
+            issues.append(
+                f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID} must be "
+                "required=true, selection=single, and applies_when=null."
+            )
+        values = require_list(
+            knowledge_goal.get("values"),
+            f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values",
+        )
+        substantive_values = substantive_tag_values(values)
+        if len(substantive_values) < 3:
+            issues.append(
+                f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values must "
+                "contain at least three concrete partition values so the root "
+                "category is not too coarse."
+            )
+        vague_values = [
+            value
+            for value in substantive_values
+            if normalize_tagging_label(value).startswith(WEAK_KNOWLEDGE_GOAL_PREFIXES)
+        ]
+        if vague_values:
+            issues.append(
+                f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values contains "
+                f"vague benefit/action value(s) {vague_values}. The root category "
+                "must partition papers by their knowledge role, such as "
+                "prevention, screening_detection, treatment_effectiveness, "
+                "implementation_acceptability, prognosis, diagnosis, or other "
+                "review-derived role values."
+            )
+
     return issues
+
+
+def generated_tagging_quality_warnings(contract: dict[str, Any]) -> list[str]:
+    """Find soft quality concerns in generated tagging ontologies.
+
+    These warnings identify generic-looking labels that should be avoided by the
+    prompt, but should not block a run. Some topics can legitimately need a
+    population or design dimension when the values are review-derived.
+    """
+    warnings: list[str] = []
+    tagging = require_mapping(contract.get("tagging"), "tagging")
+    categories = require_mapping(tagging.get("categories"), "tagging.categories")
+
+    for category_id, category in categories.items():
+        category_label = normalize_tagging_label(str(category_id))
+        category_map = require_mapping(category, f"tagging.categories.{category_id}")
+        values = require_list(
+            category_map.get("values"), f"tagging.categories.{category_id}.values"
+        )
+        substantive_values = substantive_tag_values(values)
+        normalized_values = [
+            normalize_tagging_label(value)
+            for value in substantive_values
+            if isinstance(value, str)
+        ]
+
+        if category_label in BOILERPLATE_CATEGORY_IDS:
+            warnings.append(
+                f"tagging.categories.{category_id} looks like a generic "
+                "boilerplate category. Prefer a review-derived, topic-specific "
+                "category id when possible."
+            )
+
+        if substantive_values and all(
+            value in BOILERPLATE_CATEGORY_VALUES for value in normalized_values
+        ):
+            warnings.append(
+                f"tagging.categories.{category_id}.values look like generic "
+                "boilerplate values. Prefer values grounded in the topic and "
+                "review evidence."
+            )
+
+    return warnings
 
 
 def validate_generated_tagging_quality(

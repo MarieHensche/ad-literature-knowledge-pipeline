@@ -110,9 +110,11 @@ steps derive the planner and candidate-screening topic text from the contract's
 Generated topic contracts include `topic_structure`, which defines one
 non-replaceable title anchor, main topic components with broad equivalent terms,
 and secondary replacement terms for non-anchor components. Collection fetches a
-scaled raw-candidate budget for the requested `--max-results`, screens candidate
-titles against this structure, and exports selected papers in tier order: anchor
-plus all main topics first, then anchor plus secondary substitutions.
+scaled raw-candidate budget for the requested `--max-results` (currently four
+times the target count, with a floor of 30 and cap of 5000), screens up to that
+many candidate titles against this structure, and exports selected papers in
+tier order: anchor plus all main topics first, then anchor plus secondary
+substitutions.
 
 ## Script-To-Module Map
 
@@ -159,8 +161,24 @@ when no contract is supplied. A contract includes:
 
 Tagging categories are topic-specific knowledge dimensions. Generated contracts
 start from example placeholders, then the review-seeded refinement step replaces
-or improves them from review/overview evidence. Category values do not expand
-rule-based screening terms.
+or improves them from review/overview evidence. New generated/refined contracts
+must contain at least six concrete knowledge categories, reject generic
+meta-categories, and include a required single-selection `knowledge_goal` root
+category whose concrete values form a complete, mutually exclusive
+topic-specific partition of included papers. The `knowledge_goal` values are
+inferred from the topic/reviews and should use `topic_structure.main_topics` as
+scaffolding for the main knowledge roles papers play around the topic. Details
+that apply only under one root value should be represented as conditional
+categories with `applies_when`.
+Generated values should avoid `unclear`, `not_reported`, `mixed_or_unclear`,
+and `other`; missing or inapplicable details should usually be represented by
+optional or conditional categories instead. The audit step checks observed
+tag distributions after paper tagging: unused values and highly dominant values
+are reported, and bad `knowledge_goal` partitions block export so a collapsed
+root ontology is not treated as Mantis-ready. The quality checks also warn
+about boilerplate labels such as `study_design` and `population_group` that
+should be rewritten as topic-specific review-derived dimensions. Category values
+do not expand rule-based screening terms.
 
 The legacy `configs/early_detection_tagging_config.yaml` is still supported by
 the direct normalization step, but orchestrated runs require `--topic-contract`.
@@ -189,6 +207,12 @@ When a trace directory is provided, or when an orchestrated run uses the default
 ```
 
 The run manifest records these trace paths.
+
+OpenAI calls are bounded by `OPENAI_TIMEOUT_SECONDS` and
+`OPENAI_MAX_RETRIES`. The defaults are 45 seconds and zero SDK retries, so one
+slow title-screening or paper-tagging request cannot stall an entire run for many
+minutes. These values can be overridden in `.env` or the shell for specific
+tests.
 
 ## Manifests And Resumability
 

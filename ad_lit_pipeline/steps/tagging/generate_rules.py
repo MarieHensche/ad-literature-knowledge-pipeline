@@ -113,8 +113,8 @@ def recommended_fallback_value(
     category_id: str,
     allowed_values: set[str],
     topic_contract: dict[str, object] | None = None,
-) -> str:
-    """Pick a deterministic legal fallback value for a category."""
+) -> str | None:
+    """Pick a deterministic legal fallback value only when the ontology has one."""
     policy = fallback_policy(topic_contract)
 
     explicit = policy.get(category_id)
@@ -134,16 +134,13 @@ def recommended_fallback_value(
     if isinstance(missing_value, str) and missing_value in allowed_values:
         return missing_value
 
-    if not allowed_values:
-        raise ValueError(f"Category has no allowed fallback values: {category_id}")
-
-    return sorted(allowed_values)[0]
+    return None
 
 
 def fallback_recommendations(
     config: dict[str, object],
     topic_contract: dict[str, object] | None = None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     allowed = allowed_values_by_category(config)
     return {
         category_id: recommended_fallback_value(
@@ -244,18 +241,31 @@ def repair_rules(
                 )
 
         fallback_value = rule.get("fallback_value")
-        if fallback_value not in allowed[category_id]:
+        recommended_fallback = recommended[category_id]
+        if fallback_value != recommended_fallback:
             rule["fallback_value"] = recommended[category_id]
             reason = str(rule.get("reason") or "").strip()
             repair_reason = (
-                " Pipeline replaced an invalid fallback_value with the "
-                "topic-contract recommendation."
+                " Pipeline replaced fallback_value with the topic-contract "
+                "recommendation so required exhaustive categories do not get a "
+                "biased default label."
             )
             rule["reason"] = f"{reason}{repair_reason}".strip()
-            warnings.append(
-                "Repaired invalid fallback_value for "
-                f"{category_id}: {fallback_value} -> {recommended[category_id]}"
-            )
+            if fallback_value is None:
+                warnings.append(
+                    "Added recommended fallback_value for "
+                    f"{category_id}: None -> {recommended_fallback}"
+                )
+            elif fallback_value not in allowed[category_id]:
+                warnings.append(
+                    "Repaired invalid fallback_value for "
+                    f"{category_id}: {fallback_value} -> {recommended_fallback}"
+                )
+            else:
+                warnings.append(
+                    "Repaired biased fallback_value for "
+                    f"{category_id}: {fallback_value} -> {recommended_fallback}"
+                )
 
         if required_flags[category_id] and not rule.get("required"):
             rule["required"] = True
@@ -290,7 +300,7 @@ def validate_rules(config: dict[str, object], result: dict[str, object]) -> None
         seen.add(category_id)
 
         fallback_value = rule.get("fallback_value")
-        if fallback_value not in allowed[category_id]:
+        if fallback_value is not None and fallback_value not in allowed[category_id]:
             raise ValueError(f"Invalid fallback_value for {category_id}: {fallback_value}")
 
         if rule.get("selection") not in VALID_CATEGORY_SELECTIONS:

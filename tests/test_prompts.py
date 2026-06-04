@@ -56,7 +56,17 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "borderline or tangentially relevant candidates are included" in prompt
     assert "collection.search_queries" in prompt
     assert "multiple topic-specific knowledge tagging categories" in prompt
-    assert "at least 4 knowledge tagging categories" in prompt
+    assert "at least 6 knowledge tagging categories" in prompt
+    assert "category_id `knowledge_goal`" in prompt
+    assert "topic_structure.main_topics" in prompt
+    assert "complete, mutually exclusive partition" in prompt
+    assert "mental distribution check" in prompt
+    assert "no single value should be so broad" in prompt
+    assert "conditional sub-categories" in prompt
+    assert "Do not add `unclear`, `mixed_or_unclear`, `not_reported`, or `other`" in prompt
+    assert "generic boilerplate categories" in prompt
+    assert "generic method or participant buckets" in prompt
+    assert "topic-specific id and values" in prompt
     assert "multiple allowed values" in prompt
     assert "examples only" in prompt
     assert "`applies_when`" in prompt
@@ -79,7 +89,17 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
 
     assert "Review and overview seed papers" in prompt
     assert "knowledge categories" in prompt
-    assert "at least 4 knowledge tagging categories" in prompt
+    assert "at least 6 knowledge tagging categories" in prompt
+    assert "category_id `knowledge_goal`" in prompt
+    assert "topic_structure.main_topics" in prompt
+    assert "complete, mutually exclusive partition" in prompt
+    assert "mental distribution check" in prompt
+    assert "no single value should be so broad" in prompt
+    assert "conditional sub-categories" in prompt
+    assert "Do not add `unclear`, `mixed_or_unclear`, `not_reported`, or `other`" in prompt
+    assert "generic boilerplate categories" in prompt
+    assert "generic method or participant buckets" in prompt
+    assert "topic-specific id and values" in prompt
     assert "multiple allowed values" in prompt
     assert "`applies_when`" in prompt
     assert "only about knowledge tagging" in prompt
@@ -114,3 +134,6 @@ def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
 
     assert "Do not return review_status" in prompt
     assert 'Set review_status to ["ai_tagged"]' not in prompt
+    assert "Do not combine fallback values" in prompt
+    assert "required categories with no fallback_value" in prompt
+    assert "Do not select the broadest or first-listed value" in prompt

@@ -12,7 +12,11 @@ from ad_lit_pipeline.llm.schemas import paper_tags_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_tag_paper_prompt
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
-from ad_lit_pipeline.topics.contract import load_topic_contract
+from ad_lit_pipeline.topics.contract import (
+    FALLBACK_TAG_VALUES,
+    load_topic_contract,
+    normalize_tagging_label,
+)
 
 
 STEP = StepSpec(
@@ -93,6 +97,17 @@ def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]
             value["value"] for value in category.get("allowed_values", [])
         }
     return allowed
+
+
+def is_fallback_tag_value(value: object) -> bool:
+    return normalize_tagging_label(str(value or "")) in FALLBACK_TAG_VALUES
+
+
+def remove_fallback_values_when_concrete_values_exist(values: list[object]) -> list[object]:
+    concrete_values = [value for value in values if not is_fallback_tag_value(value)]
+    if concrete_values and len(concrete_values) != len(values):
+        return concrete_values
+    return values
 
 
 def applies_when_for_category(
@@ -192,6 +207,9 @@ def validate_tagged_row(
         invalid = [value for value in values if value not in allowed_values]
         if invalid:
             raise ValueError(f"{category_id} has invalid value(s): {invalid}")
+
+        values = remove_fallback_values_when_concrete_values_exist(values)
+        tagged[category_id] = values
 
         rule = rule_map[category_id]
         if rule["selection"] == "single" and len(values) > 1:

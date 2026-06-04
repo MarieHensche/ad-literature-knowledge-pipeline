@@ -12,26 +12,28 @@ from ad_lit_pipeline.core.registry import (
     CONTRACT_BOOTSTRAP_PIPELINE,
 )
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
-from ad_lit_pipeline.steps.collection import (
-    deduplicate,
-    export_included,
-    fetch_candidates,
-    fetch_review_overviews,
-    generate_topic_contract,
-    plan_search,
-    refine_topic_contract,
-)
-from ad_lit_pipeline.steps.screening import title_relevance
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
 SEARCH_BUDGET_HARD_CAP = 5000
+SEARCH_BUDGET_MINIMUM = 30
+SEARCH_BUDGET_MULTIPLIER = 4
+DEFAULT_MAX_REVIEW_OVERVIEWS = 5
+DEFAULT_BASE_CONTRACT = (
+    Path(__file__).resolve().parents[2]
+    / "configs"
+    / "topics"
+    / "topic_contract_template.yaml"
+)
 
 
 def candidate_search_budget(max_results: int | None) -> int | None:
     if max_results is None:
         return None
-    return min(max(100, max_results * 10), SEARCH_BUDGET_HARD_CAP)
+    return min(
+        max(SEARCH_BUDGET_MINIMUM, max_results * SEARCH_BUDGET_MULTIPLIER),
+        SEARCH_BUDGET_HARD_CAP,
+    )
 
 
 def explain(collection: str) -> None:
@@ -103,59 +105,100 @@ def build_step_functions(
 ) -> dict[str, object]:
     artifacts = collection_artifacts(args.collection)
 
-    return {
-        "generate_topic_contract": lambda: generate_topic_contract.run(
+    def run_generate_topic_contract() -> object:
+        from ad_lit_pipeline.steps.collection import generate_topic_contract
+
+        return generate_topic_contract.run(
             topic_description,
             topic_contract_path,
             args.model,
             Path(args.base_contract),
             trace_dir=trace_dir,
             overwrite=args.overwrite_topic_contract,
-        ),
-        "fetch_review_overviews": lambda: fetch_review_overviews.run(
+        )
+
+    def run_fetch_review_overviews() -> object:
+        from ad_lit_pipeline.steps.collection import fetch_review_overviews
+
+        return fetch_review_overviews.run(
             topic_contract_path,
             artifacts.review_overviews_jsonl,
             args.max_review_overviews,
             mailto=args.mailto,
-        ),
-        "refine_topic_contract": lambda: refine_topic_contract.run(
+        )
+
+    def run_refine_topic_contract() -> object:
+        from ad_lit_pipeline.steps.collection import refine_topic_contract
+
+        return refine_topic_contract.run(
             topic_description,
             topic_contract_path,
             artifacts.review_overviews_jsonl,
             args.model,
             trace_dir=trace_dir,
-        ),
-        "plan_search": lambda: plan_search.run(
+        )
+
+    def run_plan_search() -> object:
+        from ad_lit_pipeline.steps.collection import plan_search
+
+        return plan_search.run(
             topic_description,
             artifacts.plan_json,
             args.max_results,
             args.model,
             topic_contract_path,
             trace_dir=trace_dir,
-        ),
-        "fetch_candidates": lambda: fetch_candidates.run(
+        )
+
+    def run_fetch_candidates() -> object:
+        from ad_lit_pipeline.steps.collection import fetch_candidates
+
+        return fetch_candidates.run(
             artifacts.plan_json,
             artifacts.candidates_jsonl,
             candidate_search_budget(args.max_results),
             mailto=args.mailto,
-        ),
-        "deduplicate_candidates": lambda: deduplicate.run(
+        )
+
+    def run_deduplicate_candidates() -> object:
+        from ad_lit_pipeline.steps.collection import deduplicate
+
+        return deduplicate.run(
             [artifacts.candidates_jsonl],
             artifacts.deduped_candidates_jsonl,
-        ),
-        "screen_title_relevance": lambda: title_relevance.run(
+        )
+
+    def run_screen_title_relevance() -> object:
+        from ad_lit_pipeline.steps.screening import title_relevance
+
+        return title_relevance.run(
             artifacts.deduped_candidates_jsonl,
             artifacts.candidate_screening_csv,
             args.model,
             topic_contract_path,
+            limit=candidate_search_budget(args.max_results),
             trace_dir=trace_dir,
-        ),
-        "export_included_candidates": lambda: export_included.run(
+        )
+
+    def run_export_included_candidates() -> object:
+        from ad_lit_pipeline.steps.collection import export_included
+
+        return export_included.run(
             artifacts.deduped_candidates_jsonl,
             artifacts.candidate_screening_csv,
             artifacts.papers_csv,
             args.max_results,
-        ),
+        )
+
+    return {
+        "generate_topic_contract": run_generate_topic_contract,
+        "fetch_review_overviews": run_fetch_review_overviews,
+        "refine_topic_contract": run_refine_topic_contract,
+        "plan_search": run_plan_search,
+        "fetch_candidates": run_fetch_candidates,
+        "deduplicate_candidates": run_deduplicate_candidates,
+        "screen_title_relevance": run_screen_title_relevance,
+        "export_included_candidates": run_export_included_candidates,
     }
 
 
@@ -239,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--max-review-overviews",
         type=int,
-        default=fetch_review_overviews.DEFAULT_MAX_REVIEWS,
+        default=DEFAULT_MAX_REVIEW_OVERVIEWS,
         help="Review/overview seed count used when generating a contract.",
     )
     run_parser.add_argument(
@@ -270,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "--base-contract",
-        default=str(generate_topic_contract.DEFAULT_BASE_CONTRACT),
+        default=str(DEFAULT_BASE_CONTRACT),
         help="Base topic contract template used when generating a contract.",
     )
     run_parser.add_argument(

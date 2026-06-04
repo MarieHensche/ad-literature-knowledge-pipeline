@@ -311,7 +311,7 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
                     },
                     "categories": {
                         "type": "array",
-                        "minItems": 4,
+                        "minItems": 6,
                         "items": category_schema,
                     },
                 },
@@ -451,7 +451,7 @@ RULE_RESPONSE_SCHEMA: dict[str, Any] = {
                     "category_id": {"type": "string"},
                     "selection": {"type": "string", "enum": ["single", "multi"]},
                     "required": {"type": "boolean"},
-                    "fallback_value": {"type": "string"},
+                    "fallback_value": {"type": ["string", "null"]},
                     "reason": {"type": "string"},
                 },
                 "required": [

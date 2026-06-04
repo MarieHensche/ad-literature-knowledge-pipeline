@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ad_lit_pipeline.llm.schemas import text_format
 from ad_lit_pipeline.llm.trace import LLMTracePaths, LLMTraceWriter
+
+
+DEFAULT_OPENAI_TIMEOUT_SECONDS = 45.0
+DEFAULT_OPENAI_MAX_RETRIES = 0
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,20 @@ class JSONLLMClient(Protocol):
 class OpenAIResponsesClient:
     """OpenAI Responses API client used by pipeline LLM steps."""
 
+    def __init__(
+        self,
+        timeout_seconds: float | None = None,
+        max_retries: int | None = None,
+    ) -> None:
+        self.timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else openai_timeout_seconds_from_env()
+        )
+        self.max_retries = (
+            max_retries if max_retries is not None else openai_max_retries_from_env()
+        )
+
     def create_json(
         self,
         model: str,
@@ -50,20 +69,31 @@ class OpenAIResponsesClient:
     ) -> LLMResult:
         from openai import OpenAI
 
-        client = OpenAI()
+        client = OpenAI(
+            timeout=self.timeout_seconds,
+            max_retries=self.max_retries,
+        )
 
         # Retry logic: try up to 2 times (1 initial attempt + 1 retry) on JSON decode errors
         last_error = None
         for attempt in range(2):
             try:
-                response = client.responses.create(
-                    model=model,
-                    input=[
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": prompt},
-                    ],
-                    text=text_format(schema_name, schema),
-                )
+                try:
+                    response = client.responses.create(
+                        model=model,
+                        input=[
+                            {"role": "system", "content": system_message},
+                            {"role": "user", "content": prompt},
+                        ],
+                        text=text_format(schema_name, schema),
+                    )
+                except Exception as error:
+                    raise ValueError(
+                        f"OpenAI request failed for {step_name}/{call_id} "
+                        f"with model {model} "
+                        f"(timeout={self.timeout_seconds}s, "
+                        f"max_retries={self.max_retries}): {error}"
+                    ) from error
 
                 parsed = json.loads(response.output_text)
 
@@ -111,6 +141,32 @@ class OpenAIResponsesClient:
                 f"Try re-running the command. Error: {last_error}"
             ) from last_error
         raise ValueError("Unexpected error in create_json")
+
+
+def openai_timeout_seconds_from_env() -> float:
+    raw_value = os.getenv("OPENAI_TIMEOUT_SECONDS", "").strip()
+    if not raw_value:
+        return DEFAULT_OPENAI_TIMEOUT_SECONDS
+    try:
+        timeout = float(raw_value)
+    except ValueError as error:
+        raise ValueError("OPENAI_TIMEOUT_SECONDS must be a number.") from error
+    if timeout <= 0:
+        raise ValueError("OPENAI_TIMEOUT_SECONDS must be greater than 0.")
+    return timeout
+
+
+def openai_max_retries_from_env() -> int:
+    raw_value = os.getenv("OPENAI_MAX_RETRIES", "").strip()
+    if not raw_value:
+        return DEFAULT_OPENAI_MAX_RETRIES
+    try:
+        max_retries = int(raw_value)
+    except ValueError as error:
+        raise ValueError("OPENAI_MAX_RETRIES must be an integer.") from error
+    if max_retries < 0:
+        raise ValueError("OPENAI_MAX_RETRIES must be 0 or greater.")
+    return max_retries
 
 
 class StaticJSONClient:

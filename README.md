@@ -47,9 +47,14 @@ Then edit `.env`:
 ```text
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4o-mini
+OPENAI_TIMEOUT_SECONDS=45
+OPENAI_MAX_RETRIES=0
 ```
 
 Non-LLM commands, `explain`, and `--dry-run` do not require an API key.
+The timeout and retry values are optional. They keep individual LLM calls from
+stalling a whole run; lower `OPENAI_TIMEOUT_SECONDS` during small tests if you
+want slow title or paper calls to fail faster and continue.
 
 ## Main Files
 
@@ -78,7 +83,22 @@ terms, candidate-screening policy, tagging categories, fallback policy, enabled
 providers, and optional seed search queries. Tagging categories are
 topic-specific knowledge dimensions. New generated contracts should replace the
 template examples with categories and values inferred from review/overview seed
-papers.
+papers. Generated/refined contracts require at least six concrete knowledge
+categories, reject generic meta-categories, and require a `knowledge_goal`
+single-selection root category whose concrete values form a complete,
+mutually exclusive topic-specific partition of the included papers. The
+`knowledge_goal` values are inferred from the topic/reviews and should use
+`topic_structure.main_topics` as scaffolding for the main knowledge roles papers
+play around the topic. Details that apply only to one root value should be
+modeled as conditional categories with `applies_when`. Generated value lists
+should avoid `unclear`,
+`not_reported`, `mixed_or_unclear`, and `other`; missing or inapplicable details
+should usually be represented by optional or conditional categories instead.
+The audit step checks observed tag distributions after tagging: unused values
+and highly dominant values are reported, and bad `knowledge_goal` partitions
+block export so a collapsed root ontology is not treated as Mantis-ready.
+The pipeline also warns about generic boilerplate labels that should be
+rewritten as topic-specific review-derived dimensions.
 
 For a new research direction, start from a plain research question and generate
 a draft contract. The generator uses:
@@ -150,7 +170,9 @@ Use this when you have a topic description and want the pipeline to collect
 candidate papers first. If `--topic-contract` is omitted, the collection
 workflow generates a draft contract, fetches a small set of OpenAlex
 review/overview seed papers, refines the contract's knowledge tagging
-categories from those seeds, and then plans the search:
+categories from those seeds, and then plans the search. Candidate fetching and
+title screening use a bounded buffer around `--max-results` so small test runs
+do not screen a much larger candidate pool by default:
 
 ```bash
 TOPIC="How does climate change affect human health?"

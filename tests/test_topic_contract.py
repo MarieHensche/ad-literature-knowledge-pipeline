@@ -10,6 +10,7 @@ import pytest
 
 from ad_lit_pipeline.topics.contract import (
     generated_tagging_quality_issues,
+    generated_tagging_quality_warnings,
     load_topic_contract,
     rule_based_screening_from_contract,
     tagging_config_from_contract,
@@ -65,7 +66,8 @@ def test_topic_contract_template_loads() -> None:
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert contract["collection"]["exclude_openalex_review_type"] is False
     assert contract["collection"]["search_queries"] == []
-    assert "example_knowledge_dimension" in contract["tagging"]["categories"]
+    assert "knowledge_goal" in contract["tagging"]["categories"]
+    assert "example_goal_b_subtype" in contract["tagging"]["categories"]
     assert "research_target" not in contract["tagging"]["categories"]
 
 
@@ -133,6 +135,16 @@ def test_topic_contract_does_not_require_generic_mantis_categories() -> None:
 def generated_quality_contract() -> dict:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
     contract["tagging"]["categories"] = {
+        "knowledge_goal": {
+            "required": True,
+            "selection": "single",
+            "values": [
+                "performance_improvement",
+                "engagement_support",
+                "learning_process_support",
+                "equity_or_access",
+            ],
+        },
         "ai_tool_type": {
             "required": False,
             "selection": "multi",
@@ -140,8 +152,7 @@ def generated_quality_contract() -> dict:
                 "chatbot",
                 "adaptive_learning_system",
                 "automated_feedback",
-                "not_reported",
-                "unclear",
+                "generative_ai_assistant",
             ],
         },
         "education_level": {
@@ -152,7 +163,6 @@ def generated_quality_contract() -> dict:
                 "secondary_school",
                 "higher_education",
                 "mixed_levels",
-                "not_reported",
             ],
         },
         "outcome_domain": {
@@ -163,20 +173,36 @@ def generated_quality_contract() -> dict:
                 "student_engagement",
                 "learning_outcomes",
                 "motivation",
-                "not_reported",
-                "unclear",
             ],
         },
-        "study_design": {
+        "learning_domain": {
             "required": False,
             "selection": "multi",
             "values": [
-                "experimental",
-                "survey",
-                "qualitative",
-                "mixed_methods",
-                "not_reported",
-                "unclear",
+                "language_learning",
+                "mathematics",
+                "programming",
+                "cross_subject",
+            ],
+        },
+        "ai_use_context": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "classroom_instruction",
+                "homework_support",
+                "after_class_review",
+                "assessment_feedback",
+            ],
+        },
+        "assessment_signal": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "grades",
+                "test_scores",
+                "self_report_survey",
+                "learning_analytics",
             ],
         },
     }
@@ -204,10 +230,81 @@ def test_generated_tagging_quality_rejects_meta_categories() -> None:
 def test_generated_tagging_quality_requires_enough_categories() -> None:
     contract = generated_quality_contract()
     categories = contract["tagging"]["categories"]
-    contract["tagging"]["categories"] = dict(list(categories.items())[:3])
+    contract["tagging"]["categories"] = dict(list(categories.items())[:5])
 
-    with pytest.raises(ValueError, match="at least 4 concrete"):
+    with pytest.raises(ValueError, match="at least 6 concrete"):
         validate_generated_tagging_quality(contract)
+
+
+def test_generated_tagging_quality_requires_root_partition() -> None:
+    contract = generated_quality_contract()
+    del contract["tagging"]["categories"]["knowledge_goal"]
+
+    with pytest.raises(ValueError, match="knowledge_goal"):
+        validate_generated_tagging_quality(contract)
+
+
+def test_generated_tagging_quality_requires_valid_knowledge_goal() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["selection"] = "multi"
+
+    with pytest.raises(ValueError, match="knowledge_goal"):
+        validate_generated_tagging_quality(contract)
+
+
+def test_generated_tagging_quality_rejects_catchall_values() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["ai_tool_type"]["values"].append("not_reported")
+
+    issues = generated_tagging_quality_issues(contract)
+
+    assert any("contains catch-all value" in issue for issue in issues)
+
+
+def test_generated_tagging_quality_rejects_boilerplate_categories() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": [
+            "cross_sectional",
+            "longitudinal",
+            "experimental",
+            "meta_analysis",
+        ],
+    }
+
+    issues = generated_tagging_quality_issues(contract)
+
+    assert any("study_design is a generic boilerplate" in issue for issue in issues)
+    warnings = generated_tagging_quality_warnings(contract)
+    assert any("study_design.values look like generic" in warning for warning in warnings)
+
+
+def test_generated_tagging_quality_rejects_non_snake_case_labels() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "performance improvement",
+        "engagement_support",
+        "learning_process_support",
+    ]
+
+    issues = generated_tagging_quality_issues(contract)
+
+    assert any("non-snake-case" in issue for issue in issues)
+
+
+def test_generated_tagging_quality_rejects_vague_knowledge_goal_values() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "improving_maternal_mental_health",
+        "enhancing_user_engagement",
+        "supporting_social_support_networks",
+    ]
+
+    issues = generated_tagging_quality_issues(contract)
+
+    assert any("vague benefit/action" in issue for issue in issues)
 
 
 def test_topic_contract_requires_valid_anchor_topic() -> None:

@@ -138,7 +138,7 @@ def render_refine_topic_contract_prompt(
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,
-    fallback_recommendations: dict[str, str] | None = None,
+    fallback_recommendations: dict[str, str | None] | None = None,
 ) -> str:
     fallback_policy = {}
     if topic_contract is not None:

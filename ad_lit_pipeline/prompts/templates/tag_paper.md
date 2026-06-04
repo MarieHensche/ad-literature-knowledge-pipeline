@@ -29,8 +29,18 @@ Rules:
   applicability and evidence.
 - If a rule includes `applies_when`, return an empty array unless the referenced
   parent category contains one of the triggering values.
-- If a category applies but the paper does not provide enough information, use
-  the category fallback value from the fixed rules.
+- Use a category fallback value only when the fixed rule has a non-null
+  fallback_value.
+- For required categories with no fallback_value, choose the best concrete value
+  from the allowed exhaustive partition using the title, abstract, and full-text
+  evidence.
+- For `knowledge_goal`, choose the single value that best describes the paper's
+  main knowledge contribution. Do not select the broadest or first-listed value
+  by default; use the title, abstract, and full-text evidence to distinguish the
+  paper from other likely papers in the collection.
+- For optional categories with no supported value, return an empty array.
+- Do not combine fallback values such as `not_reported`, `unclear`, or
+  `mixed_or_unclear` with concrete values in the same category.
 - Do not invent new values.
 - If `main_topic_category` offers `core_topic`, `adjacent_but_relevant`, and
   `out_of_scope`, use it as a strict topical-fit judgment: choose `core_topic`

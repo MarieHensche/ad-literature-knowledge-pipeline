@@ -384,6 +384,97 @@ def test_prepare_full_text_continues_after_invalid_pdf_response(
     assert int(rows[0]["full_text_chars"]) >= 1000
 
 
+def test_prepare_full_text_ignores_template_download_links(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "scope_screened.csv"
+    output_path = tmp_path / "scope_screened_full_text.csv"
+    manifest_path = tmp_path / "full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    html_text = (
+        "<html><body>"
+        '<a href="/plosone/article/figure/image?size=original&download=&id=<%= doi %>">'
+        "download</a>"
+        + "<p>Postpartum digital mental health intervention evidence.</p>" * 40
+        + "</body></html>"
+    ).encode("utf-8")
+    requested_urls = []
+
+    def fake_request_bytes(url: str) -> tuple[bytes, str, str]:
+        requested_urls.append(url)
+        if "<%" in url or " " in url:
+            raise AssertionError(f"Template URL should have been filtered: {url}")
+        return html_text, "text/html", "https://example.org/full-text"
+
+    monkeypatch.setattr(full_text_prepare, "request_bytes", fake_request_bytes)
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Digital intervention for postpartum depression",
+                "year": "2024",
+                "doi": "",
+                "abstract": "Digital postpartum intervention.",
+                "full_text_path": "",
+                "full_text_url": "https://example.org/full-text",
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "full_text_path",
+            "full_text_url",
+            "scope_decision",
+        ],
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    rows = read_csv(output_path)
+    assert requested_urls == ["https://example.org/full-text"]
+    assert result.row_counts["local_texts"] == 1
+    assert rows[0]["full_text_status"] == "html_text_extracted"
+    assert rows[0]["full_text_error"] == ""
+
+
+def test_candidate_locations_ignore_core_timeout(monkeypatch) -> None:
+    def fake_core_locations(doi: str, title: str, api_key: str | None):
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(
+        full_text_prepare,
+        "unpaywall_locations",
+        lambda doi, email: [],
+    )
+    monkeypatch.setattr(full_text_prepare, "europe_pmc_locations", lambda doi: [])
+    monkeypatch.setattr(full_text_prepare, "core_locations", fake_core_locations)
+
+    locations = full_text_prepare.candidate_locations(
+        {
+            "doi": "10.1371/journal.pone.0257065",
+            "title": "Perinatal depression screening using smartphone technology",
+            "url": "https://doi.org/10.1371/journal.pone.0257065",
+        },
+        unpaywall_email=None,
+        core_api_key="core-key",
+    )
+
+    assert [(location.source, location.url) for location in locations] == [
+        ("provider_metadata", "https://doi.org/10.1371/journal.pone.0257065"),
+    ]
+
+
 def test_knowledge_evidence_uses_flexible_section_headings() -> None:
     text = (
         "1. Methods\nParticipants completed a classroom intervention.\n\n"
@@ -808,6 +899,255 @@ def test_audit_extraction_writes_expected_issues(tmp_path: Path) -> None:
             "issue": "required_missing",
         },
     ]
+
+
+def test_audit_extraction_flags_dominant_value_distribution(tmp_path: Path) -> None:
+    extraction_path = tmp_path / "extraction.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "audit.csv"
+
+    rows = [
+        {"paper_id": f"p{index}", "data_source": "clinical_trials"}
+        for index in range(1, 6)
+    ]
+    write_csv(extraction_path, rows, ["paper_id", "data_source"])
+    write_json(
+        config_path,
+        {
+            "categories": [
+                {
+                    "category_id": "data_source",
+                    "allowed_values": [
+                        {"value": "clinical_trials"},
+                        {"value": "surveys"},
+                        {"value": "interviews"},
+                    ],
+                }
+            ]
+        },
+    )
+    write_json(
+        rules_path,
+        {
+            "rules": [
+                {
+                    "category_id": "data_source",
+                    "selection": "single",
+                    "required": True,
+                },
+            ]
+        },
+    )
+
+    run_script(
+        "scripts/audit_extraction.py",
+        "--input",
+        str(extraction_path),
+        "--config",
+        str(config_path),
+        "--rules",
+        str(rules_path),
+        "--output",
+        str(output_path),
+    )
+
+    audit_rows = read_csv(output_path)
+    assert audit_rows == [
+        {
+            "paper_id": "",
+            "field": "data_source",
+            "value": "surveys",
+            "issue": "unused_value_distribution_warning:0_of_5_applicable_rows",
+        },
+        {
+            "paper_id": "",
+            "field": "data_source",
+            "value": "interviews",
+            "issue": "unused_value_distribution_warning:0_of_5_applicable_rows",
+        },
+        {
+            "paper_id": "",
+            "field": "data_source",
+            "value": "clinical_trials",
+            "issue": "dominant_value_distribution_warning:5_of_5_applicable_rows",
+        }
+    ]
+
+
+def test_audit_extraction_respects_conditional_required_categories(
+    tmp_path: Path,
+) -> None:
+    extraction_path = tmp_path / "extraction.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "audit.csv"
+
+    write_csv(
+        extraction_path,
+        [
+            {
+                "paper_id": "p1",
+                "knowledge_goal": "screening_detection",
+                "screening_tool_type": "",
+            },
+            {
+                "paper_id": "p2",
+                "knowledge_goal": "treatment_effectiveness",
+                "screening_tool_type": "",
+            },
+        ],
+        ["paper_id", "knowledge_goal", "screening_tool_type"],
+    )
+    write_json(
+        config_path,
+        {
+            "categories": [
+                {
+                    "category_id": "knowledge_goal",
+                    "allowed_values": [
+                        {"value": "screening_detection"},
+                        {"value": "treatment_effectiveness"},
+                    ],
+                },
+                {
+                    "category_id": "screening_tool_type",
+                    "allowed_values": [
+                        {"value": "symptom_scale"},
+                        {"value": "risk_model"},
+                    ],
+                    "applies_when": {
+                        "category_id": "knowledge_goal",
+                        "values": ["screening_detection"],
+                    },
+                },
+            ]
+        },
+    )
+    write_json(
+        rules_path,
+        {
+            "rules": [
+                {
+                    "category_id": "knowledge_goal",
+                    "selection": "single",
+                    "required": True,
+                },
+                {
+                    "category_id": "screening_tool_type",
+                    "selection": "single",
+                    "required": True,
+                    "applies_when": {
+                        "category_id": "knowledge_goal",
+                        "values": ["screening_detection"],
+                    },
+                },
+            ]
+        },
+    )
+
+    run_script(
+        "scripts/audit_extraction.py",
+        "--input",
+        str(extraction_path),
+        "--config",
+        str(config_path),
+        "--rules",
+        str(rules_path),
+        "--output",
+        str(output_path),
+    )
+
+    audit_rows = read_csv(output_path)
+    assert audit_rows == [
+        {
+            "paper_id": "p1",
+            "field": "screening_tool_type",
+            "value": "",
+            "issue": "required_missing",
+        }
+    ]
+
+
+def test_audit_extraction_blocks_bad_knowledge_goal_distribution(
+    tmp_path: Path,
+) -> None:
+    extraction_path = tmp_path / "extraction.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "audit.csv"
+
+    rows = [
+        {"paper_id": f"p{index}", "knowledge_goal": "treatment_effectiveness"}
+        for index in range(1, 7)
+    ]
+    write_csv(extraction_path, rows, ["paper_id", "knowledge_goal"])
+    write_json(
+        config_path,
+        {
+            "categories": [
+                {
+                    "category_id": "knowledge_goal",
+                    "allowed_values": [
+                        {"value": "treatment_effectiveness"},
+                        {"value": "screening_detection"},
+                        {"value": "engagement_acceptability"},
+                    ],
+                }
+            ]
+        },
+    )
+    write_json(
+        rules_path,
+        {
+            "rules": [
+                {
+                    "category_id": "knowledge_goal",
+                    "selection": "single",
+                    "required": True,
+                    "fallback_value": None,
+                },
+            ]
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/audit_extraction.py",
+            "--input",
+            str(extraction_path),
+            "--config",
+            str(config_path),
+            "--rules",
+            str(rules_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Blocking knowledge-tagging distribution issue" in result.stderr
+    audit_rows = read_csv(output_path)
+    assert {
+        "paper_id": "",
+        "field": "knowledge_goal",
+        "value": "screening_detection",
+        "issue": "knowledge_goal_unused_value_distribution_error:0_of_6_applicable_rows",
+    } in audit_rows
+    assert {
+        "paper_id": "",
+        "field": "knowledge_goal",
+        "value": "treatment_effectiveness",
+        "issue": (
+            "knowledge_goal_dominant_value_distribution_error:"
+            "6_of_6_applicable_rows"
+        ),
+    } in audit_rows
 
 
 def test_export_mantis_ready_filters_to_core_and_adjacent_topics(tmp_path: Path) -> None:

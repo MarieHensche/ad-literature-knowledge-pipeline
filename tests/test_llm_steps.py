@@ -15,6 +15,7 @@ from ad_lit_pipeline.steps.collection.plan_search import (
     run as run_plan_search,
 )
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
+    contract_from_model_payload,
     run as run_generate_topic_contract,
 )
 from ad_lit_pipeline.steps.collection.refine_topic_contract import (
@@ -39,6 +40,153 @@ def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> 
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def generated_topic_contract_payload() -> dict:
+    payload = deepcopy(
+        load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    )
+    payload["topic_id"] = "ai_school_performance"
+    payload["research_topic"] = {
+        "title": "AI tools and student performance",
+        "description": (
+            "Research on artificial intelligence tools, learning contexts, and "
+            "student performance or engagement outcomes."
+        ),
+    }
+    payload["tagging"]["categories"] = {
+        "knowledge_goal": {
+            "required": True,
+            "selection": "single",
+            "values": [
+                "performance_effect",
+                "engagement_pattern",
+                "learning_process",
+                "access_equity",
+            ],
+        },
+        "ai_tool_type": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "chatbot",
+                "adaptive_learning_system",
+                "automated_feedback",
+                "generative_ai_assistant",
+            ],
+        },
+        "education_level": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "primary_school",
+                "secondary_school",
+                "higher_education",
+                "mixed_levels",
+            ],
+        },
+        "outcome_domain": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "academic_performance",
+                "student_engagement",
+                "learning_outcomes",
+                "motivation",
+            ],
+        },
+        "learning_domain": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "language_learning",
+                "mathematics",
+                "programming",
+                "cross_subject",
+            ],
+        },
+        "ai_use_context": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "classroom_instruction",
+                "homework_support",
+                "after_class_review",
+                "assessment_feedback",
+            ],
+        },
+        "assessment_signal": {
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "grades",
+                "test_scores",
+                "self_report_survey",
+                "learning_analytics",
+            ],
+        },
+    }
+    return payload
+
+
+def test_generated_contract_payload_normalizes_tag_labels() -> None:
+    payload = generated_topic_contract_payload()
+    payload["tagging"]["categories"] = [
+        {
+            "category_id": "Knowledge Goal",
+            "description": "Root category.",
+            "required": True,
+            "selection": "single",
+            "values": [
+                "Sleep Quality Analysis",
+                "stress-outcome evaluation",
+                "urban/design effects",
+            ],
+            "applies_when": None,
+        },
+        {
+            "category_id": "Green Space Type",
+            "description": "Green-space forms studied in the paper.",
+            "required": False,
+            "selection": "multi",
+            "values": ["community gardens", "natural reserves", "green-roofs"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "Green Space Detail",
+            "description": "Details for natural reserve papers.",
+            "required": False,
+            "selection": "multi",
+            "values": ["trail access", "tree canopy"],
+            "applies_when": {
+                "category_id": "Green Space Type",
+                "values": ["natural reserves"],
+            },
+        },
+    ]
+
+    contract = contract_from_model_payload(payload)
+    categories = contract["tagging"]["categories"]
+
+    assert list(categories) == [
+        "knowledge_goal",
+        "green_space_type",
+        "green_space_detail",
+    ]
+    assert categories["knowledge_goal"]["values"] == [
+        "sleep_quality_analysis",
+        "stress_outcome_evaluation",
+        "urban_design_effects",
+    ]
+    assert categories["green_space_type"]["values"] == [
+        "community_gardens",
+        "natural_reserves",
+        "green_roofs",
+    ]
+    assert categories["green_space_detail"]["applies_when"] == {
+        "category_id": "green_space_type",
+        "values": ["natural_reserves"],
+    }
 
 
 def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
@@ -267,6 +415,22 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                     },
                     "categories": [
                         {
+                            "category_id": "knowledge_goal",
+                            "description": (
+                                "Top-level partition of climate-health papers by "
+                                "their main knowledge contribution."
+                            ),
+                            "required": True,
+                            "selection": "single",
+                            "values": [
+                                "exposure_risk_assessment",
+                                "health_impact_estimation",
+                                "adaptation_or_response",
+                                "policy_or_system_planning",
+                            ],
+                            "applies_when": None,
+                        },
+                        {
                             "category_id": "climate_exposure",
                             "description": "Climate-related exposures examined in the paper.",
                             "required": False,
@@ -276,8 +440,6 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                                 "wildfire_smoke",
                                 "flooding",
                                 "extreme_weather",
-                                "not_reported",
-                                "unclear",
                             ],
                             "applies_when": None,
                         },
@@ -290,8 +452,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                                 "mortality",
                                 "morbidity",
                                 "mental_health",
-                                "mixed_or_unclear",
-                                "unclear",
+                                "healthcare_use",
                             ],
                             "applies_when": None,
                         },
@@ -304,24 +465,39 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                                 "heat_action_plan",
                                 "wildfire_preparedness",
                                 "health_system_adaptation",
-                                "not_reported",
-                                "mixed_or_unclear",
-                                "unclear",
+                                "community_resilience_program",
                             ],
                             "applies_when": None,
                         },
                         {
-                            "category_id": "study_design",
-                            "description": "Study designs used to examine climate-health evidence.",
+                            "category_id": "climate_health_evidence_type",
+                            "description": (
+                                "Review evidence distinguishes empirical, modeling, "
+                                "and synthesis evidence for climate-health claims."
+                            ),
                             "required": False,
                             "selection": "multi",
                             "values": [
-                                "observational",
-                                "modeling",
-                                "review",
-                                "mixed_methods",
-                                "not_reported",
-                                "unclear",
+                                "observed_association",
+                                "projection_model",
+                                "evidence_review",
+                                "policy_evaluation",
+                            ],
+                            "applies_when": None,
+                        },
+                        {
+                            "category_id": "exposure_measurement",
+                            "description": (
+                                "Review evidence separates direct climate exposure "
+                                "measures from modeled or proxy exposure measures."
+                            ),
+                            "required": False,
+                            "selection": "multi",
+                            "values": [
+                                "weather_station_measure",
+                                "remote_sensing_measure",
+                                "modeled_exposure",
+                                "administrative_proxy",
                             ],
                             "applies_when": None,
                         },
@@ -334,8 +510,6 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                                 "cooling_center",
                                 "early_warning",
                                 "urban_greening",
-                                "not_reported",
-                                "unclear",
                             ],
                             "applies_when": {
                                 "category_id": "adaptation_strategy",
@@ -390,6 +564,97 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     assert result.trace_paths
 
 
+def test_generate_topic_contract_retries_with_tagging_quality_feedback(
+    tmp_path: Path,
+) -> None:
+    weak_payload = generated_topic_contract_payload()
+    weak_payload["tagging"]["categories"]["intervention_type"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["self-help_resources", "therapist_guided"],
+    }
+    weak_payload["tagging"]["categories"]["target_population"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["postpartum_mothers", "pregnant_people"],
+    }
+    weak_payload["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["cross_sectional", "longitudinal", "experimental"],
+    }
+    client = StaticJSONClient([weak_payload, generated_topic_contract_payload()])
+    output = tmp_path / "contract.yaml"
+
+    result = run_generate_topic_contract(
+        "How do AI tools affect student performance?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    categories = contract["tagging"]["categories"]
+    assert len(client.requests) == 2
+    retry_prompt = client.requests[1]["prompt"]
+    assert client.requests[0]["call_id"] == "contract"
+    assert client.requests[1]["call_id"] == "contract_retry_2"
+    assert "self-help_resources" in retry_prompt
+    assert "target_population" in retry_prompt
+    assert "study_design" in retry_prompt
+    assert "check every validation path above" in retry_prompt
+    assert "self_help_resources" in retry_prompt
+    assert "Do not keep generic category ids" in retry_prompt
+    assert "target_population" not in categories
+    assert "study_design" not in categories
+    assert result.row_counts["tagging_categories"] == 7
+
+
+def test_generate_topic_contract_retries_from_best_failed_contract(
+    tmp_path: Path,
+) -> None:
+    first_payload = generated_topic_contract_payload()
+    first_payload["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["cross_sectional", "longitudinal", "experimental"],
+    }
+    worse_payload = generated_topic_contract_payload()
+    worse_payload["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["cross_sectional", "longitudinal", "experimental"],
+    }
+    worse_payload["tagging"]["categories"]["study_population"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["adults", "children", "general_population"],
+    }
+    client = StaticJSONClient(
+        [first_payload, worse_payload, generated_topic_contract_payload()]
+    )
+    output = tmp_path / "contract.yaml"
+
+    result = run_generate_topic_contract(
+        "How do AI tools affect student performance?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    retry_3_prompt = client.requests[2]["prompt"]
+    assert result.row_counts["tagging_categories"] == 7
+    assert len(client.requests) == 3
+    assert client.requests[2]["call_id"] == "contract_retry_3"
+    assert "Best response so far" in retry_3_prompt
+    assert "tagging.categories.study_design is a generic boilerplate" in retry_3_prompt
+    worse_issue = "tagging.categories.study_population is a generic boilerplate"
+    assert worse_issue not in retry_3_prompt
+    assert '"ai_tool_type"' in retry_3_prompt
+
+
 def test_refine_topic_contract_adds_review_seeded_categories(
     tmp_path: Path,
 ) -> None:
@@ -428,6 +693,22 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     refined_payload["research_topic"]["title"] = "Changed outside tagging"
     refined_payload["tagging"]["categories"] = [
         {
+            "category_id": "knowledge_goal",
+            "description": (
+                "Review-derived top-level partition of early AD computational "
+                "biology papers by their main knowledge goal."
+            ),
+            "required": True,
+            "selection": "single",
+            "values": [
+                "risk_prediction",
+                "diagnosis",
+                "disease_observation",
+                "intervention_planning",
+            ],
+            "applies_when": None,
+        },
+        {
             "category_id": "evidence_signal_family",
             "description": "Evidence signal families used for early AD detection.",
             "required": False,
@@ -436,8 +717,7 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                 "neuroimaging",
                 "speech_language",
                 "cognitive_assessment",
-                "mixed_or_unclear",
-                "unclear",
+                "fluid_biomarker",
             ],
             "applies_when": None,
         },
@@ -450,8 +730,7 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                 "diagnostic_accuracy",
                 "conversion_prediction",
                 "screening_feasibility",
-                "not_reported",
-                "unclear",
+                "treatment_response_prediction",
             ],
             "applies_when": None,
         },
@@ -465,8 +744,6 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                 "deep_learning",
                 "statistical_modeling",
                 "clinical_rule",
-                "not_reported",
-                "unclear",
             ],
             "applies_when": None,
         },
@@ -480,8 +757,38 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                 "external_validation",
                 "cross_validation",
                 "clinical_validation",
-                "not_reported",
-                "unclear",
+            ],
+            "applies_when": None,
+        },
+        {
+            "category_id": "clinical_detection_context",
+            "description": (
+                "Review evidence distinguishes screening, diagnosis, and "
+                "monitoring contexts."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "population_screening",
+                "clinical_diagnosis",
+                "risk_stratification",
+                "disease_monitoring",
+            ],
+            "applies_when": None,
+        },
+        {
+            "category_id": "biomarker_data_source",
+            "description": (
+                "Review evidence reports different data sources used for early "
+                "detection biomarkers."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "imaging_data",
+                "speech_language_data",
+                "cognitive_test_data",
+                "blood_or_csf_data",
             ],
             "applies_when": None,
         },
@@ -505,7 +812,7 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert "evidence_signal_family" in categories
     assert "detection_outcome" in categories
     assert result.row_counts["review_overviews"] == 1
-    assert result.row_counts["tagging_categories"] == 4
+    assert result.row_counts["tagging_categories"] == 7
     assert result.trace_paths
     assert "Review and overview seed papers" in client.requests[0]["prompt"]
     assert "AI biomarkers" in client.requests[0]["prompt"]
@@ -840,6 +1147,116 @@ def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:
     assert '"evidence_modality_family": "unclear"' in client.requests[0]["prompt"]
 
 
+def test_generate_rules_allows_null_fallback_for_exhaustive_categories(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.json"
+    output_path = tmp_path / "rules.json"
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "research_goal",
+                "required": True,
+                "selection": "single",
+                "allowed_values": [
+                    {"value": "diagnosis"},
+                    {"value": "prognosis"},
+                    {"value": "treatment"},
+                ],
+            }
+        ],
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    client = StaticJSONClient(
+        [
+            {
+                "rules": [
+                    {
+                        "category_id": "research_goal",
+                        "selection": "single",
+                        "required": True,
+                        "fallback_value": "unclear",
+                        "reason": "The model should not invent fallback values.",
+                    }
+                ]
+            }
+        ]
+    )
+
+    result = run_generate_rules(
+        config_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["rules"][0]["fallback_value"] is None
+    assert result.warnings == [
+        "Repaired invalid fallback_value for research_goal: unclear -> None",
+    ]
+    assert '"research_goal": null' in client.requests[0]["prompt"]
+
+
+def test_generate_rules_removes_biased_concrete_fallback_for_exhaustive_category(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.json"
+    output_path = tmp_path / "rules.json"
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "knowledge_goal",
+                "required": True,
+                "selection": "single",
+                "allowed_values": [
+                    {"value": "screening_detection"},
+                    {"value": "treatment_effectiveness"},
+                    {"value": "engagement_acceptability"},
+                ],
+            }
+        ],
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    client = StaticJSONClient(
+        [
+            {
+                "rules": [
+                    {
+                        "category_id": "knowledge_goal",
+                        "selection": "single",
+                        "required": True,
+                        "fallback_value": "treatment_effectiveness",
+                        "reason": "The model picked the broadest value.",
+                    }
+                ]
+            }
+        ]
+    )
+
+    result = run_generate_rules(
+        config_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["rules"][0]["fallback_value"] is None
+    assert result.warnings == [
+        (
+            "Repaired biased fallback_value for knowledge_goal: "
+            "treatment_effectiveness -> None"
+        ),
+    ]
+
+
 def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None:
     papers_path = tmp_path / "scope.csv"
     config_path = tmp_path / "config.json"
@@ -1005,6 +1422,48 @@ def test_validate_tagged_row_allows_optional_and_clears_inapplicable_values() ->
     validate_tagged_row(tagged, config, rules)
 
     assert tagged["deep_learning_architecture"] == []
+
+
+def test_validate_tagged_row_removes_fallback_when_concrete_values_exist() -> None:
+    config = {
+        "categories": [
+            {
+                "category_id": "health_outcome",
+                "required": True,
+                "selection": "multi",
+                "allowed_values": [
+                    {"value": "hypertension"},
+                    {"value": "ischemic_heart_disease"},
+                    {"value": "not_reported"},
+                ],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "health_outcome",
+                "selection": "multi",
+                "required": True,
+                "fallback_value": "not_reported",
+                "reason": "Required outcome tag.",
+            }
+        ]
+    }
+    tagged = {
+        "health_outcome": [
+            "hypertension",
+            "not_reported",
+            "ischemic_heart_disease",
+        ],
+    }
+
+    validate_tagged_row(tagged, config, rules)
+
+    assert tagged["health_outcome"] == [
+        "hypertension",
+        "ischemic_heart_disease",
+    ]
 
 
 def test_paper_tags_schema_constrains_category_values() -> None:

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ad_lit_pipeline.cli.run_collection import candidate_search_budget
 from ad_lit_pipeline.cli.run_pipeline import prepare_papers_csv
 
 
@@ -92,6 +93,13 @@ def test_run_collection_explain_lists_steps() -> None:
     assert "screen_title_relevance" in result.stdout
     assert "generate_topic_contract" in result.stdout
     assert "example_openalex_candidates.jsonl" in result.stdout
+
+
+def test_collection_candidate_search_budget_is_bounded_for_small_runs() -> None:
+    assert candidate_search_budget(5) == 30
+    assert candidate_search_budget(10) == 40
+    assert candidate_search_budget(25) == 100
+    assert candidate_search_budget(None) is None
 
 
 def test_run_collection_dry_run_can_generate_contract_first() -> None:
