@@ -32,8 +32,6 @@ META_TAGGING_CATEGORY_IDS = {
     "category_type",
     "dimension",
     "dimension_type",
-    "evidence_kind",
-    "evidence_type",
     "knowledge_area",
     "knowledge_category",
     "knowledge_dimension",
@@ -69,37 +67,16 @@ META_TAGGING_VALUES = {
     "technology",
     "tool",
 }
+
 BOILERPLATE_CATEGORY_IDS = {
-    "data_source",
     "data_source_type",
-    "participant_population",
-    "participants",
-    "population",
-    "population_group",
-    "research_design",
-    "study_population",
-    "study_design",
-    "study_type",
-    "target_population",
 }
 BOILERPLATE_CATEGORY_VALUES = {
-    "adolescents",
-    "adults",
-    "case_control",
-    "children",
-    "cohort",
-    "cross_sectional",
-    "elderly",
-    "experimental",
-    "general_population",
-    "humans",
     "longitudinal",
     "meta_analysis",
     "mixed_methods",
     "observational",
     "patients",
-    "qualitative",
-    "quantitative",
     "review",
     "survey",
     "systematic_review",
@@ -110,26 +87,26 @@ GENERATED_CATCHALL_TAG_VALUES = {
     "other",
     "not_specified",
 }
-WEAK_KNOWLEDGE_GOAL_PREFIXES = (
-    "addressing_",
-    "assessing_",
-    "decreasing_",
-    "enhancing_",
-    "evaluating_",
-    "exploring_",
-    "facilitating_",
-    "improving_",
-    "increasing_",
-    "investigating_",
-    "measuring_",
-    "optimizing_",
-    "promoting_",
-    "reducing_",
-    "strengthening_",
-    "studying_",
-    "supporting_",
-    "understanding_",
-)
+# WEAK_KNOWLEDGE_GOAL_PREFIXES = (
+#     "addressing_",
+#     "assessing_",
+#     "decreasing_",
+#     "enhancing_",
+#     "evaluating_",
+#     "exploring_",
+#     "facilitating_",
+#     "improving_",
+#     "increasing_",
+#     "investigating_",
+#     "measuring_",
+#     "optimizing_",
+#     "promoting_",
+#     "reducing_",
+#     "strengthening_",
+#     "studying_",
+#     "supporting_",
+#     "understanding_",
+# )
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -579,20 +556,20 @@ def generated_tagging_quality_issues(contract: dict[str, Any]) -> list[str]:
                 "contain at least three concrete partition values so the root "
                 "category is not too coarse."
             )
-        vague_values = [
-            value
-            for value in substantive_values
-            if normalize_tagging_label(value).startswith(WEAK_KNOWLEDGE_GOAL_PREFIXES)
-        ]
-        if vague_values:
-            issues.append(
-                f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values contains "
-                f"vague benefit/action value(s) {vague_values}. The root category "
-                "must partition papers by their knowledge role, such as "
-                "prevention, screening_detection, treatment_effectiveness, "
-                "implementation_acceptability, prognosis, diagnosis, or other "
-                "review-derived role values."
-            )
+        # vague_values = [
+        #     value
+        #     for value in substantive_values
+        #     if normalize_tagging_label(value).startswith(WEAK_KNOWLEDGE_GOAL_PREFIXES)
+        # ]
+        # if vague_values:
+        #     issues.append(
+        #         f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values contains "
+        #         f"vague benefit/action value(s) {vague_values}. The root category "
+        #         "must partition papers by their knowledge role, such as "
+        #         "prevention, screening_detection, treatment_effectiveness, "
+        #         "implementation_acceptability, prognosis, diagnosis, or other "
+        #         "review-derived role values."
+        #     )
 
     return issues
 

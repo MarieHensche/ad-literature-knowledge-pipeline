@@ -51,33 +51,30 @@ candidate_screening:
 
 tagging:
   fallback_policy:
-    prefer_unclear_when_allowed: true
-    prefer_mixed_or_unclear_when_unclear_missing: true
-    missing_information_value: not_reported
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ""
   categories:
-    example_knowledge_dimension:
-      description: Example only. Replace with a review-derived knowledge dimension.
+    knowledge_goal:
+      description: Example only. Replace with the main review-derived root partition for the topic.
+      required: true
       selection: single
       values:
-        - method
-        - population
-        - outcome
-        - mixed_or_unclear
-        - unclear
-    example_method_subtype:
-      description: Example only. Use conditional sub-categories when a value requires more detail.
-      selection: multi
+        - goal_a
+        - goal_b
+        - goal_c
+    example_goal_b_subtype:
+      description: Example only. Use conditional sub-categories when one root value requires more detail.
+      required: true
+      selection: single
       applies_when:
-        category_id: example_knowledge_dimension
+        category_id: knowledge_goal
         values:
-          - method
+          - goal_b
       values:
-        - statistical_model
-        - machine_learning
-        - qualitative_framework
-        - not_reported
-        - mixed_or_unclear
-        - unclear
+        - subtype_b1
+        - subtype_b2
+        - subtype_b3
 
 collection:
   allowed_providers:
