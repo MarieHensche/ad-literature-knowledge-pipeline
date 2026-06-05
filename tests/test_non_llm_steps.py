@@ -77,7 +77,15 @@ class FakeReviewProvider:
                 "abstract": "Review evidence about biomarkers and models.",
                 "query": "early detection review overview",
                 "rank": 1,
-            }
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W2",
+                "title": "A Review of Unrelated Hospital Staffing",
+                "abstract": "Review evidence about nursing staffing models.",
+                "query": "unrelated review overview",
+                "rank": 2,
+            },
         ]
 
 
@@ -108,15 +116,19 @@ def test_fetch_review_overviews_builds_review_only_openalex_plan(tmp_path: Path)
     result = run_fetch_review_overviews(
         ROOT / "configs/topics/early_detection_ad.yaml",
         output_path,
-        max_results=5,
+        max_results=1,
         provider=provider,
     )
 
     rows = read_jsonl_objects(output_path)
     assert rows[0]["provider_id"] == "W1"
-    assert result.row_counts["review_overviews"] == 1
-    assert result.row_counts["review_overview_candidates"] == 1
-    assert provider.max_results == review_pool_size(5)
+    assert len(rows) == 2
+    assert all("review_selection_score" in row for row in rows)
+    assert result.row_counts["review_overviews"] == 2
+    assert result.row_counts["review_overview_candidates"] == 2
+    assert result.row_counts["review_candidate_pool"] == 2
+    assert result.metadata["max_review_overviews"] == 1
+    assert provider.max_results == review_pool_size(1)
     assert provider.plan is not None
     assert provider.plan["filters"] == {
         "publication_types": ["review"],

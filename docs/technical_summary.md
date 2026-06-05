@@ -95,9 +95,10 @@ Steps:
 | `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
 
 When no topic contract is supplied, collection first generates a draft contract,
-fetches review/overview seed papers, resolves available full text for those
-reviews, refines the contract's knowledge categories from extracted review
-full-text evidence, and then continues into search planning. The planner can
+fetches a larger review/overview candidate pool, resolves available full text
+for that pool, selects the best review seeds only from candidates with readable
+extracted text, refines the contract's knowledge categories from those selected
+review full texts, and then continues into search planning. The planner can
 describe multiple provider types, but the current fetch layer implements only
 OpenAlex. Unsupported provider selections fail before any network fetch.
 
@@ -107,9 +108,11 @@ candidate collection.
 
 `prepare_review_full_text` reuses the same full-text extraction helpers as the
 main paper-tagging pipeline. It adapts OpenAlex review metadata, DOI landing
-pages, Unpaywall, Europe PMC, and CORE locations into cached text files, then
-`refine_topic_contract` sends bounded `full_text_evidence` from those texts to
-the LLM. Reviews without extracted full text are excluded from tag ontology
+pages, Unpaywall, Europe PMC, and CORE locations into cached text files for the
+review candidate pool. `refine_topic_contract` then filters to reviews with a
+readable `full_text_text_path`, selects the configured number of best matching
+reviews, and sends only bounded `full_text_evidence` from those selected texts
+to the LLM. Reviews without extracted full text are excluded from tag ontology
 generation; if no review full text is available, refinement fails instead of
 building tags from abstracts or metadata.
 

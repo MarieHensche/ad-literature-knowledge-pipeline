@@ -156,6 +156,7 @@ def build_step_functions(
             review_overviews_path,
             args.model,
             trace_dir=trace_dir,
+            max_review_overviews=args.max_review_overviews,
         )
 
     def run_plan_search() -> object:
@@ -304,7 +305,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-review-overviews",
         type=int,
         default=DEFAULT_MAX_REVIEW_OVERVIEWS,
-        help="Review/overview seed count used when generating a contract.",
+        help=(
+            "Extracted review full-text seed count used when refining a "
+            "generated contract. Review fetch retrieves a larger candidate pool."
+        ),
     )
     run_parser.add_argument(
         "--mailto",

@@ -22,7 +22,7 @@ STEP = StepSpec(
     inputs=["review_overviews_jsonl"],
     outputs=["review_overviews_full_text_jsonl", "review_full_text_manifest_csv"],
     uses_llm=False,
-    description="Resolve, cache, and extract full text for review seed papers.",
+    description="Resolve, cache, and extract full text for review candidates.",
 )
 
 

@@ -130,8 +130,8 @@ def refinement_context_contract(current_contract: dict[str, Any]) -> dict[str, A
             "fallback_policy": deepcopy(tagging.get("fallback_policy", {})),
             "categories": [],
             "categories_note": (
-                "Bootstrap categories omitted. Build final categories from "
-                "review evidence and the research question."
+                "Bootstrap categories omitted. Build final tagging categories "
+                "only from extracted review full-text evidence."
             ),
         }
     return context

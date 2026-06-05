@@ -48,6 +48,9 @@ def review_seed_with_full_text(
     tmp_path: Path,
     stem: str = "review",
     body: str | None = None,
+    title: str = "Metadata title that must not define tags",
+    abstract: str = "Metadata abstract that must not define tags.",
+    query: str = "",
 ) -> dict[str, object]:
     text_path = tmp_path / f"{stem}_full_text.txt"
     text_path.write_text(
@@ -66,8 +69,9 @@ def review_seed_with_full_text(
     )
     return {
         "provider_id": stem,
-        "title": "Metadata title that must not define tags",
-        "abstract": "Metadata abstract that must not define tags.",
+        "title": title,
+        "abstract": abstract,
+        "query": query,
         "full_text_status": "local_text_extracted",
         "full_text_text_path": str(text_path),
         "full_text_chars": str(text_path.stat().st_size),
@@ -677,7 +681,32 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     write_jsonl(
         review_path,
         [
-            review_seed_with_full_text(tmp_path, "W1"),
+            review_seed_with_full_text(
+                tmp_path,
+                "W1",
+                title=(
+                    "Systematic review of early Alzheimer's detection "
+                    "biomarkers"
+                ),
+                abstract=(
+                    "Review evidence about MCI screening, diagnosis, "
+                    "biomarkers, and early detection models."
+                ),
+                query="early detection Alzheimer's review overview",
+            ),
+            review_seed_with_full_text(
+                tmp_path,
+                "W2",
+                body=(
+                    "Introduction\nThis review is about hospital staffing.\n\n"
+                    "Results\nUNSELECTED_FULL_TEXT_MARKER nursing shifts, "
+                    "workflow staffing, and hospital rostering dominate this "
+                    "review.\n\n"
+                ),
+                title="Review of unrelated hospital staffing workflows",
+                abstract="A review about nursing staffing workflows.",
+                query="unrelated review overview",
+            ),
             {
                 "provider_id": "abstract_only_review",
                 "title": "Abstract-only review must not shape tags",
@@ -799,6 +828,7 @@ def test_refine_topic_contract_adds_review_seeded_categories(
         "test-model",
         client=client,
         trace_dir=tmp_path / "traces",
+        max_review_overviews=1,
     )
 
     refined = load_topic_contract(contract_path)
@@ -808,20 +838,23 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert refined["topic_structure"] == contract["topic_structure"]
     assert "evidence_signal_family" in categories
     assert "detection_outcome" in categories
-    assert result.row_counts["review_overviews"] == 2
-    assert result.row_counts["review_full_texts"] == 1
+    assert result.row_counts["review_overviews"] == 3
+    assert result.row_counts["review_full_texts"] == 2
+    assert result.row_counts["review_full_texts_selected"] == 1
     assert result.row_counts["tagging_categories"] == 7
     assert result.warnings == [
         (
             "Ignored review/overview seed papers without extracted full text; "
             "final tagging categories were refined only from review full-text "
-            "evidence. ignored=1 used=1."
+            "evidence. ignored=1 usable=2 selected=1."
         )
     ]
     assert result.trace_paths
     assert "Extracted review full-text evidence" in client.requests[0]["prompt"]
     assert "full_text_evidence" in client.requests[0]["prompt"]
+    assert "full_text_status" not in client.requests[0]["prompt"]
     assert "speech markers, imaging biomarkers" in client.requests[0]["prompt"]
+    assert "UNSELECTED_FULL_TEXT_MARKER" not in client.requests[0]["prompt"]
     assert "Abstract-only review must not shape tags" not in client.requests[0]["prompt"]
     assert "Metadata abstract that must not define tags" not in client.requests[0]["prompt"]
     assert "Bootstrap categories omitted" in client.requests[0]["prompt"]

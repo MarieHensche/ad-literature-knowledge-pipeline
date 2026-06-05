@@ -27,6 +27,10 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     contract_from_model_payload,
     prompt_with_validation_feedback,
 )
+from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
+    DEFAULT_MAX_REVIEWS,
+    select_best_review_overviews,
+)
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.topics.contract import (
     BOILERPLATE_CATEGORY_IDS,
@@ -81,7 +85,7 @@ MISSING_REVIEW_FULL_TEXT_ERROR = (
     "least one seed has a readable full_text_text_path before refining tagging "
     "categories."
 )
-IGNORED_ABSTRACT_ONLY_REVIEWS_WARNING = (
+IGNORED_NO_FULL_TEXT_REVIEWS_WARNING = (
     "Ignored review/overview seed papers without extracted full text; final "
     "tagging categories were refined only from review full-text evidence."
 )
@@ -118,10 +122,6 @@ def compact_review_overview(
 
     return {
         "review_id": review_evidence_id(record, index),
-        "full_text_status": record.get("full_text_status", ""),
-        "full_text_source": record.get("full_text_source", ""),
-        "full_text_license": record.get("full_text_license", ""),
-        "full_text_chars": record.get("full_text_chars", ""),
         "full_text_evidence": full_text_evidence,
     }
 
@@ -133,6 +133,35 @@ def compact_review_overviews(records: list[dict[str, Any]]) -> list[dict[str, An
         if review is not None:
             compacted.append(review)
     return compacted
+
+
+def has_usable_review_full_text(record: dict[str, Any]) -> bool:
+    text_path = str(record.get("full_text_text_path") or "").strip()
+    if not text_path:
+        return False
+    return bool(
+        read_text_evidence(
+            text_path,
+            max_chars=MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS,
+        )
+    )
+
+
+def review_overviews_with_usable_full_text(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [record for record in records if has_usable_review_full_text(record)]
+
+
+def select_review_overviews_with_full_text(
+    topic_contract: dict[str, Any],
+    records: list[dict[str, Any]],
+    max_results: int,
+) -> list[dict[str, Any]]:
+    if max_results < 1:
+        raise ValueError("max_review_overviews must be at least 1.")
+    usable_reviews = review_overviews_with_usable_full_text(records)
+    return select_best_review_overviews(topic_contract, usable_reviews, max_results)
 
 
 def merge_refined_tagging(
@@ -322,8 +351,14 @@ def call_llm(
     model: str,
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
+    max_review_overviews: int = DEFAULT_MAX_REVIEWS,
 ) -> tuple[dict[str, Any], list[Path]]:
-    compact_reviews = compact_review_overviews(review_overviews)
+    selected_reviews = select_review_overviews_with_full_text(
+        current_contract,
+        review_overviews,
+        max_review_overviews,
+    )
+    compact_reviews = compact_review_overviews(selected_reviews)
     if not compact_reviews:
         raise ValueError(MISSING_REVIEW_FULL_TEXT_ERROR)
     prompt = render_refine_topic_contract_prompt(
@@ -421,16 +456,23 @@ def run(
     model: str,
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
+    max_review_overviews: int = DEFAULT_MAX_REVIEWS,
 ) -> StepResult:
     current_contract = load_topic_contract(topic_contract_path)
     review_overviews = read_jsonl_objects(review_overviews_path)
     warnings = []
-    compact_reviews = compact_review_overviews(review_overviews)
-    if review_overviews and len(compact_reviews) < len(review_overviews):
+    usable_reviews = review_overviews_with_usable_full_text(review_overviews)
+    selected_reviews = select_review_overviews_with_full_text(
+        current_contract,
+        review_overviews,
+        max_review_overviews,
+    )
+    if review_overviews and len(usable_reviews) < len(review_overviews):
         warnings.append(
-            f"{IGNORED_ABSTRACT_ONLY_REVIEWS_WARNING} "
-            f"ignored={len(review_overviews) - len(compact_reviews)} "
-            f"used={len(compact_reviews)}."
+            f"{IGNORED_NO_FULL_TEXT_REVIEWS_WARNING} "
+            f"ignored={len(review_overviews) - len(usable_reviews)} "
+            f"usable={len(usable_reviews)} "
+            f"selected={len(selected_reviews)}."
         )
 
     trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
@@ -441,6 +483,7 @@ def run(
         model,
         client or OpenAIResponsesClient(),
         trace_writer,
+        max_review_overviews,
     )
     write_yaml_object(topic_contract_path, refined_contract)
     contract = refined_contract
@@ -455,7 +498,8 @@ def run(
         outputs={"topic_contract_yaml": topic_contract_path},
         row_counts={
             "review_overviews": len(review_overviews),
-            "review_full_texts": len(compact_reviews),
+            "review_full_texts": len(usable_reviews),
+            "review_full_texts_selected": len(selected_reviews),
             "tagging_categories": len(categories),
         },
         warnings=warnings,
@@ -476,7 +520,7 @@ def main() -> None:
     parser.add_argument(
         "--review-overviews",
         required=True,
-        help="Review/overview seed JSONL.",
+        help="Review/overview candidate JSONL, preferably enriched with full text.",
     )
     parser.add_argument(
         "--model",
@@ -487,6 +531,12 @@ def main() -> None:
         "--trace-dir",
         default=None,
         help="Optional directory where prompt/response traces are written.",
+    )
+    parser.add_argument(
+        "--max-review-overviews",
+        type=int,
+        default=DEFAULT_MAX_REVIEWS,
+        help="Maximum extracted review full texts to send into refinement.",
     )
     args = parser.parse_args()
 
@@ -499,11 +549,16 @@ def main() -> None:
         Path(args.review_overviews),
         model,
         trace_dir=trace_dir,
+        max_review_overviews=args.max_review_overviews,
     )
 
     print(f"Topic id: {result.metadata['topic_id']}")
     print(f"Title: {result.metadata['title']}")
-    print(f"Review/overview seeds: {result.row_counts['review_overviews']}")
+    print(f"Review/overview candidates: {result.row_counts['review_overviews']}")
+    print(
+        "Selected review full texts: "
+        f"{result.row_counts['review_full_texts_selected']}"
+    )
     print(f"Tagging categories: {result.row_counts['tagging_categories']}")
     print(f"Wrote {args.topic_contract}")
 

@@ -85,6 +85,10 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
 
     assert "Extracted review full-text evidence" in prompt
     assert "Bootstrap categories omitted" in prompt
+    assert (
+        "Build final tagging categories only from extracted review full-text evidence"
+        in prompt
+    )
     assert '"categories": []' in prompt
     assert "main_topic_category" not in prompt
     assert "knowledge categories" in prompt
