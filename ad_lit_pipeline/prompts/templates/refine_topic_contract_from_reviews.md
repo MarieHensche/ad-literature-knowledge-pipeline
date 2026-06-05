@@ -6,28 +6,24 @@ $topic_description
 Current topic contract:
 $current_contract_json
 
-Review and overview seed papers:
+Extracted review full-text evidence:
 $review_overviews_json
 
 Task:
-Return a complete refined topic contract. Use the review and overview seed papers
-to replace or improve the knowledge tagging categories so a new user does not
-need weeks of manual ontology research before running the pipeline.
+Return a complete refined topic contract. Use only the extracted review
+full-text evidence provided here to replace or improve the knowledge tagging
+categories so a new user does not need weeks of manual ontology research before
+running the pipeline.
 
 Rules:
-- Use only the review and overview evidence provided here; do not infer from
-  imagined primary papers.
-- If the review and overview seed paper list is empty, build the best final
-  tagging ontology you can from the research question and discovery contract.
-  Do not preserve provisional bootstrap categories as evidence. The pipeline
-  will emit a warning that this ontology was not review-seeded.
-- Prefer evidence from seed reviews with high `review_selection_score`, strong
-  topical evidence, useful abstracts, recent years, and citation strength.
-- When a seed review includes `full_text_evidence`, treat it as the richest available context for ontology design. Use abstracts and metadata only as fallback or supporting context for reviews without extracted full text.
-- Do not let off-topic seed reviews reshape the ontology, even if they are
-  recent or highly cited.
-- If a seed review is only broadly related but not close to the research topic,
-  use it only for generic context, not for topic-specific tag categories.
+- Define tagging categories and allowed values only from `full_text_evidence` in
+  the extracted review records. Do not use titles, abstracts, query metadata,
+  citation metadata, or imagined primary papers to define tags.
+- If no extracted review full-text evidence is available, the pipeline should
+  fail before this prompt is called. Do not invent a fallback ontology from the
+  research question or discovery contract alone.
+- Do not let off-topic passages in a review reshape the ontology, even if the
+  review itself was selected by the search step.
 - Preserve the research question, topic structure, broad discovery scope,
   rule-based screening, candidate-screening policy, provider settings, and
   search queries. This task is only about knowledge tagging categories and
@@ -39,8 +35,8 @@ Rules:
   replaceable examples. Keep one only when the review evidence shows that it is
   a crucial knowledge dimension for this topic.
 - The current contract prompt context intentionally omits bootstrap categories.
-  Build final categories from review evidence and the research question, not
-  from provisional discovery placeholders.
+  Build final categories from extracted review full-text evidence, not from
+  provisional discovery placeholders.
 - Add or improve multiple topic-specific knowledge categories for what the
   literature is about: targets, phenomena, populations, outcomes, mechanisms,
   claims, signals, methods, or other domain concepts visible in the review

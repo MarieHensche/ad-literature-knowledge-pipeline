@@ -4,7 +4,7 @@ contract.
 User research question:
 $topic_description
 
-Review and overview seed papers:
+Extracted review full-text evidence:
 $review_overviews_json
 
 Failed refined contract candidate:
@@ -34,8 +34,9 @@ Rules:
   validation issue.
 - Remove or replace generic boilerplate categories with topic-specific
   review-derived categories.
-- When seed reviews include `full_text_evidence`, use that evidence before
-  abstract-only metadata when choosing replacement categories and values.
+- Use only `full_text_evidence` from extracted review records when choosing
+  replacement categories and values. Do not use abstracts, titles, query
+  metadata, citation metadata, or imagined primary papers to repair the ontology.
 - Do not introduce catch-all values such as `unclear`, `not_reported`, `other`,
   `mixed_or_unclear`, `not_applicable`, or `unknown`.
 - If repairing `knowledge_goal`, return the complete replacement
@@ -43,10 +44,9 @@ Rules:
   `required` true, `selection` single, and `applies_when` null.
 - If a category depends on a repaired parent value, repair the dependency or
   replace the dependent category.
-- If no review seed papers are available, use the research question and
-  discovery contract as fallback context, but do not preserve provisional
-  bootstrap categories unless they are genuinely useful as final knowledge
-  dimensions.
+- If no extracted review full-text evidence is available, the pipeline should
+  fail before this prompt is called. Do not invent a fallback ontology from the
+  research question or discovery contract alone.
 - Use compact lowercase snake_case category ids and values.
 - For each `upsert_categories` item, include `category_id`, `description`,
   `required`, `selection`, `values`, and `applies_when`.

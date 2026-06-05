@@ -75,9 +75,15 @@ REPLACE_CATEGORY_ISSUE_CODES = {
     "meta_dependency",
     "broad_dependency_values",
 }
-EMPTY_REVIEW_REFINEMENT_WARNING = (
-    "No review/overview seed papers were available; refined tagging ontology "
-    "from the research question and bootstrap discovery contract only."
+MISSING_REVIEW_FULL_TEXT_ERROR = (
+    "Topic-contract refinement requires extracted full text from at least one "
+    "review/overview seed paper. Run prepare_review_full_text and ensure at "
+    "least one seed has a readable full_text_text_path before refining tagging "
+    "categories."
+)
+IGNORED_ABSTRACT_ONLY_REVIEWS_WARNING = (
+    "Ignored review/overview seed papers without extracted full text; final "
+    "tagging categories were refined only from review full-text evidence."
 )
 MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS = 16_000
 
@@ -90,52 +96,43 @@ class TaggingRepairError(ValueError):
         self.trace_paths = trace_paths
 
 
-def compact_review_overview(record: dict[str, Any]) -> dict[str, Any]:
-    """Keep only prompt-useful review metadata."""
-    raw = record.get("raw_record")
-    open_access: object = {}
-    best_oa_location: object = {}
-    work_type = ""
-    if isinstance(raw, dict):
-        open_access = raw.get("open_access") or {}
-        best_oa_location = raw.get("best_oa_location") or {}
-        work_type = str(raw.get("type") or "")
+def review_evidence_id(record: dict[str, Any], index: int) -> str:
+    for key in ["provider_id", "doi", "paper_id"]:
+        value = str(record.get(key) or "").strip()
+        if value:
+            return value
+    return f"review_{index}"
 
+
+def compact_review_overview(
+    record: dict[str, Any],
+    index: int,
+) -> dict[str, Any] | None:
+    """Keep only extracted review full-text evidence for tag ontology design."""
     full_text_evidence = read_text_evidence(
         str(record.get("full_text_text_path") or ""),
         max_chars=MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS,
     )
-    compacted = {
-        "provider_id": record.get("provider_id", ""),
-        "doi": record.get("doi", ""),
-        "title": record.get("title", ""),
-        "year": record.get("year", ""),
-        "venue": record.get("venue", ""),
-        "type": work_type,
-        "abstract": record.get("abstract", ""),
-        "query": record.get("query", ""),
-        "query_reason": record.get("query_reason", ""),
-        "cited_by_count": record.get("cited_by_count", ""),
-        "citation_rate_per_year": record.get("citation_rate_per_year", ""),
-        "review_selection_score": record.get("review_selection_score", ""),
-        "review_topic_evidence": record.get("review_topic_evidence", []),
-        "review_selection_reasons": record.get("review_selection_reasons", []),
-        "open_access": open_access,
-        "best_oa_location": best_oa_location,
+    if not full_text_evidence:
+        return None
+
+    return {
+        "review_id": review_evidence_id(record, index),
         "full_text_status": record.get("full_text_status", ""),
         "full_text_source": record.get("full_text_source", ""),
-        "full_text_url": record.get("full_text_url", ""),
         "full_text_license": record.get("full_text_license", ""),
         "full_text_chars": record.get("full_text_chars", ""),
-        "full_text_available_for_refinement": "yes" if full_text_evidence else "no",
+        "full_text_evidence": full_text_evidence,
     }
-    if full_text_evidence:
-        compacted["full_text_evidence"] = full_text_evidence
-    return compacted
 
 
 def compact_review_overviews(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [compact_review_overview(record) for record in records]
+    compacted = []
+    for index, record in enumerate(records, start=1):
+        review = compact_review_overview(record, index)
+        if review is not None:
+            compacted.append(review)
+    return compacted
 
 
 def merge_refined_tagging(
@@ -327,6 +324,8 @@ def call_llm(
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, Any], list[Path]]:
     compact_reviews = compact_review_overviews(review_overviews)
+    if not compact_reviews:
+        raise ValueError(MISSING_REVIEW_FULL_TEXT_ERROR)
     prompt = render_refine_topic_contract_prompt(
         topic_description,
         current_contract,
@@ -426,8 +425,13 @@ def run(
     current_contract = load_topic_contract(topic_contract_path)
     review_overviews = read_jsonl_objects(review_overviews_path)
     warnings = []
-    if not review_overviews:
-        warnings.append(EMPTY_REVIEW_REFINEMENT_WARNING)
+    compact_reviews = compact_review_overviews(review_overviews)
+    if review_overviews and len(compact_reviews) < len(review_overviews):
+        warnings.append(
+            f"{IGNORED_ABSTRACT_ONLY_REVIEWS_WARNING} "
+            f"ignored={len(review_overviews) - len(compact_reviews)} "
+            f"used={len(compact_reviews)}."
+        )
 
     trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
     refined_contract, trace_paths = call_llm(
@@ -451,6 +455,7 @@ def run(
         outputs={"topic_contract_yaml": topic_contract_path},
         row_counts={
             "review_overviews": len(review_overviews),
+            "review_full_texts": len(compact_reviews),
             "tagging_categories": len(categories),
         },
         warnings=warnings,

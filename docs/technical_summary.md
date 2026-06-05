@@ -96,10 +96,10 @@ Steps:
 
 When no topic contract is supplied, collection first generates a draft contract,
 fetches review/overview seed papers, resolves available full text for those
-reviews, refines the contract's knowledge categories from review evidence, and
-then continues into search planning. The planner can describe multiple provider
-types, but the current fetch layer implements only OpenAlex. Unsupported
-provider selections fail before any network fetch.
+reviews, refines the contract's knowledge categories from extracted review
+full-text evidence, and then continues into search planning. The planner can
+describe multiple provider types, but the current fetch layer implements only
+OpenAlex. Unsupported provider selections fail before any network fetch.
 
 Passing `--contract-bootstrap-only` runs only the contract-bootstrap steps and
 stops before search planning, so a user can review the generated contract before
@@ -109,7 +109,9 @@ candidate collection.
 main paper-tagging pipeline. It adapts OpenAlex review metadata, DOI landing
 pages, Unpaywall, Europe PMC, and CORE locations into cached text files, then
 `refine_topic_contract` sends bounded `full_text_evidence` from those texts to
-the LLM alongside review abstracts and selection metadata.
+the LLM. Reviews without extracted full text are excluded from tag ontology
+generation; if no review full text is available, refinement fails instead of
+building tags from abstracts or metadata.
 
 When a reviewed topic contract is supplied, `--topic` is optional. Collection
 steps derive the planner and candidate-screening topic text from the contract's
@@ -170,15 +172,15 @@ when no contract is supplied. A contract includes:
 
 Tagging categories are topic-specific knowledge dimensions. Generated contracts
 start from example placeholders, then the review-seeded refinement step replaces
-or improves them from review/overview evidence. New generated/refined contracts
-must contain at least six concrete knowledge categories, reject generic
-meta-categories, and include a required single-selection `knowledge_goal` root
-category whose concrete values form a complete, mutually exclusive
-topic-specific partition of included papers. The `knowledge_goal` values are
-inferred from the topic/reviews and should use `topic_structure.main_topics` as
-scaffolding for the main knowledge roles papers play around the topic. Details
-that apply only under one root value should be represented as conditional
-categories with `applies_when`.
+or improves them from extracted review full-text evidence only. New
+generated/refined contracts must contain at least six concrete knowledge
+categories, reject generic meta-categories, and include a required
+single-selection `knowledge_goal` root category whose concrete values form a
+complete, mutually exclusive topic-specific partition of included papers. The
+`knowledge_goal` values are inferred from review full texts and should use
+`topic_structure.main_topics` as scaffolding for the main knowledge roles papers
+play around the topic. Details that apply only under one root value should be
+represented as conditional categories with `applies_when`.
 Generated values should avoid `unclear`, `not_reported`, `mixed_or_unclear`,
 and `other`; missing or inapplicable details should usually be represented by
 optional or conditional categories instead. The audit step checks observed

@@ -77,20 +77,20 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
         contract,
         [
             {
-                "title": "Review of AI biomarkers for early AD detection",
-                "abstract": "A review of modalities and validation practices.",
+                "review_id": "W1",
                 "full_text_evidence": "[Results]\nSpeech and imaging markers matter.",
             }
         ],
     )
 
-    assert "Review and overview seed papers" in prompt
+    assert "Extracted review full-text evidence" in prompt
     assert "Bootstrap categories omitted" in prompt
     assert '"categories": []' in prompt
     assert "main_topic_category" not in prompt
     assert "knowledge categories" in prompt
     assert "full_text_evidence" in prompt
-    assert "richest available context" in prompt
+    assert "Define tagging categories and allowed values only from `full_text_evidence`" in prompt
+    assert "Do not use titles, abstracts, query metadata" in prompt
     assert "at least 6 knowledge tagging categories" in prompt
     assert "category_id `knowledge_goal`" in prompt
     assert "topic_structure.main_topics" in prompt
@@ -107,7 +107,7 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "only about knowledge tagging" in prompt
     assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
-    assert "If the review and overview seed paper list is empty" in prompt
+    assert "If no extracted review full-text evidence is available" in prompt
 
 
 def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
@@ -143,6 +143,7 @@ def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
     assert "Do not modify `research_topic`, `topic_structure`, `scope`" in prompt
     assert "Patch only `tagging.categories`" in prompt
     assert "full_text_evidence" in prompt
+    assert "Do not use abstracts, titles, query" in prompt
     assert "Do not return a full topic contract" in prompt
     assert "boilerplate_category_id" in prompt
 

@@ -5,6 +5,8 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from ad_lit_pipeline.llm.client import StaticJSONClient
 from ad_lit_pipeline.llm.schemas import paper_tags_schema
 from ad_lit_pipeline.io.jsonl_io import write_jsonl
@@ -40,6 +42,36 @@ def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> 
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def review_seed_with_full_text(
+    tmp_path: Path,
+    stem: str = "review",
+    body: str | None = None,
+) -> dict[str, object]:
+    text_path = tmp_path / f"{stem}_full_text.txt"
+    text_path.write_text(
+        (
+            body
+            or (
+                "Introduction\nThis review maps early detection evidence.\n\n"
+                "Results\nFull text evidence separates speech markers, imaging "
+                "biomarkers, fluid assays, and external validation cohorts.\n\n"
+                "Conclusion\nReview authors recommend clinically validated "
+                "screening and conversion prediction categories.\n\n"
+            )
+        )
+        * 8,
+        encoding="utf-8",
+    )
+    return {
+        "provider_id": stem,
+        "title": "Metadata title that must not define tags",
+        "abstract": "Metadata abstract that must not define tags.",
+        "full_text_status": "local_text_extracted",
+        "full_text_text_path": str(text_path),
+        "full_text_chars": str(text_path.stat().st_size),
+    }
 
 
 def generated_topic_contract_payload() -> dict:
@@ -642,40 +674,15 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
-    review_text_path = tmp_path / "review_full_text.txt"
-    review_text_path.write_text(
-        (
-            "Introduction\nThis review maps early AD detection evidence.\n\n"
-            "Results\nFull text evidence separates speech markers, imaging "
-            "biomarkers, fluid assays, and external validation cohorts.\n\n"
-            "Conclusion\nReview authors recommend clinically validated "
-            "screening and conversion prediction categories.\n\n"
-        )
-        * 8,
-        encoding="utf-8",
-    )
     write_jsonl(
         review_path,
         [
+            review_seed_with_full_text(tmp_path, "W1"),
             {
-                "provider_id": "W1",
-                "title": "Review of AI biomarkers for early AD detection",
-                "year": 2024,
-                "venue": "Example Reviews",
-                "abstract": (
-                    "This overview maps neuroimaging, speech, cognitive tests, "
-                    "and model validation practices for early AD detection."
-                ),
-                "query": "early detection Alzheimer's review",
-                "raw_record": {
-                    "type": "review",
-                    "open_access": {"is_oa": True},
-                    "best_oa_location": {"pdf_url": "https://example.test/paper.pdf"},
-                },
-                "full_text_status": "local_text_extracted",
-                "full_text_text_path": str(review_text_path),
-                "full_text_chars": str(review_text_path.stat().st_size),
-            }
+                "provider_id": "abstract_only_review",
+                "title": "Abstract-only review must not shape tags",
+                "abstract": "This metadata-only review should be ignored.",
+            },
         ],
     )
 
@@ -801,19 +808,28 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert refined["topic_structure"] == contract["topic_structure"]
     assert "evidence_signal_family" in categories
     assert "detection_outcome" in categories
-    assert result.row_counts["review_overviews"] == 1
+    assert result.row_counts["review_overviews"] == 2
+    assert result.row_counts["review_full_texts"] == 1
     assert result.row_counts["tagging_categories"] == 7
+    assert result.warnings == [
+        (
+            "Ignored review/overview seed papers without extracted full text; "
+            "final tagging categories were refined only from review full-text "
+            "evidence. ignored=1 used=1."
+        )
+    ]
     assert result.trace_paths
-    assert "Review and overview seed papers" in client.requests[0]["prompt"]
-    assert "AI biomarkers" in client.requests[0]["prompt"]
+    assert "Extracted review full-text evidence" in client.requests[0]["prompt"]
     assert "full_text_evidence" in client.requests[0]["prompt"]
     assert "speech markers, imaging biomarkers" in client.requests[0]["prompt"]
+    assert "Abstract-only review must not shape tags" not in client.requests[0]["prompt"]
+    assert "Metadata abstract that must not define tags" not in client.requests[0]["prompt"]
     assert "Bootstrap categories omitted" in client.requests[0]["prompt"]
     assert '"categories": []' in client.requests[0]["prompt"]
     assert "main_topic_category" not in client.requests[0]["prompt"]
 
 
-def test_refine_topic_contract_runs_with_empty_review_overviews(
+def test_refine_topic_contract_requires_extracted_review_full_text(
     tmp_path: Path,
 ) -> None:
     contract = load_topic_contract(TOPIC_CONTRACT)
@@ -823,31 +839,19 @@ def test_refine_topic_contract_runs_with_empty_review_overviews(
     review_path.write_text("", encoding="utf-8")
     client = StaticJSONClient([generated_topic_contract_payload()])
 
-    result = run_refine_topic_contract(
-        "How can Alzheimer's disease be detected early?",
-        contract_path,
-        review_path,
-        "test-model",
-        client=client,
-        trace_dir=tmp_path / "traces",
-    )
+    with pytest.raises(ValueError, match="requires extracted full text"):
+        run_refine_topic_contract(
+            "How can Alzheimer's disease be detected early?",
+            contract_path,
+            review_path,
+            "test-model",
+            client=client,
+            trace_dir=tmp_path / "traces",
+        )
 
     refined = load_topic_contract(contract_path)
-    assert len(client.requests) == 1
-    assert result.row_counts["review_overviews"] == 0
-    assert result.warnings == [
-        (
-            "No review/overview seed papers were available; refined tagging "
-            "ontology from the research question and bootstrap discovery "
-            "contract only."
-        )
-    ]
-    assert "If the review and overview seed paper list is empty" in client.requests[
-        0
-    ]["prompt"]
-    assert "[]" in client.requests[0]["prompt"]
+    assert len(client.requests) == 0
     assert refined["research_topic"] == contract["research_topic"]
-    assert "ai_tool_type" in refined["tagging"]["categories"]
 
 
 def test_refine_topic_contract_repairs_boilerplate_category(
@@ -857,16 +861,7 @@ def test_refine_topic_contract_repairs_boilerplate_category(
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
-    write_jsonl(
-        review_path,
-        [
-            {
-                "provider_id": "W1",
-                "title": "Review of AI biomarkers for early AD detection",
-                "abstract": "Review evidence covers modalities and validation.",
-            }
-        ],
-    )
+    write_jsonl(review_path, [review_seed_with_full_text(tmp_path, "W1")])
     weak_payload = generated_topic_contract_payload()
     weak_payload["tagging"]["categories"]["study_design"] = {
         "required": False,
@@ -928,7 +923,7 @@ def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
-    write_jsonl(review_path, [{"title": "Review of MCI screening"}])
+    write_jsonl(review_path, [review_seed_with_full_text(tmp_path, "W1")])
     weak_payload = generated_topic_contract_payload()
     weak_payload["tagging"]["categories"]["knowledge_goal"]["values"] = [
         "diagnosis",
@@ -985,7 +980,7 @@ def test_refine_topic_contract_falls_back_when_targeted_repair_fails(
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
-    write_jsonl(review_path, [{"title": "Review of MCI screening"}])
+    write_jsonl(review_path, [review_seed_with_full_text(tmp_path, "W1")])
     weak_payload = generated_topic_contract_payload()
     weak_payload["tagging"]["categories"]["study_design"] = {
         "required": False,
