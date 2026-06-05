@@ -16,7 +16,6 @@ from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_topic_contract_prompt
 from ad_lit_pipeline.topics.contract import (
     normalize_tagging_label,
-    validate_generated_tagging_quality,
     validate_topic_contract,
 )
 
@@ -47,7 +46,7 @@ def prompt_with_validation_feedback(
     error: ValueError,
     best_contract: dict[str, Any] | None = None,
 ) -> str:
-    """Append semantic validation feedback for one LLM correction attempt."""
+    """Append validation feedback for one LLM correction attempt."""
     feedback = (
         prompt
         + "\n\nYour previous JSON response failed validation:\n"
@@ -227,7 +226,10 @@ def call_llm(
             system_message=SYSTEM_MESSAGE,
             prompt=attempt_prompt,
             schema_name="topic_contract",
-            schema=topic_contract_schema(SUPPORTED_PROVIDERS),
+            schema=topic_contract_schema(
+                SUPPORTED_PROVIDERS,
+                min_tagging_categories=1,
+            ),
             step_name=STEP.name,
             call_id=call_id,
             trace_writer=trace_writer,
@@ -239,7 +241,6 @@ def call_llm(
             contract: dict[str, Any] | None = None
             contract = contract_from_model_payload(result.parsed)
             validate_topic_contract(contract)
-            validate_generated_tagging_quality(contract)
             return contract, trace_paths
         except ValueError as error:
             last_error = error

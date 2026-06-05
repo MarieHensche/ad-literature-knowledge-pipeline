@@ -17,6 +17,10 @@ need weeks of manual ontology research before running the pipeline.
 Rules:
 - Use only the review and overview evidence provided here; do not infer from
   imagined primary papers.
+- If the review and overview seed paper list is empty, build the best final
+  tagging ontology you can from the research question and discovery contract.
+  Do not preserve provisional bootstrap categories as evidence. The pipeline
+  will emit a warning that this ontology was not review-seeded.
 - Prefer evidence from seed reviews with high `review_selection_score`, strong
   topical evidence, useful abstracts, recent years, and citation strength.
 - Do not let off-topic seed reviews reshape the ontology, even if they are
@@ -33,6 +37,9 @@ Rules:
 - Treat any existing categories from a template or provisional draft as
   replaceable examples. Keep one only when the review evidence shows that it is
   a crucial knowledge dimension for this topic.
+- The current contract prompt context intentionally omits bootstrap categories.
+  Build final categories from review evidence and the research question, not
+  from provisional discovery placeholders.
 - Add or improve multiple topic-specific knowledge categories for what the
   literature is about: targets, phenomena, populations, outcomes, mechanisms,
   claims, signals, methods, or other domain concepts visible in the review

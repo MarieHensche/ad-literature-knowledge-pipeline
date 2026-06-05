@@ -5,6 +5,7 @@ from pathlib import Path
 from ad_lit_pipeline.prompts.render import (
     render_generate_tagging_rules_prompt,
     render_generate_topic_contract_prompt,
+    render_repair_topic_contract_tagging_prompt,
     render_refine_topic_contract_prompt,
     render_screen_candidate_prompt,
     render_tag_paper_prompt,
@@ -55,23 +56,18 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
 
     assert "borderline or tangentially relevant candidates are included" in prompt
     assert "collection.search_queries" in prompt
-    assert "multiple topic-specific knowledge tagging categories" in prompt
-    assert "at least 6 knowledge tagging categories" in prompt
-    assert "category_id `knowledge_goal`" in prompt
-    assert "topic_structure.main_topics" in prompt
-    assert "complete, mutually exclusive partition" in prompt
-    assert "mental distribution check" in prompt
-    assert "no single value should be so broad" in prompt
-    assert "conditional sub-categories" in prompt
-    assert "Do not add `unclear`, `mixed_or_unclear`, `not_reported`, or `other`" in prompt
-    assert "generic boilerplate categories" in prompt
-    assert "generic method or participant buckets" in prompt
-    assert "topic-specific id and values" in prompt
-    assert "multiple allowed values" in prompt
+    assert "discovery-focused topic contract" in prompt
+    assert "tagging categories in this first contract are provisional" in prompt.lower()
+    assert "final extraction ontology" in prompt
+    assert "Include at least one provisional tagging category" in prompt
+    assert "knowledge_goal" in prompt
     assert "examples only" in prompt
     assert "`applies_when`" in prompt
     assert "common abbreviations or acronyms" in prompt
     assert "climate change affect human health" in prompt
+    assert "at least 6 knowledge tagging categories" not in prompt
+    assert "mental distribution check" not in prompt
+    assert "no single value should be so broad" not in prompt
 
 
 def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -> None:
@@ -88,6 +84,9 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     )
 
     assert "Review and overview seed papers" in prompt
+    assert "Bootstrap categories omitted" in prompt
+    assert '"categories": []' in prompt
+    assert "main_topic_category" not in prompt
     assert "knowledge categories" in prompt
     assert "at least 6 knowledge tagging categories" in prompt
     assert "category_id `knowledge_goal`" in prompt
@@ -105,6 +104,43 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "only about knowledge tagging" in prompt
     assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
+    assert "If the review and overview seed paper list is empty" in prompt
+
+
+def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
+    prompt = render_repair_topic_contract_tagging_prompt(
+        topic_description="How does green space affect sleep?",
+        failed_contract={
+            "topic_id": "green_space_sleep",
+            "tagging": {
+                "categories": {
+                    "study_design": {
+                        "required": False,
+                        "selection": "multi",
+                        "values": ["cross_sectional", "longitudinal"],
+                    }
+                }
+            },
+        },
+        review_overviews=[],
+        validation_issues=[
+            {
+                "code": "boilerplate_category_id",
+                "category_id": "study_design",
+                "values": [],
+                "message": "study_design is generic.",
+            }
+        ],
+        existing_category_ids=["study_design"],
+        forbidden_generic_ids=["study_design"],
+        forbidden_catchall_values=["not_reported", "other"],
+    )
+
+    assert "Return only a JSON patch" in prompt
+    assert "Do not modify `research_topic`, `topic_structure`, `scope`" in prompt
+    assert "Patch only `tagging.categories`" in prompt
+    assert "Do not return a full topic contract" in prompt
+    assert "boilerplate_category_id" in prompt
 
 
 def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:

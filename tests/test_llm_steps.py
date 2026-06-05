@@ -564,7 +564,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     assert result.trace_paths
 
 
-def test_generate_topic_contract_retries_with_tagging_quality_feedback(
+def test_generate_topic_contract_accepts_weak_provisional_tagging(
     tmp_path: Path,
 ) -> None:
     weak_payload = generated_topic_contract_payload()
@@ -583,7 +583,7 @@ def test_generate_topic_contract_retries_with_tagging_quality_feedback(
         "selection": "multi",
         "values": ["cross_sectional", "longitudinal", "experimental"],
     }
-    client = StaticJSONClient([weak_payload, generated_topic_contract_payload()])
+    client = StaticJSONClient([weak_payload])
     output = tmp_path / "contract.yaml"
 
     result = run_generate_topic_contract(
@@ -596,44 +596,22 @@ def test_generate_topic_contract_retries_with_tagging_quality_feedback(
 
     contract = load_topic_contract(output)
     categories = contract["tagging"]["categories"]
-    assert len(client.requests) == 2
-    retry_prompt = client.requests[1]["prompt"]
+    assert len(client.requests) == 1
     assert client.requests[0]["call_id"] == "contract"
-    assert client.requests[1]["call_id"] == "contract_retry_2"
-    assert "self-help_resources" in retry_prompt
-    assert "target_population" in retry_prompt
-    assert "study_design" in retry_prompt
-    assert "check every validation path above" in retry_prompt
-    assert "self_help_resources" in retry_prompt
-    assert "Do not keep generic category ids" in retry_prompt
-    assert "target_population" not in categories
-    assert "study_design" not in categories
-    assert result.row_counts["tagging_categories"] == 7
+    assert client.requests[0]["schema"]["properties"]["tagging"]["properties"][
+        "categories"
+    ]["minItems"] == 1
+    assert "target_population" in categories
+    assert "study_design" in categories
+    assert result.row_counts["tagging_categories"] == 10
 
 
-def test_generate_topic_contract_retries_from_best_failed_contract(
+def test_generate_topic_contract_still_retries_on_structural_errors(
     tmp_path: Path,
 ) -> None:
-    first_payload = generated_topic_contract_payload()
-    first_payload["tagging"]["categories"]["study_design"] = {
-        "required": False,
-        "selection": "multi",
-        "values": ["cross_sectional", "longitudinal", "experimental"],
-    }
-    worse_payload = generated_topic_contract_payload()
-    worse_payload["tagging"]["categories"]["study_design"] = {
-        "required": False,
-        "selection": "multi",
-        "values": ["cross_sectional", "longitudinal", "experimental"],
-    }
-    worse_payload["tagging"]["categories"]["study_population"] = {
-        "required": False,
-        "selection": "multi",
-        "values": ["adults", "children", "general_population"],
-    }
-    client = StaticJSONClient(
-        [first_payload, worse_payload, generated_topic_contract_payload()]
-    )
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_structure"]["anchor_topic_id"] = "missing_topic"
+    client = StaticJSONClient([invalid_payload, generated_topic_contract_payload()])
     output = tmp_path / "contract.yaml"
 
     result = run_generate_topic_contract(
@@ -644,15 +622,12 @@ def test_generate_topic_contract_retries_from_best_failed_contract(
         trace_dir=tmp_path / "traces",
     )
 
-    retry_3_prompt = client.requests[2]["prompt"]
     assert result.row_counts["tagging_categories"] == 7
-    assert len(client.requests) == 3
-    assert client.requests[2]["call_id"] == "contract_retry_3"
-    assert "Best response so far" in retry_3_prompt
-    assert "tagging.categories.study_design is a generic boilerplate" in retry_3_prompt
-    worse_issue = "tagging.categories.study_population is a generic boilerplate"
-    assert worse_issue not in retry_3_prompt
-    assert '"ai_tool_type"' in retry_3_prompt
+    assert len(client.requests) == 2
+    assert client.requests[0]["call_id"] == "contract"
+    assert client.requests[1]["call_id"] == "contract_retry_2"
+    assert "previous JSON response failed validation" in client.requests[1]["prompt"]
+    assert "topic_structure.anchor_topic_id" in client.requests[1]["prompt"]
 
 
 def test_refine_topic_contract_adds_review_seeded_categories(
@@ -816,6 +791,228 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert result.trace_paths
     assert "Review and overview seed papers" in client.requests[0]["prompt"]
     assert "AI biomarkers" in client.requests[0]["prompt"]
+    assert "Bootstrap categories omitted" in client.requests[0]["prompt"]
+    assert '"categories": []' in client.requests[0]["prompt"]
+    assert "main_topic_category" not in client.requests[0]["prompt"]
+
+
+def test_refine_topic_contract_runs_with_empty_review_overviews(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    review_path = tmp_path / "review_overviews.jsonl"
+    review_path.write_text("", encoding="utf-8")
+    client = StaticJSONClient([generated_topic_contract_payload()])
+
+    result = run_refine_topic_contract(
+        "How can Alzheimer's disease be detected early?",
+        contract_path,
+        review_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    refined = load_topic_contract(contract_path)
+    assert len(client.requests) == 1
+    assert result.row_counts["review_overviews"] == 0
+    assert result.warnings == [
+        (
+            "No review/overview seed papers were available; refined tagging "
+            "ontology from the research question and bootstrap discovery "
+            "contract only."
+        )
+    ]
+    assert "If the review and overview seed paper list is empty" in client.requests[
+        0
+    ]["prompt"]
+    assert "[]" in client.requests[0]["prompt"]
+    assert refined["research_topic"] == contract["research_topic"]
+    assert "ai_tool_type" in refined["tagging"]["categories"]
+
+
+def test_refine_topic_contract_repairs_boilerplate_category(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    review_path = tmp_path / "review_overviews.jsonl"
+    write_jsonl(
+        review_path,
+        [
+            {
+                "provider_id": "W1",
+                "title": "Review of AI biomarkers for early AD detection",
+                "abstract": "Review evidence covers modalities and validation.",
+            }
+        ],
+    )
+    weak_payload = generated_topic_contract_payload()
+    weak_payload["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["cross_sectional", "longitudinal", "experimental"],
+    }
+    repair_patch = {
+        "remove_category_ids": ["study_design"],
+        "upsert_categories": [
+            {
+                "category_id": "detection_validation_setting",
+                "description": (
+                    "Validation settings used for early detection evidence."
+                ),
+                "required": False,
+                "selection": "multi",
+                "values": [
+                    "internal_validation",
+                    "external_validation",
+                    "clinical_validation",
+                ],
+                "applies_when": None,
+            }
+        ],
+        "repair_notes": [
+            "Replaced generic study_design with a topic-specific validation category."
+        ],
+    }
+    client = StaticJSONClient([weak_payload, repair_patch])
+
+    result = run_refine_topic_contract(
+        "How can Alzheimer's disease be detected early?",
+        contract_path,
+        review_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    refined = load_topic_contract(contract_path)
+    categories = refined["tagging"]["categories"]
+    assert [request["call_id"] for request in client.requests] == [
+        "contract_refinement",
+        "contract_refinement_repair",
+    ]
+    assert "study_design" not in categories
+    assert "detection_validation_setting" in categories
+    assert refined["research_topic"] == contract["research_topic"]
+    assert refined["topic_structure"] == contract["topic_structure"]
+    assert refined["scope"] == contract["scope"]
+    assert refined["collection"] == contract["collection"]
+    assert any("repair" in path.name for path in result.trace_paths)
+
+
+def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    review_path = tmp_path / "review_overviews.jsonl"
+    write_jsonl(review_path, [{"title": "Review of MCI screening"}])
+    weak_payload = generated_topic_contract_payload()
+    weak_payload["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "diagnosis",
+        "prognosis",
+    ]
+    repair_patch = {
+        "remove_category_ids": [],
+        "upsert_categories": [
+            {
+                "category_id": "knowledge_goal",
+                "description": (
+                    "Root partition of early detection papers by knowledge role."
+                ),
+                "required": True,
+                "selection": "single",
+                "values": [
+                    "screening_detection",
+                    "risk_prediction",
+                    "diagnostic_validation",
+                ],
+                "applies_when": None,
+            }
+        ],
+        "repair_notes": ["Expanded knowledge_goal to three role-like values."],
+    }
+    client = StaticJSONClient([weak_payload, repair_patch])
+
+    run_refine_topic_contract(
+        "How can Alzheimer's disease be detected early?",
+        contract_path,
+        review_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    refined = load_topic_contract(contract_path)
+    assert list(refined["tagging"]["categories"])[0] == "knowledge_goal"
+    assert refined["tagging"]["categories"]["knowledge_goal"]["values"] == [
+        "screening_detection",
+        "risk_prediction",
+        "diagnostic_validation",
+    ]
+    assert [request["call_id"] for request in client.requests] == [
+        "contract_refinement",
+        "contract_refinement_repair",
+    ]
+
+
+def test_refine_topic_contract_falls_back_when_targeted_repair_fails(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    review_path = tmp_path / "review_overviews.jsonl"
+    write_jsonl(review_path, [{"title": "Review of MCI screening"}])
+    weak_payload = generated_topic_contract_payload()
+    weak_payload["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": ["cross_sectional", "longitudinal", "experimental"],
+    }
+    bad_repair_patch = {
+        "remove_category_ids": ["study_design"],
+        "upsert_categories": [
+            {
+                "category_id": "replacement_category",
+                "description": "Invalid because it uses a catch-all value.",
+                "required": False,
+                "selection": "multi",
+                "values": ["not_reported", "unclear"],
+                "applies_when": None,
+            }
+        ],
+        "repair_notes": ["This patch should fail semantic validation."],
+    }
+    client = StaticJSONClient(
+        [weak_payload, bad_repair_patch, generated_topic_contract_payload()]
+    )
+
+    result = run_refine_topic_contract(
+        "How can Alzheimer's disease be detected early?",
+        contract_path,
+        review_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    refined = load_topic_contract(contract_path)
+    assert [request["call_id"] for request in client.requests] == [
+        "contract_refinement",
+        "contract_refinement_repair",
+        "contract_refinement_retry_2",
+    ]
+    assert "study_design" not in refined["tagging"]["categories"]
+    assert "ai_tool_type" in refined["tagging"]["categories"]
+    assert any(
+        "contract_refinement_repair" in path.name for path in result.trace_paths
+    )
 
 
 def test_review_exclusion_does_not_force_abstracts_without_policy() -> None:

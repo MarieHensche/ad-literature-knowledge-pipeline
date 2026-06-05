@@ -121,7 +121,10 @@ def plan_schema(provider_names: list[str]) -> dict[str, Any]:
     }
 
 
-def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
+def topic_contract_schema(
+    provider_names: list[str],
+    min_tagging_categories: int = 6,
+) -> dict[str, Any]:
     """Build the JSON schema for generated topic contract drafts."""
     category_dependency_schema = {
         "type": "object",
@@ -311,7 +314,7 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
                     },
                     "categories": {
                         "type": "array",
-                        "minItems": 6,
+                        "minItems": min_tagging_categories,
                         "items": category_schema,
                     },
                 },
@@ -365,6 +368,76 @@ def topic_contract_schema(provider_names: list[str]) -> dict[str, Any]:
             "candidate_screening",
             "tagging",
             "collection",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def topic_contract_tagging_repair_schema() -> dict[str, Any]:
+    """Build the JSON schema for patch-only topic tagging repairs."""
+    category_dependency_schema = {
+        "type": "object",
+        "properties": {
+            "category_id": {"type": "string"},
+            "values": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["category_id", "values"],
+        "additionalProperties": False,
+    }
+    category_schema = {
+        "type": "object",
+        "properties": {
+            "category_id": {"type": "string"},
+            "description": {"type": "string"},
+            "required": {"type": "boolean"},
+            "selection": {"type": "string", "enum": ["single", "multi"]},
+            "values": {
+                "type": "array",
+                "minItems": 2,
+                "items": {"type": "string"},
+            },
+            "applies_when": {
+                "type": ["object", "null"],
+                "properties": category_dependency_schema["properties"],
+                "required": category_dependency_schema["required"],
+                "additionalProperties": False,
+            },
+        },
+        "required": [
+            "category_id",
+            "description",
+            "required",
+            "selection",
+            "values",
+            "applies_when",
+        ],
+        "additionalProperties": False,
+    }
+
+    return {
+        "type": "object",
+        "properties": {
+            "remove_category_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "upsert_categories": {
+                "type": "array",
+                "items": category_schema,
+            },
+            "repair_notes": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": [
+            "remove_category_ids",
+            "upsert_categories",
+            "repair_notes",
         ],
         "additionalProperties": False,
     }

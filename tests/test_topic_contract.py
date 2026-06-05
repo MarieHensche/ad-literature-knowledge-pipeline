@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ad_lit_pipeline.topics.contract import (
+    generated_tagging_quality_issue_records,
     generated_tagging_quality_issues,
     generated_tagging_quality_warnings,
     load_topic_contract,
@@ -279,6 +280,42 @@ def test_generated_tagging_quality_rejects_boilerplate_categories() -> None:
     assert any("study_design is a generic boilerplate" in issue for issue in issues)
     warnings = generated_tagging_quality_warnings(contract)
     assert any("study_design.values look like generic" in warning for warning in warnings)
+
+
+def test_generated_tagging_quality_issue_records_include_codes() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["study_design"] = {
+        "required": False,
+        "selection": "multi",
+        "values": [
+            "cross_sectional",
+            "longitudinal",
+            "experimental",
+            "meta_analysis",
+        ],
+    }
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "improving_maternal_mental_health",
+        "enhancing_user_engagement",
+    ]
+
+    records = generated_tagging_quality_issue_records(contract)
+
+    assert any(
+        record.code == "boilerplate_category_id"
+        and record.category_id == "study_design"
+        for record in records
+    )
+    assert any(
+        record.code == "too_few_knowledge_goal_values"
+        and record.category_id == "knowledge_goal"
+        for record in records
+    )
+    assert any(
+        record.code == "vague_knowledge_goal_values"
+        and "enhancing_user_engagement" in record.values
+        for record in records
+    )
 
 
 def test_generated_tagging_quality_rejects_non_snake_case_labels() -> None:
