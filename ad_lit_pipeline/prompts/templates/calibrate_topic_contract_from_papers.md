@@ -12,9 +12,13 @@ Selected primary-paper full-text evidence:
 $primary_papers_json
 
 Task:
-Return a complete topic contract whose non-tagging sections are preserved and
-whose `tagging.categories` are calibrated against the selected primary-paper
-full-text evidence.
+Return JSON with:
+- `topic_contract`: a complete topic contract whose non-tagging sections are
+  preserved and whose `tagging.categories` are calibrated against the selected
+  primary-paper full-text evidence.
+- `paper_assignments`: one assignment for every selected primary paper mapping
+  its `paper_id` to exactly one proposed `knowledge_goal` value, with a short
+  evidence-grounded reason.
 
 Rules:
 - Use the current review-derived ontology as the starting point. Do not invent a
@@ -35,6 +39,12 @@ Rules:
   complete, mutually exclusive root axis for what each paper is mainly about.
   The id stays `knowledge_goal` for pipeline compatibility, but the category is
   conceptually the paper's primary study focus.
+- The `paper_assignments` must use every selected `paper_id` exactly once. Every
+  proposed `knowledge_goal` value must be used by at least one selected primary
+  paper. If a root value cannot be assigned to any selected full-text paper,
+  remove it, merge it with a clearer neighbor, or replace the whole root axis.
+- Prefer 3 to 6 `knowledge_goal` values. Do not create more `knowledge_goal`
+  values than the selected primary-paper full texts can support.
 - `knowledge_goal` values must be concrete nouns or noun phrases, not vague
   benefit/action phrases such as `improving_x`, `enhancing_y`, `supporting_z`,
   `studying_x`, or `evaluating_y`.
@@ -55,6 +65,6 @@ Rules:
   `not_applicable`, or `unknown` as values in generated knowledge categories.
 - Prefer 6 to 10 compact knowledge categories when the evidence supports them.
 - Category IDs and allowed values must use lowercase snake_case.
-- Return JSON matching the topic-contract schema. For `tagging.categories`,
+- Return JSON matching the calibration schema. In `topic_contract.tagging.categories`,
   return an array of category objects with `category_id`, `description`,
   `required`, `selection`, `values`, and `applies_when`.

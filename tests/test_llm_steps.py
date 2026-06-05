@@ -903,6 +903,20 @@ def test_review_full_text_selection_requires_topic_specific_title_and_text(
                 "and Deep Learning in Nutrition: A Systematic Review"
             ),
         ),
+        review_seed_with_full_text(
+            tmp_path,
+            "broad_education_review",
+            body=(
+                "Introduction\nThis review examines technology-supported "
+                "education.\n\n"
+                "Results\nEducation studies report classroom teaching, student "
+                "engagement, learning outcomes, and instructional support.\n\n"
+            ),
+            title=(
+                "Technology-supported management education: a systematic "
+                "review of antecedents of learning effectiveness"
+            ),
+        ),
     ]
 
     selected = select_review_overviews_with_full_text(
@@ -1377,16 +1391,31 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     papers_path = tmp_path / "scope_screened_full_text.csv"
-    full_text_path = tmp_path / "paper_full_text.txt"
-    full_text_path.write_text(
-        (
+    full_texts = {
+        "p1": (
             "Introduction\nThe paper studies classroom use of AI tutoring.\n\n"
             "Results\nPrimary paper full text reports student performance, "
             "lesson feedback, engagement, and teacher-supported adoption.\n\n"
-        )
-        * 20,
-        encoding="utf-8",
-    )
+        ),
+        "p2": (
+            "Introduction\nThis paper studies automated AI feedback and "
+            "assessment in lessons.\n\n"
+            "Results\nPrimary paper full text reports formative feedback, "
+            "teacher review, and assessment support for student performance.\n\n"
+        ),
+        "p3": (
+            "Introduction\nThis paper studies classroom motivation during AI "
+            "supported learning activities.\n\n"
+            "Results\nPrimary paper full text reports engagement, motivation, "
+            "lesson participation, and learning outcomes.\n\n"
+        ),
+    }
+    full_text_paths = {}
+    for paper_id, text in full_texts.items():
+        full_text_path = tmp_path / f"{paper_id}_full_text.txt"
+        full_text_path.write_text(text * 20, encoding="utf-8")
+        full_text_paths[paper_id] = full_text_path
+
     write_csv(
         papers_path,
         [
@@ -1396,8 +1425,24 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
                 "abstract": "AI tutoring and student performance.",
                 "doi": "10.123/calibration",
                 "scope_decision": "include",
-                "full_text_text_path": str(full_text_path),
-            }
+                "full_text_text_path": str(full_text_paths["p1"]),
+            },
+            {
+                "paper_id": "p2",
+                "title": "AI feedback assessment in school lessons",
+                "abstract": "AI feedback and assessment support.",
+                "doi": "10.123/calibration-feedback",
+                "scope_decision": "include",
+                "full_text_text_path": str(full_text_paths["p2"]),
+            },
+            {
+                "paper_id": "p3",
+                "title": "AI engagement in classroom lessons",
+                "abstract": "AI learning support and student engagement.",
+                "doi": "10.123/calibration-engagement",
+                "scope_decision": "include",
+                "full_text_text_path": str(full_text_paths["p3"]),
+            },
         ],
         [
             "paper_id",
@@ -1419,7 +1464,6 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
             "values": [
                 "learning_outcome_effect",
                 "engagement_motivation_effect",
-                "personalized_instruction",
                 "assessment_feedback_support",
             ],
             "applies_when": None,
@@ -1465,7 +1509,42 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
             "applies_when": None,
         },
     ]
-    client = StaticJSONClient([calibrated_payload])
+    invalid_payload = deepcopy(calibrated_payload)
+    invalid_payload["tagging"]["categories"][0]["values"] = [
+        "learning_outcome_effect",
+        "engagement_motivation_effect",
+        "assessment_feedback_support",
+        "personalized_instruction",
+    ]
+    assignments = [
+        {
+            "paper_id": "p1",
+            "knowledge_goal": "learning_outcome_effect",
+            "reason": "The full text centers on student performance effects.",
+        },
+        {
+            "paper_id": "p2",
+            "knowledge_goal": "assessment_feedback_support",
+            "reason": "The full text centers on assessment and feedback.",
+        },
+        {
+            "paper_id": "p3",
+            "knowledge_goal": "engagement_motivation_effect",
+            "reason": "The full text centers on engagement and motivation.",
+        },
+    ]
+    client = StaticJSONClient(
+        [
+            {
+                "topic_contract": invalid_payload,
+                "paper_assignments": assignments,
+            },
+            {
+                "topic_contract": calibrated_payload,
+                "paper_assignments": assignments,
+            },
+        ]
+    )
 
     result = run_calibrate_topic_contract(
         papers_path,
@@ -1478,8 +1557,8 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
 
     calibrated = load_topic_contract(contract_path)
     categories = calibrated["tagging"]["categories"]
-    assert result.row_counts["primary_papers"] == 1
-    assert result.row_counts["primary_full_texts_selected"] == 1
+    assert result.row_counts["primary_papers"] == 3
+    assert result.row_counts["primary_full_texts_selected"] == 3
     assert result.row_counts["tagging_categories"] == 6
     assert result.trace_paths
     assert calibrated["research_topic"] == contract["research_topic"]
@@ -1488,10 +1567,14 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     assert categories["knowledge_goal"]["values"] == [
         "learning_outcome_effect",
         "engagement_motivation_effect",
-        "personalized_instruction",
         "assessment_feedback_support",
     ]
+    assert len(client.requests) == 2
     assert client.requests[0]["call_id"] == "contract_calibration"
+    assert client.requests[0]["schema_name"] == "topic_contract_calibration"
+    assert client.requests[1]["call_id"] == "contract_calibration_retry_2"
+    assert "left knowledge_goal value(s) unused" in client.requests[1]["prompt"]
+    assert "`paper_assignments`" in client.requests[1]["prompt"]
     assert "Selected primary-paper full-text evidence" in client.requests[0]["prompt"]
     assert "Primary paper full text reports student performance" in client.requests[0][
         "prompt"

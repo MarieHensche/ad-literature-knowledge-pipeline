@@ -30,6 +30,7 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     DEFAULT_MAX_REVIEWS,
     meaningful_tokens,
+    normalize_text,
     review_identity,
     select_best_review_overviews,
 )
@@ -96,8 +97,11 @@ IGNORED_OFF_TOPIC_REVIEWS_WARNING = (
     "did not contain enough topic-specific evidence for ontology refinement."
 )
 MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS = 16_000
+MIN_REVIEW_TITLE_TOPIC_TOKENS = 2
+MAX_REVIEW_TITLE_PHRASE_NGRAM = 4
 
 GENERIC_REVIEW_TOPIC_TOKENS = {
+    "abstract",
     "academic",
     "adaptive",
     "affects",
@@ -109,7 +113,10 @@ GENERIC_REVIEW_TOPIC_TOKENS = {
     "applications",
     "approach",
     "approaches",
+    "aspect",
     "aspects",
+    "assess",
+    "assessing",
     "artificial",
     "automated",
     "based",
@@ -123,17 +130,23 @@ GENERIC_REVIEW_TOPIC_TOKENS = {
     "discuss",
     "effect",
     "effects",
+    "effectiveness",
     "evidence",
     "empirical",
     "exclude",
     "explore",
     "exploring",
     "focused",
+    "focus",
     "generative",
     "impact",
     "impacts",
     "include",
     "implementation",
+    "indicate",
+    "indicates",
+    "investigate",
+    "investigates",
     "intelligent",
     "intelligence",
     "language",
@@ -153,7 +166,11 @@ GENERIC_REVIEW_TOPIC_TOKENS = {
     "paper",
     "papers",
     "performance",
+    "platform",
+    "platforms",
     "processes",
+    "only",
+    "related",
     "relevant",
     "research",
     "role",
@@ -163,12 +180,18 @@ GENERIC_REVIEW_TOPIC_TOKENS = {
     "study",
     "studies",
     "studying",
+    "subtopics",
+    "summarizing",
+    "support",
+    "supported",
+    "supporting",
     "systematic",
     "system",
     "systems",
     "technology",
     "technologies",
     "they",
+    "title",
     "tool",
     "tools",
     "unrelated",
@@ -291,13 +314,92 @@ def topic_specific_terms(topic_contract: dict[str, Any]) -> set[str]:
             if isinstance(values, list):
                 texts.extend(str(value) for value in values)
 
+    collection = topic_contract.get("collection", {})
+    search_queries = (
+        collection.get("search_queries") if isinstance(collection, dict) else []
+    )
+    if isinstance(search_queries, list):
+        for query in search_queries:
+            if isinstance(query, dict):
+                texts.append(str(query.get("query") or ""))
+            elif isinstance(query, str):
+                texts.append(query)
+
     tokens = set()
     for text in texts:
         tokens.update(meaningful_tokens(text))
     return {
         token
         for token in tokens
-        if len(token) >= 4 and token not in GENERIC_REVIEW_TOPIC_TOKENS
+        if (len(token) >= 4 or token == "ai")
+        and token not in GENERIC_REVIEW_TOPIC_TOKENS
+    }
+
+
+def topic_phrase_source_texts(topic_contract: dict[str, Any]) -> list[str]:
+    """Return topic-contract text sources used for strong title phrase matches."""
+    texts = []
+    research_topic = topic_contract.get("research_topic", {})
+    if isinstance(research_topic, dict):
+        texts.extend(
+            str(research_topic.get(field) or "")
+            for field in ["title", "description"]
+        )
+
+    topic_structure = topic_contract.get("topic_structure", {})
+    main_topics = (
+        topic_structure.get("main_topics")
+        if isinstance(topic_structure, dict)
+        else []
+    )
+    if isinstance(main_topics, list):
+        for topic in main_topics:
+            if not isinstance(topic, dict):
+                continue
+            texts.append(str(topic.get("label") or ""))
+            terms = topic.get("terms")
+            if isinstance(terms, list):
+                texts.extend(str(term) for term in terms)
+
+    collection = topic_contract.get("collection", {})
+    search_queries = (
+        collection.get("search_queries") if isinstance(collection, dict) else []
+    )
+    if isinstance(search_queries, list):
+        for query in search_queries:
+            if isinstance(query, dict):
+                texts.append(str(query.get("query") or ""))
+            elif isinstance(query, str):
+                texts.append(query)
+
+    return [text for text in texts if text.strip()]
+
+
+def topic_title_phrases(topic_contract: dict[str, Any]) -> set[str]:
+    """Return normalized topic phrases strong enough for review-title gating."""
+    phrases: set[str] = set()
+    for text in topic_phrase_source_texts(topic_contract):
+        tokens = normalize_text(text).split()
+        for size in range(2, MAX_REVIEW_TITLE_PHRASE_NGRAM + 1):
+            if len(tokens) < size:
+                continue
+            for start in range(0, len(tokens) - size + 1):
+                phrase_tokens = tokens[start : start + size]
+                content_tokens = meaningful_tokens(" ".join(phrase_tokens))
+                if len(content_tokens) >= 2:
+                    phrases.add(" ".join(phrase_tokens))
+    return phrases
+
+
+def matched_topic_title_phrases(
+    text: object,
+    phrases: set[str],
+) -> set[str]:
+    normalized = f" {normalize_text(text)} "
+    return {
+        phrase
+        for phrase in phrases
+        if f" {phrase} " in normalized
     }
 
 
@@ -325,25 +427,39 @@ def review_topic_eligibility(
     if not specific_terms:
         return True, ["no topic-specific contract terms available for filtering"]
 
+    title_phrases = topic_title_phrases(topic_contract)
     title_matches = matched_topic_specific_terms(
         record.get("title", ""),
         specific_terms,
     )
+    title_phrase_matches = matched_topic_title_phrases(
+        record.get("title", ""),
+        title_phrases,
+    )
     evidence_matches = matched_topic_specific_terms(evidence, specific_terms)
-    if not title_matches:
+    has_strong_title_evidence = len(
+        title_matches
+    ) >= MIN_REVIEW_TITLE_TOPIC_TOKENS or (
+        bool(title_matches) and bool(title_phrase_matches)
+    )
+    if not has_strong_title_evidence:
         return False, [
-            "review title lacks topic-specific terms",
+            "review title lacks enough topic-specific terms or phrase evidence",
             f"available_terms={', '.join(sorted(specific_terms)[:20])}",
+            f"title_matches={', '.join(sorted(title_matches))}",
+            f"title_phrase_matches={', '.join(sorted(title_phrase_matches)[:12])}",
         ]
     if len(evidence_matches) < 2 and not (title_matches & evidence_matches):
         return False, [
             "review full text lacks enough topic-specific evidence",
             f"title_matches={', '.join(sorted(title_matches))}",
+            f"title_phrase_matches={', '.join(sorted(title_phrase_matches)[:12])}",
             f"evidence_matches={', '.join(sorted(evidence_matches)[:20])}",
         ]
 
     return True, [
         f"title_matches={', '.join(sorted(title_matches)[:12])}",
+        f"title_phrase_matches={', '.join(sorted(title_phrase_matches)[:12])}",
         f"full_text_matches={', '.join(sorted(evidence_matches)[:20])}",
     ]
 

@@ -10,7 +10,7 @@ from ad_lit_pipeline.core.env import load_dotenv
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.yaml_io import write_yaml_object
 from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
-from ad_lit_pipeline.llm.schemas import topic_contract_schema
+from ad_lit_pipeline.llm.schemas import topic_contract_calibration_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_calibrate_topic_contract_prompt
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import meaningful_tokens
@@ -18,7 +18,6 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     MAX_CONTRACT_VALIDATION_ATTEMPTS,
     SUPPORTED_PROVIDERS,
     contract_from_model_payload,
-    prompt_with_validation_feedback,
 )
 from ad_lit_pipeline.steps.collection.refine_topic_contract import merge_refined_tagging
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
@@ -196,6 +195,23 @@ def full_text_evidence(row: dict[str, str]) -> str:
     )
 
 
+def calibration_prompt_with_validation_feedback(
+    prompt: str,
+    error: ValueError,
+) -> str:
+    return (
+        prompt
+        + "\n\nYour previous JSON response failed validation:\n"
+        + str(error)
+        + "\n\nReturn corrected JSON with `topic_contract` and "
+        "`paper_assignments`. Keep the non-tagging topic-contract sections "
+        "preserved. Repair the tagging ontology and assignments together so "
+        "each selected `paper_id` is assigned exactly once and every proposed "
+        "`knowledge_goal` value is assigned to at least one selected full-text "
+        "paper."
+    )
+
+
 def primary_paper_score(
     topic_contract: dict[str, Any],
     row: dict[str, str],
@@ -248,6 +264,104 @@ def select_primary_papers_for_calibration(
     return selected_rows, compact
 
 
+def calibration_response_parts(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if not isinstance(payload, dict):
+        raise ValueError("Calibration response must be a JSON object.")
+
+    topic_contract = payload.get("topic_contract")
+    if not isinstance(topic_contract, dict):
+        raise ValueError("Calibration response must contain topic_contract.")
+
+    assignments = payload.get("paper_assignments")
+    if not isinstance(assignments, list):
+        raise ValueError("Calibration response must contain paper_assignments.")
+    if not all(isinstance(assignment, dict) for assignment in assignments):
+        raise ValueError("Each calibration paper assignment must be an object.")
+
+    return topic_contract, assignments
+
+
+def compact_primary_paper_ids(primary_papers: list[dict[str, Any]]) -> list[str]:
+    paper_ids = []
+    for index, paper in enumerate(primary_papers, start=1):
+        paper_id = str(paper.get("paper_id") or f"paper_{index}").strip()
+        if not paper_id:
+            raise ValueError(f"Selected primary paper {index} has no paper_id.")
+        if paper_id in paper_ids:
+            raise ValueError(f"Duplicate selected primary paper_id: {paper_id}")
+        paper_ids.append(paper_id)
+    return paper_ids
+
+
+def validate_calibration_assignments(
+    contract: dict[str, Any],
+    assignments: list[dict[str, Any]],
+    primary_papers: list[dict[str, Any]],
+) -> None:
+    categories = contract.get("tagging", {}).get("categories", {})
+    if not isinstance(categories, dict):
+        raise ValueError("Calibrated contract tagging.categories must be a mapping.")
+
+    knowledge_goal = categories.get("knowledge_goal")
+    if not isinstance(knowledge_goal, dict):
+        raise ValueError("Calibrated contract must include knowledge_goal.")
+
+    raw_values = knowledge_goal.get("values")
+    if not isinstance(raw_values, list) or not raw_values:
+        raise ValueError("Calibrated knowledge_goal must contain values.")
+
+    knowledge_goal_values = [str(value).strip() for value in raw_values]
+    allowed_values = set(knowledge_goal_values)
+    paper_ids = compact_primary_paper_ids(primary_papers)
+    assigned_goals_by_paper: dict[str, str] = {}
+
+    for index, assignment in enumerate(assignments, start=1):
+        paper_id = str(assignment.get("paper_id") or "").strip()
+        knowledge_goal_value = str(assignment.get("knowledge_goal") or "").strip()
+
+        if paper_id not in paper_ids:
+            raise ValueError(
+                "Calibration assignment references unknown paper_id "
+                f"{paper_id!r} at index {index}; expected one of {paper_ids}."
+            )
+        if paper_id in assigned_goals_by_paper:
+            raise ValueError(
+                f"Calibration assignment duplicates paper_id {paper_id!r}."
+            )
+        if knowledge_goal_value not in allowed_values:
+            raise ValueError(
+                "Calibration assignment for paper_id "
+                f"{paper_id!r} uses unknown knowledge_goal "
+                f"{knowledge_goal_value!r}; expected one of "
+                f"{knowledge_goal_values}."
+            )
+
+        assigned_goals_by_paper[paper_id] = knowledge_goal_value
+
+    missing_paper_ids = [
+        paper_id for paper_id in paper_ids if paper_id not in assigned_goals_by_paper
+    ]
+    if missing_paper_ids:
+        raise ValueError(
+            "Calibration assignments must cover every selected primary paper; "
+            f"missing paper_id(s): {missing_paper_ids}."
+        )
+
+    assigned_values = set(assigned_goals_by_paper.values())
+    unused_values = [
+        value for value in knowledge_goal_values if value not in assigned_values
+    ]
+    if unused_values:
+        raise ValueError(
+            "Calibration assignments left knowledge_goal value(s) unused by the "
+            f"selected full-text papers: {unused_values}. Remove, merge, or "
+            "replace unsupported root values so the primary study-focus axis "
+            "is supported by the calibration evidence."
+        )
+
+
 def call_llm(
     topic_description: str,
     current_contract: dict[str, Any],
@@ -268,7 +382,7 @@ def call_llm(
         attempt_prompt = (
             prompt
             if last_error is None
-            else prompt_with_validation_feedback(prompt, last_error)
+            else calibration_prompt_with_validation_feedback(prompt, last_error)
         )
         call_id = (
             "contract_calibration"
@@ -279,8 +393,8 @@ def call_llm(
             model=model,
             system_message=SYSTEM_MESSAGE,
             prompt=attempt_prompt,
-            schema_name="topic_contract",
-            schema=topic_contract_schema(SUPPORTED_PROVIDERS),
+            schema_name="topic_contract_calibration",
+            schema=topic_contract_calibration_schema(SUPPORTED_PROVIDERS),
             step_name=STEP.name,
             call_id=call_id,
             trace_writer=trace_writer,
@@ -289,7 +403,8 @@ def call_llm(
             trace_paths.extend(result.trace_paths.as_list())
 
         try:
-            proposed_contract = contract_from_model_payload(result.parsed)
+            proposed_payload, assignments = calibration_response_parts(result.parsed)
+            proposed_contract = contract_from_model_payload(proposed_payload)
             validate_topic_contract(proposed_contract)
             contract = merge_refined_tagging(current_contract, proposed_contract)
             validate_topic_contract(contract)
@@ -297,6 +412,7 @@ def call_llm(
                 contract,
                 label="Calibrated topic contract",
             )
+            validate_calibration_assignments(contract, assignments, primary_papers)
             return contract, trace_paths
         except ValueError as error:
             last_error = error

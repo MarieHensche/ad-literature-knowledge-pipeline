@@ -136,6 +136,8 @@ def test_calibrate_topic_contract_prompt_uses_primary_full_text_evidence() -> No
     assert "full_text_evidence" in prompt
     assert "review-derived ontology as the starting point" in prompt
     assert "primary study-focus" in prompt
+    assert "`paper_assignments`" in prompt
+    assert "Every proposed `knowledge_goal` value must be used" in prompt
     assert "Preserve `research_topic`, `topic_structure`, `scope`" in prompt
     assert "AI tutoring changed classroom engagement" in prompt
     assert "completely new ontology" in prompt
