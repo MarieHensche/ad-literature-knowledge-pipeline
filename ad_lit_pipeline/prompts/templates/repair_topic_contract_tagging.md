@@ -34,6 +34,8 @@ Rules:
   validation issue.
 - Remove or replace generic boilerplate categories with topic-specific
   review-derived categories.
+- When seed reviews include `full_text_evidence`, use that evidence before
+  abstract-only metadata when choosing replacement categories and values.
 - Do not introduce catch-all values such as `unclear`, `not_reported`, `other`,
   `mixed_or_unclear`, `not_applicable`, or `unknown`.
 - If repairing `knowledge_goal`, return the complete replacement

@@ -25,6 +25,8 @@ class CollectionArtifacts:
     """Derived artifact paths for the collection workflow."""
 
     review_overviews_jsonl: Path
+    review_overviews_full_text_jsonl: Path
+    review_full_text_manifest_csv: Path
     plan_json: Path
     candidates_jsonl: Path
     deduped_candidates_jsonl: Path
@@ -86,6 +88,12 @@ def collection_artifacts(
     return CollectionArtifacts(
         review_overviews_jsonl=raw_path(
             collection, "review_overviews.jsonl", base_dir
+        ),
+        review_overviews_full_text_jsonl=raw_path(
+            collection, "review_overviews_full_text.jsonl", base_dir
+        ),
+        review_full_text_manifest_csv=raw_path(
+            collection, "review_full_text_manifest.csv", base_dir
         ),
         plan_json=plan_path(collection, base_dir),
         candidates_jsonl=raw_path(collection, "openalex_candidates.jsonl", base_dir),

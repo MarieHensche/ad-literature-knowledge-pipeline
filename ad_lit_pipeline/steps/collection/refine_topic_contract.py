@@ -27,6 +27,7 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     contract_from_model_payload,
     prompt_with_validation_feedback,
 )
+from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.topics.contract import (
     BOILERPLATE_CATEGORY_IDS,
     GENERATED_CATCHALL_TAG_VALUES,
@@ -78,6 +79,7 @@ EMPTY_REVIEW_REFINEMENT_WARNING = (
     "No review/overview seed papers were available; refined tagging ontology "
     "from the research question and bootstrap discovery contract only."
 )
+MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS = 16_000
 
 
 class TaggingRepairError(ValueError):
@@ -99,7 +101,11 @@ def compact_review_overview(record: dict[str, Any]) -> dict[str, Any]:
         best_oa_location = raw.get("best_oa_location") or {}
         work_type = str(raw.get("type") or "")
 
-    return {
+    full_text_evidence = read_text_evidence(
+        str(record.get("full_text_text_path") or ""),
+        max_chars=MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS,
+    )
+    compacted = {
         "provider_id": record.get("provider_id", ""),
         "doi": record.get("doi", ""),
         "title": record.get("title", ""),
@@ -116,7 +122,16 @@ def compact_review_overview(record: dict[str, Any]) -> dict[str, Any]:
         "review_selection_reasons": record.get("review_selection_reasons", []),
         "open_access": open_access,
         "best_oa_location": best_oa_location,
+        "full_text_status": record.get("full_text_status", ""),
+        "full_text_source": record.get("full_text_source", ""),
+        "full_text_url": record.get("full_text_url", ""),
+        "full_text_license": record.get("full_text_license", ""),
+        "full_text_chars": record.get("full_text_chars", ""),
+        "full_text_available_for_refinement": "yes" if full_text_evidence else "no",
     }
+    if full_text_evidence:
+        compacted["full_text_evidence"] = full_text_evidence
+    return compacted
 
 
 def compact_review_overviews(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

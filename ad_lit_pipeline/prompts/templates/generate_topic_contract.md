@@ -46,8 +46,7 @@ Rules:
   tagging categories. Screening terms should come from the research topic,
   topic structure, and scope.
 - Keep `rule_based_screening.exclude_terms` short and only for hard negatives.
-- Set candidate screening so borderline or tangentially relevant candidates are
-  included for later review unless clearly outside the topic.
+- Set candidate screening so borderline or tangentially relevant candidates are included for later review unless clearly outside the topic.
 - Add 4 to 8 `collection.search_queries`; each query should search a different
   phrasing, synonym set, population, method, application, or adjacent angle.
 - Search queries should be precise enough for OpenAlex but not so narrow that

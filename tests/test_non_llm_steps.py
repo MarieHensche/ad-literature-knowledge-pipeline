@@ -6,13 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects
+from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     review_pool_size,
     run as run_fetch_review_overviews,
     select_best_review_overviews,
 )
+from ad_lit_pipeline.steps.collection import prepare_review_full_text
 from ad_lit_pipeline.steps.full_text import prepare as full_text_prepare
+from ad_lit_pipeline.steps.full_text.prepare import FullTextResult
 from ad_lit_pipeline.steps.full_text.evidence import build_knowledge_evidence
 from ad_lit_pipeline.steps.full_text.prepare import run as run_prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
@@ -152,6 +154,80 @@ def test_review_seed_selection_prefers_topic_fit_over_citations() -> None:
     assert selected[0]["provider_id"] == "education-review"
     assert selected[0]["review_selection_score"] > 0
     assert selected[0]["review_topic_evidence"]
+
+
+def test_prepare_review_full_text_adapts_openalex_locations(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "review_overviews.jsonl"
+    output_path = tmp_path / "review_overviews_full_text.jsonl"
+    manifest_path = tmp_path / "review_full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    captured_rows = []
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider_id": "https://openalex.org/W1",
+                "doi": "10.123/review",
+                "title": "Review of drinking water microplastics",
+                "abstract": "A review.",
+                "url": "https://doi.org/10.123/review",
+                "raw_record": {
+                    "content_urls": {
+                        "pdf": "https://content.openalex.org/works/W1.pdf"
+                    },
+                    "best_oa_location": {
+                        "pdf_url": "https://example.org/best.pdf",
+                        "landing_page_url": "https://example.org/article",
+                    },
+                },
+            }
+        ],
+    )
+
+    def fake_resolve_full_text(
+        row: dict[str, str],
+        cache_dir: Path,
+        unpaywall_email: str | None,
+        core_api_key: str | None,
+    ) -> FullTextResult:
+        captured_rows.append(row)
+        return FullTextResult(
+            status="pdf_text_extracted",
+            source="provider_metadata",
+            url=row["full_text_url"],
+            text_path=str(cache_dir / "texts" / "review.txt"),
+            chars=1234,
+        )
+
+    monkeypatch.setattr(
+        prepare_review_full_text,
+        "resolve_full_text",
+        fake_resolve_full_text,
+    )
+
+    result = prepare_review_full_text.run(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    rows = read_jsonl_objects(output_path)
+    manifest_rows = read_csv(manifest_path)
+    assert result.row_counts["review_overviews"] == 1
+    assert result.row_counts["local_texts"] == 1
+    assert captured_rows[0]["paper_id"] == "https://openalex.org/W1"
+    assert (
+        captured_rows[0]["full_text_url"]
+        == "https://content.openalex.org/works/W1.pdf"
+    )
+    assert captured_rows[0]["pdf_url"] == "https://example.org/best.pdf"
+    assert rows[0]["full_text_status"] == "pdf_text_extracted"
+    assert rows[0]["full_text_text_path"].endswith("review.txt")
+    assert manifest_rows[0]["paper_id"] == "https://openalex.org/W1"
 
 
 def test_screen_scope_preserves_metadata_and_appends_contract_fields(

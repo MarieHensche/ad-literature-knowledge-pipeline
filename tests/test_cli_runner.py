@@ -92,6 +92,7 @@ def test_run_collection_explain_lists_steps() -> None:
     assert "fetch_candidates" in result.stdout
     assert "screen_title_relevance" in result.stdout
     assert "generate_topic_contract" in result.stdout
+    assert "prepare_review_full_text" in result.stdout
     assert "example_openalex_candidates.jsonl" in result.stdout
 
 
@@ -138,6 +139,7 @@ def test_run_collection_can_run_contract_bootstrap_only() -> None:
 
     assert "Would run step: generate_topic_contract" in result.stdout
     assert "Would run step: fetch_review_overviews" in result.stdout
+    assert "Would run step: prepare_review_full_text" in result.stdout
     assert "Would run step: refine_topic_contract" in result.stdout
     assert "Would run step: plan_search" not in result.stdout
 
@@ -199,6 +201,7 @@ def test_run_collection_with_contract_can_start_at_review_refinement() -> None:
 
     assert "Would run step: generate_topic_contract" not in result.stdout
     assert "Would run step: fetch_review_overviews" in result.stdout
+    assert "Would run step: prepare_review_full_text" in result.stdout
     assert "Would run step: refine_topic_contract" in result.stdout
     assert "Would run step: plan_search" in result.stdout
 

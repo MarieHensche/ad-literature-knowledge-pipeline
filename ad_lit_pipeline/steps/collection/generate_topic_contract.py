@@ -211,7 +211,7 @@ def call_llm(
     trace_paths: list[Path] = []
     last_error: ValueError | None = None
     best_error: ValueError | None = None
-    best_error_score = 1000
+    best_error_score = 1001
     best_contract: dict[str, Any] | None = None
 
     for attempt in range(1, MAX_CONTRACT_VALIDATION_ATTEMPTS + 1):

@@ -86,6 +86,7 @@ Steps:
 | --- | --- | --- |
 | `generate_topic_contract` | `ad_lit_pipeline/steps/collection/generate_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
 | `fetch_review_overviews` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` | `data/raw/<collection>_review_overviews.jsonl` |
+| `prepare_review_full_text` | `ad_lit_pipeline/steps/collection/prepare_review_full_text.py` | `data/raw/<collection>_review_overviews_full_text.jsonl`, `data/raw/<collection>_review_full_text_manifest.csv` |
 | `refine_topic_contract` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
 | `plan_search` | `ad_lit_pipeline/steps/collection/plan_search.py` | `data/collection_plans/<collection>_plan.json` |
 | `fetch_candidates` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` | `data/raw/<collection>_openalex_candidates.jsonl` |
@@ -94,14 +95,21 @@ Steps:
 | `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
 
 When no topic contract is supplied, collection first generates a draft contract,
-fetches review/overview seed papers, refines the contract's knowledge
-categories, and then continues into search planning. The planner can describe
-multiple provider types, but the current fetch layer implements only OpenAlex.
-Unsupported provider selections fail before any network fetch.
+fetches review/overview seed papers, resolves available full text for those
+reviews, refines the contract's knowledge categories from review evidence, and
+then continues into search planning. The planner can describe multiple provider
+types, but the current fetch layer implements only OpenAlex. Unsupported
+provider selections fail before any network fetch.
 
-Passing `--contract-bootstrap-only` runs only the three contract-bootstrap steps
-and stops before search planning, so a user can review the generated contract
-before candidate collection.
+Passing `--contract-bootstrap-only` runs only the contract-bootstrap steps and
+stops before search planning, so a user can review the generated contract before
+candidate collection.
+
+`prepare_review_full_text` reuses the same full-text extraction helpers as the
+main paper-tagging pipeline. It adapts OpenAlex review metadata, DOI landing
+pages, Unpaywall, Europe PMC, and CORE locations into cached text files, then
+`refine_topic_contract` sends bounded `full_text_evidence` from those texts to
+the LLM alongside review abstracts and selection metadata.
 
 When a reviewed topic contract is supplied, `--topic` is optional. Collection
 steps derive the planner and candidate-screening topic text from the contract's
@@ -136,6 +144,7 @@ The original script names are kept as wrappers or direct CLIs:
 | `scripts/export_mantis_ready.py` | `ad_lit_pipeline/steps/export/mantis.py` |
 | `scripts/generate_topic_contract.py` | `ad_lit_pipeline/steps/collection/generate_topic_contract.py` |
 | `scripts/fetch_review_overviews.py` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` |
+| `scripts/prepare_review_full_text.py` | `ad_lit_pipeline/steps/collection/prepare_review_full_text.py` |
 | `scripts/refine_topic_contract.py` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` |
 | `scripts/plan_library_search.py` | `ad_lit_pipeline/steps/collection/plan_search.py` |
 | `scripts/fetch_openalex_candidates.py` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` and `ad_lit_pipeline/providers/openalex.py` |

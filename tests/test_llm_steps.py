@@ -642,6 +642,18 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
+    review_text_path = tmp_path / "review_full_text.txt"
+    review_text_path.write_text(
+        (
+            "Introduction\nThis review maps early AD detection evidence.\n\n"
+            "Results\nFull text evidence separates speech markers, imaging "
+            "biomarkers, fluid assays, and external validation cohorts.\n\n"
+            "Conclusion\nReview authors recommend clinically validated "
+            "screening and conversion prediction categories.\n\n"
+        )
+        * 8,
+        encoding="utf-8",
+    )
     write_jsonl(
         review_path,
         [
@@ -660,6 +672,9 @@ def test_refine_topic_contract_adds_review_seeded_categories(
                     "open_access": {"is_oa": True},
                     "best_oa_location": {"pdf_url": "https://example.test/paper.pdf"},
                 },
+                "full_text_status": "local_text_extracted",
+                "full_text_text_path": str(review_text_path),
+                "full_text_chars": str(review_text_path.stat().st_size),
             }
         ],
     )
@@ -791,6 +806,8 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert result.trace_paths
     assert "Review and overview seed papers" in client.requests[0]["prompt"]
     assert "AI biomarkers" in client.requests[0]["prompt"]
+    assert "full_text_evidence" in client.requests[0]["prompt"]
+    assert "speech markers, imaging biomarkers" in client.requests[0]["prompt"]
     assert "Bootstrap categories omitted" in client.requests[0]["prompt"]
     assert '"categories": []' in client.requests[0]["prompt"]
     assert "main_topic_category" not in client.requests[0]["prompt"]

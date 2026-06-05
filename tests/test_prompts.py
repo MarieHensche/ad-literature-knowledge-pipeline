@@ -79,6 +79,7 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
             {
                 "title": "Review of AI biomarkers for early AD detection",
                 "abstract": "A review of modalities and validation practices.",
+                "full_text_evidence": "[Results]\nSpeech and imaging markers matter.",
             }
         ],
     )
@@ -88,6 +89,8 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert '"categories": []' in prompt
     assert "main_topic_category" not in prompt
     assert "knowledge categories" in prompt
+    assert "full_text_evidence" in prompt
+    assert "richest available context" in prompt
     assert "at least 6 knowledge tagging categories" in prompt
     assert "category_id `knowledge_goal`" in prompt
     assert "topic_structure.main_topics" in prompt
@@ -139,6 +142,7 @@ def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
     assert "Return only a JSON patch" in prompt
     assert "Do not modify `research_topic`, `topic_structure`, `scope`" in prompt
     assert "Patch only `tagging.categories`" in prompt
+    assert "full_text_evidence" in prompt
     assert "Do not return a full topic contract" in prompt
     assert "boilerplate_category_id" in prompt
 

@@ -23,6 +23,7 @@ COLLECTION_PIPELINE = [
 CONTRACT_BOOTSTRAP_PIPELINE = [
     "generate_topic_contract",
     "fetch_review_overviews",
+    "prepare_review_full_text",
     "refine_topic_contract",
 ]
 

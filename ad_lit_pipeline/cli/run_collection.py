@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from ad_lit_pipeline.core.artifacts import collection_artifacts
@@ -12,6 +13,7 @@ from ad_lit_pipeline.core.registry import (
     CONTRACT_BOOTSTRAP_PIPELINE,
 )
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
+from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
@@ -45,6 +47,7 @@ def explain(collection: str) -> None:
     print("Optional preflight step:")
     print("  - generate_topic_contract")
     print("  - fetch_review_overviews")
+    print("  - prepare_review_full_text")
     print("  - refine_topic_contract")
     print()
     print("Conventional outputs:")
@@ -127,13 +130,30 @@ def build_step_functions(
             mailto=args.mailto,
         )
 
+    def run_prepare_review_full_text() -> object:
+        from ad_lit_pipeline.steps.collection import prepare_review_full_text
+
+        return prepare_review_full_text.run(
+            artifacts.review_overviews_jsonl,
+            artifacts.review_overviews_full_text_jsonl,
+            artifacts.review_full_text_manifest_csv,
+            Path(args.full_text_cache_dir).expanduser(),
+            args.full_text_email,
+            args.core_api_key,
+        )
+
     def run_refine_topic_contract() -> object:
         from ad_lit_pipeline.steps.collection import refine_topic_contract
 
+        review_overviews_path = (
+            artifacts.review_overviews_full_text_jsonl
+            if artifacts.review_overviews_full_text_jsonl.exists()
+            else artifacts.review_overviews_jsonl
+        )
         return refine_topic_contract.run(
             topic_description,
             topic_contract_path,
-            artifacts.review_overviews_jsonl,
+            review_overviews_path,
             args.model,
             trace_dir=trace_dir,
         )
@@ -193,6 +213,7 @@ def build_step_functions(
     return {
         "generate_topic_contract": run_generate_topic_contract,
         "fetch_review_overviews": run_fetch_review_overviews,
+        "prepare_review_full_text": run_prepare_review_full_text,
         "refine_topic_contract": run_refine_topic_contract,
         "plan_search": run_plan_search,
         "fetch_candidates": run_fetch_candidates,
@@ -289,6 +310,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--mailto",
         default=None,
         help="Optional email for OpenAlex polite pool requests.",
+    )
+    run_parser.add_argument(
+        "--full-text-email",
+        default=os.getenv("UNPAYWALL_EMAIL"),
+        help=(
+            "Email for Unpaywall review full-text lookup. "
+            "Defaults to UNPAYWALL_EMAIL."
+        ),
+    )
+    run_parser.add_argument(
+        "--full-text-cache-dir",
+        default=str(prepare_full_text.default_cache_dir()),
+        help=(
+            "External directory for extracted review full-text cache. Defaults to "
+            "AD_LIT_FULL_TEXT_CACHE or ~/.cache/ad_lit_pipeline/full_text."
+        ),
+    )
+    run_parser.add_argument(
+        "--core-api-key",
+        default=os.getenv("CORE_API_KEY"),
+        help="Optional CORE API key for additional review full-text lookup.",
     )
     run_parser.add_argument(
         "--model",

@@ -23,6 +23,7 @@ Rules:
   will emit a warning that this ontology was not review-seeded.
 - Prefer evidence from seed reviews with high `review_selection_score`, strong
   topical evidence, useful abstracts, recent years, and citation strength.
+- When a seed review includes `full_text_evidence`, treat it as the richest available context for ontology design. Use abstracts and metadata only as fallback or supporting context for reviews without extracted full text.
 - Do not let off-topic seed reviews reshape the ontology, even if they are
   recent or highly cited.
 - If a seed review is only broadly related but not close to the research topic,
