@@ -15,8 +15,6 @@ class MainPipelineArtifacts:
     full_text_manifest_csv: Path
     tagging_config_normalized_json: Path
     tagging_rules_json: Path
-    tagging_smoke_test_csv: Path
-    tagging_smoke_audit_csv: Path
     extraction_filled_csv: Path
     extraction_audit_csv: Path
     mantis_ready_csv: Path
@@ -72,12 +70,6 @@ def main_pipeline_artifacts(
             collection, "tagging_config_normalized.json", base_dir
         ),
         tagging_rules_json=processed_path(collection, "tagging_rules.json", base_dir),
-        tagging_smoke_test_csv=processed_path(
-            collection, "tagging_smoke_test.csv", base_dir
-        ),
-        tagging_smoke_audit_csv=processed_path(
-            collection, "tagging_smoke_audit.csv", base_dir
-        ),
         extraction_filled_csv=processed_path(
             collection, "extraction_filled.csv", base_dir
         ),

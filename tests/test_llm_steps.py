@@ -30,9 +30,6 @@ from ad_lit_pipeline.steps.tagging.calibrate_topic_contract import (
     run as run_calibrate_topic_contract,
 )
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
-from ad_lit_pipeline.steps.tagging.smoke_test_contract import (
-    run as run_smoke_test_contract,
-)
 from ad_lit_pipeline.steps.tagging.tag_papers import (
     run as run_tag_papers,
     validate_tagged_row,
@@ -1870,121 +1867,6 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert "model improved early detection" in client.requests[0][
         "prompt"
     ]
-
-
-def test_smoke_test_contract_blocks_collapsed_knowledge_goal(
-    tmp_path: Path,
-) -> None:
-    papers_path = tmp_path / "scope.csv"
-    config_path = tmp_path / "config.json"
-    rules_path = tmp_path / "rules.json"
-    output_path = tmp_path / "smoke.csv"
-    audit_path = tmp_path / "smoke_audit.csv"
-
-    paper_rows = []
-    for index in range(1, 6):
-        full_text_path = tmp_path / f"p{index}_full_text.txt"
-        full_text_path.write_text(
-            (
-                "Introduction\nThe paper studies AI-supported MCI screening.\n\n"
-                "Results\nThe model improved early detection performance.\n\n"
-            )
-            * 20,
-            encoding="utf-8",
-        )
-        paper_rows.append(
-            {
-                "paper_id": f"p{index}",
-                "title": f"AI screening paper {index}",
-                "year": "2024",
-                "doi": f"10.123/smoke-{index}",
-                "abstract": "AI screening for MCI.",
-                "authors": "A. Author",
-                "venue": "Journal",
-                "source": "test",
-                "full_text_path": "",
-                "full_text_text_path": str(full_text_path),
-                "full_text_status": "local_text_extracted",
-                "scope_decision": "include",
-            }
-        )
-
-    write_csv(
-        papers_path,
-        paper_rows,
-        [
-            "paper_id",
-            "title",
-            "year",
-            "doi",
-            "abstract",
-            "authors",
-            "venue",
-            "source",
-            "full_text_path",
-            "full_text_text_path",
-            "full_text_status",
-            "scope_decision",
-        ],
-    )
-    config = {
-        "research_topic": {"title": "Topic", "description": "Description"},
-        "categories": [
-            {
-                "category_id": "knowledge_goal",
-                "required": True,
-                "selection": "single",
-                "allowed_values": [
-                    {"value": "broad_effect"},
-                    {"value": "engagement_focus"},
-                    {"value": "implementation_focus"},
-                ],
-            }
-        ],
-    }
-    rules = {
-        "rules": [
-            {
-                "category_id": "knowledge_goal",
-                "selection": "single",
-                "required": True,
-                "fallback_value": None,
-                "reason": "Required root axis.",
-            }
-        ]
-    }
-    config_path.write_text(json.dumps(config), encoding="utf-8")
-    rules_path.write_text(json.dumps(rules), encoding="utf-8")
-    client = StaticJSONClient(
-        [
-            {
-                "paper_id": f"p{index}",
-                "main_knowledge_claim": "The paper studies AI effects.",
-                "knowledge_goal": ["broad_effect"],
-            }
-            for index in range(1, 6)
-        ]
-    )
-
-    with pytest.raises(ValueError, match="Tagging smoke test failed"):
-        run_smoke_test_contract(
-            papers_path,
-            config_path,
-            rules_path,
-            output_path,
-            audit_path,
-            "test-model",
-            TOPIC_CONTRACT,
-            client,
-            tmp_path / "traces",
-            max_smoke_test_papers=5,
-        )
-
-    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
-    assert len(rows) == 5
-    audit_text = audit_path.read_text(encoding="utf-8")
-    assert "knowledge_goal_unused_value_distribution_error" in audit_text
-    assert "knowledge_goal_dominant_value_distribution_error" in audit_text
 
 
 def test_validate_tagged_row_allows_optional_and_clears_inapplicable_values() -> None:
