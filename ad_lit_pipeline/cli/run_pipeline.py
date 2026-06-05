@@ -21,6 +21,7 @@ from ad_lit_pipeline.steps.tagging import (
     calibrate_topic_contract,
     generate_rules,
     normalize_config,
+    smoke_test_contract,
     tag_papers,
 )
 
@@ -122,6 +123,17 @@ def build_step_functions(
             model,
             topic_contract_path,
             trace_dir=trace_dir,
+        ),
+        "smoke_test_tagging_contract": lambda: smoke_test_contract.run(
+            artifacts.scope_screened_full_text_csv,
+            artifacts.tagging_config_normalized_json,
+            artifacts.tagging_rules_json,
+            artifacts.tagging_smoke_test_csv,
+            artifacts.tagging_smoke_audit_csv,
+            model,
+            topic_contract_path,
+            trace_dir=trace_dir,
+            max_smoke_test_papers=args.max_calibration_papers,
         ),
         "tag_papers": lambda: tag_papers.run(
             artifacts.scope_screened_full_text_csv,

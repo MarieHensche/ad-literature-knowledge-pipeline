@@ -8,6 +8,7 @@ MAIN_PIPELINE = [
     "calibrate_topic_contract",
     "normalize_tagging_config",
     "generate_tagging_rules",
+    "smoke_test_tagging_contract",
     "tag_papers",
     "audit_extraction",
     "export_mantis",
