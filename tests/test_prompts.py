@@ -5,6 +5,7 @@ from pathlib import Path
 from ad_lit_pipeline.prompts.render import (
     render_generate_tagging_rules_prompt,
     render_generate_topic_contract_prompt,
+    render_calibrate_topic_contract_prompt,
     render_repair_topic_contract_tagging_prompt,
     render_refine_topic_contract_prompt,
     render_screen_candidate_prompt,
@@ -97,8 +98,10 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "Do not use titles, abstracts, query metadata" in prompt
     assert "at least 6 knowledge tagging categories" in prompt
     assert "category_id `knowledge_goal`" in prompt
+    assert "primary study-focus" in prompt
+    assert "contribution partition" in prompt
     assert "topic_structure.main_topics" in prompt
-    assert "complete, mutually exclusive partition" in prompt
+    assert "complete, mutually exclusive root axis" in prompt
     assert "mental distribution check" in prompt
     assert "no single value should be so broad" in prompt
     assert "conditional sub-categories" in prompt
@@ -112,6 +115,30 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
     assert "If no extracted review full-text evidence is available" in prompt
+
+
+def test_calibrate_topic_contract_prompt_uses_primary_full_text_evidence() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    prompt = render_calibrate_topic_contract_prompt(
+        "Use of AI in school lessons and student performance",
+        contract,
+        [
+            {
+                "paper_id": "p1",
+                "full_text_evidence": (
+                    "[Results]\nAI tutoring changed classroom engagement."
+                ),
+            }
+        ],
+    )
+
+    assert "Selected primary-paper full-text evidence" in prompt
+    assert "full_text_evidence" in prompt
+    assert "review-derived ontology as the starting point" in prompt
+    assert "primary study-focus" in prompt
+    assert "Preserve `research_topic`, `topic_structure`, `scope`" in prompt
+    assert "AI tutoring changed classroom engagement" in prompt
+    assert "completely new ontology" in prompt
 
 
 def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:

@@ -22,9 +22,13 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
 )
 from ad_lit_pipeline.steps.collection.refine_topic_contract import (
     run as run_refine_topic_contract,
+    select_review_overviews_with_full_text,
 )
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
 from ad_lit_pipeline.steps.screening.title_relevance import run as run_title_relevance
+from ad_lit_pipeline.steps.tagging.calibrate_topic_contract import (
+    run as run_calibrate_topic_contract,
+)
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
 from ad_lit_pipeline.steps.tagging.tag_papers import (
     run as run_tag_papers,
@@ -48,7 +52,7 @@ def review_seed_with_full_text(
     tmp_path: Path,
     stem: str = "review",
     body: str | None = None,
-    title: str = "Metadata title that must not define tags",
+    title: str = "Systematic review of early Alzheimer's detection biomarkers",
     abstract: str = "Metadata abstract that must not define tags.",
     query: str = "",
 ) -> dict[str, object]:
@@ -840,6 +844,8 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert "detection_outcome" in categories
     assert result.row_counts["review_overviews"] == 3
     assert result.row_counts["review_full_texts"] == 2
+    assert result.row_counts["review_full_texts_unique"] == 2
+    assert result.row_counts["review_full_texts_topic_eligible"] == 1
     assert result.row_counts["review_full_texts_selected"] == 1
     assert result.row_counts["tagging_categories"] == 7
     assert result.warnings == [
@@ -847,6 +853,11 @@ def test_refine_topic_contract_adds_review_seeded_categories(
             "Ignored review/overview seed papers without extracted full text; "
             "final tagging categories were refined only from review full-text "
             "evidence. ignored=1 usable=2 selected=1."
+        ),
+        (
+            "Ignored review/overview seed papers whose title and extracted full "
+            "text did not contain enough topic-specific evidence for ontology "
+            "refinement. ignored=1 eligible=1 selected=1."
         )
     ]
     assert result.trace_paths
@@ -860,6 +871,47 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert "Bootstrap categories omitted" in client.requests[0]["prompt"]
     assert '"categories": []' in client.requests[0]["prompt"]
     assert "main_topic_category" not in client.requests[0]["prompt"]
+
+
+def test_review_full_text_selection_requires_topic_specific_title_and_text(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    records = [
+        review_seed_with_full_text(
+            tmp_path,
+            "education_review",
+            body=(
+                "Introduction\nThis systematic review examines artificial "
+                "intelligence in education.\n\n"
+                "Results\nEducation studies report classroom teaching, student "
+                "engagement, learning outcomes, and feedback support.\n\n"
+            ),
+            title="Artificial Intelligence in Education: A Review",
+        ),
+        review_seed_with_full_text(
+            tmp_path,
+            "nutrition_review",
+            body=(
+                "Introduction\nThis systematic review examines artificial "
+                "intelligence and machine learning in nutrition.\n\n"
+                "Results\nDietary assessment, biomarkers, and clinical nutrition "
+                "applications dominate the review.\n\n"
+            ),
+            title=(
+                "Applications of Artificial Intelligence, Machine Learning, "
+                "and Deep Learning in Nutrition: A Systematic Review"
+            ),
+        ),
+    ]
+
+    selected = select_review_overviews_with_full_text(
+        contract,
+        records,
+        max_results=5,
+    )
+
+    assert [record["provider_id"] for record in selected] == ["education_review"]
 
 
 def test_refine_topic_contract_requires_extracted_review_full_text(
@@ -1316,6 +1368,135 @@ def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
     assert result.row_counts["rules"] == 1
     assert json.loads(output_path.read_text(encoding="utf-8"))["rules_count"] == 1
     assert '"review_status": "ai_tagged"' in client.requests[0]["prompt"]
+
+
+def test_calibrate_topic_contract_uses_primary_paper_full_text(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    papers_path = tmp_path / "scope_screened_full_text.csv"
+    full_text_path = tmp_path / "paper_full_text.txt"
+    full_text_path.write_text(
+        (
+            "Introduction\nThe paper studies classroom use of AI tutoring.\n\n"
+            "Results\nPrimary paper full text reports student performance, "
+            "lesson feedback, engagement, and teacher-supported adoption.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "AI tutoring in school lessons",
+                "abstract": "AI tutoring and student performance.",
+                "doi": "10.123/calibration",
+                "scope_decision": "include",
+                "full_text_text_path": str(full_text_path),
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "abstract",
+            "doi",
+            "scope_decision",
+            "full_text_text_path",
+        ],
+    )
+
+    calibrated_payload = deepcopy(contract)
+    calibrated_payload["tagging"]["categories"] = [
+        {
+            "category_id": "knowledge_goal",
+            "description": "Primary study-focus partition for AI education papers.",
+            "required": True,
+            "selection": "single",
+            "values": [
+                "learning_outcome_effect",
+                "engagement_motivation_effect",
+                "personalized_instruction",
+                "assessment_feedback_support",
+            ],
+            "applies_when": None,
+        },
+        {
+            "category_id": "ai_instructional_role",
+            "description": "Role played by AI in the lesson or learning activity.",
+            "required": False,
+            "selection": "multi",
+            "values": ["tutor", "feedback_provider", "content_generator"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "lesson_activity_supported",
+            "description": "Lesson activity supported by AI tools.",
+            "required": False,
+            "selection": "multi",
+            "values": ["practice_exercise", "writing_task", "assessment_activity"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "student_performance_signal",
+            "description": "Performance signal used to judge student impact.",
+            "required": False,
+            "selection": "multi",
+            "values": ["test_score", "course_grade", "task_accuracy"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "education_context",
+            "description": "Formal education context represented in the paper.",
+            "required": False,
+            "selection": "multi",
+            "values": ["primary_school", "secondary_school", "higher_education"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "implementation_condition",
+            "description": "Conditions shaping AI use in classroom practice.",
+            "required": False,
+            "selection": "multi",
+            "values": ["teacher_guided_use", "student_independent_use"],
+            "applies_when": None,
+        },
+    ]
+    client = StaticJSONClient([calibrated_payload])
+
+    result = run_calibrate_topic_contract(
+        papers_path,
+        contract_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+        max_primary_papers=3,
+    )
+
+    calibrated = load_topic_contract(contract_path)
+    categories = calibrated["tagging"]["categories"]
+    assert result.row_counts["primary_papers"] == 1
+    assert result.row_counts["primary_full_texts_selected"] == 1
+    assert result.row_counts["tagging_categories"] == 6
+    assert result.trace_paths
+    assert calibrated["research_topic"] == contract["research_topic"]
+    assert calibrated["scope"] == contract["scope"]
+    assert list(categories)[0] == "knowledge_goal"
+    assert categories["knowledge_goal"]["values"] == [
+        "learning_outcome_effect",
+        "engagement_motivation_effect",
+        "personalized_instruction",
+        "assessment_feedback_support",
+    ]
+    assert client.requests[0]["call_id"] == "contract_calibration"
+    assert "Selected primary-paper full-text evidence" in client.requests[0]["prompt"]
+    assert "Primary paper full text reports student performance" in client.requests[0][
+        "prompt"
+    ]
+    assert "AI tutoring in school lessons" not in client.requests[0]["prompt"]
 
 
 def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:

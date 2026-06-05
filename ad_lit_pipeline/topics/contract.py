@@ -626,9 +626,10 @@ def generated_tagging_quality_issue_records(
                 message=(
                     f"tagging.categories must include "
                     f"`{KNOWLEDGE_GOAL_CATEGORY_ID}` as the required "
-                    "single-selection root category. Its values should be the "
-                    "main exhaustive, mutually exclusive knowledge-goal "
-                    "partition for the topic."
+                    "single-selection root category. Its values should form "
+                    "the main exhaustive, mutually exclusive primary "
+                    "study-focus or knowledge-contribution partition for the "
+                    "topic."
                 ),
             )
         )
@@ -683,10 +684,11 @@ def generated_tagging_quality_issue_records(
                         f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
                         f"contains vague benefit/action value(s) {vague_values}. "
                         "The root category must partition papers by their "
-                        "knowledge role, such as prevention, "
-                        "screening_detection, treatment_effectiveness, "
-                        "implementation_acceptability, prognosis, diagnosis, or "
-                        "other review-derived role values."
+                        "primary study focus or primary knowledge contribution, "
+                        "such as intervention_effect, mechanism_explanation, "
+                        "measurement_validation, implementation_barrier, "
+                        "population_difference, tool_application, or other "
+                        "evidence-derived focus values."
                     ),
                 )
             )

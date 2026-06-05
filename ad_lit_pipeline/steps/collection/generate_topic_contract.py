@@ -67,7 +67,8 @@ def prompt_with_validation_feedback(
         "`self-help_resources` must become `self_help_resources` or a more "
         "specific topic-derived value.\n"
         "- The `knowledge_goal` category must be an exhaustive root partition "
-        "with role-like values, not vague benefit phrases such as "
+        "of primary study focus or primary knowledge contribution, not vague "
+        "benefit phrases such as "
         "`improving_x`, `enhancing_y`, or `supporting_z`."
     )
     if best_contract is None:

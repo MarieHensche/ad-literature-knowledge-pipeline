@@ -29,6 +29,8 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
 )
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     DEFAULT_MAX_REVIEWS,
+    meaningful_tokens,
+    review_identity,
     select_best_review_overviews,
 )
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
@@ -81,15 +83,96 @@ REPLACE_CATEGORY_ISSUE_CODES = {
 }
 MISSING_REVIEW_FULL_TEXT_ERROR = (
     "Topic-contract refinement requires extracted full text from at least one "
-    "review/overview seed paper. Run prepare_review_full_text and ensure at "
-    "least one seed has a readable full_text_text_path before refining tagging "
-    "categories."
+    "topic-relevant review/overview seed paper. Run prepare_review_full_text "
+    "and ensure at least one seed has a readable full_text_text_path and "
+    "enough topic-specific evidence before refining tagging categories."
 )
 IGNORED_NO_FULL_TEXT_REVIEWS_WARNING = (
     "Ignored review/overview seed papers without extracted full text; final "
     "tagging categories were refined only from review full-text evidence."
 )
+IGNORED_OFF_TOPIC_REVIEWS_WARNING = (
+    "Ignored review/overview seed papers whose title and extracted full text "
+    "did not contain enough topic-specific evidence for ontology refinement."
+)
 MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS = 16_000
+
+GENERIC_REVIEW_TOPIC_TOKENS = {
+    "academic",
+    "adaptive",
+    "affects",
+    "algorithmic",
+    "analyses",
+    "analysis",
+    "analyzing",
+    "application",
+    "applications",
+    "approach",
+    "approaches",
+    "aspects",
+    "artificial",
+    "automated",
+    "based",
+    "borderline",
+    "chatbot",
+    "chatbots",
+    "chatgpt",
+    "clearly",
+    "deep",
+    "directly",
+    "discuss",
+    "effect",
+    "effects",
+    "evidence",
+    "empirical",
+    "exclude",
+    "explore",
+    "exploring",
+    "focused",
+    "generative",
+    "impact",
+    "impacts",
+    "include",
+    "implementation",
+    "intelligent",
+    "intelligence",
+    "language",
+    "large",
+    "learning",
+    "literature",
+    "llm",
+    "machine",
+    "method",
+    "methodologies",
+    "methods",
+    "meta",
+    "model",
+    "models",
+    "outcome",
+    "outcomes",
+    "paper",
+    "papers",
+    "performance",
+    "processes",
+    "relevant",
+    "research",
+    "role",
+    "review",
+    "reviews",
+    "smart",
+    "study",
+    "studies",
+    "studying",
+    "systematic",
+    "system",
+    "systems",
+    "technology",
+    "technologies",
+    "they",
+    "tool",
+    "tools",
+    "unrelated",
+}
 
 
 class TaggingRepairError(ValueError):
@@ -153,6 +236,135 @@ def review_overviews_with_usable_full_text(
     return [record for record in records if has_usable_review_full_text(record)]
 
 
+def review_deduplication_key(record: dict[str, Any], index: int) -> str:
+    return review_identity(record, index).lower()
+
+
+def deduplicate_review_overviews(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep the highest-scored record for each DOI/OpenAlex/paper identity."""
+    deduped: dict[str, dict[str, Any]] = {}
+    for index, record in enumerate(records):
+        key = review_deduplication_key(record, index)
+        current = deduped.get(key)
+        current_score = (
+            float(current.get("review_selection_score") or 0)
+            if current
+            else None
+        )
+        record_score = float(record.get("review_selection_score") or 0)
+        if current is None or record_score > current_score:
+            deduped[key] = record
+    return list(deduped.values())
+
+
+def topic_specific_terms(topic_contract: dict[str, Any]) -> set[str]:
+    """Return contract terms specific enough to gate review relevance."""
+    texts = []
+    research_topic = topic_contract.get("research_topic", {})
+    if isinstance(research_topic, dict):
+        texts.extend(
+            str(research_topic.get(field) or "")
+            for field in ["title", "description"]
+        )
+
+    topic_structure = topic_contract.get("topic_structure", {})
+    main_topics = (
+        topic_structure.get("main_topics")
+        if isinstance(topic_structure, dict)
+        else []
+    )
+    if isinstance(main_topics, list):
+        for topic in main_topics:
+            if not isinstance(topic, dict):
+                continue
+            texts.append(str(topic.get("label") or ""))
+            terms = topic.get("terms")
+            if isinstance(terms, list):
+                texts.extend(str(term) for term in terms)
+
+    scope = topic_contract.get("scope", {})
+    if isinstance(scope, dict):
+        for key in ["include_criteria", "boundary_rules"]:
+            values = scope.get(key)
+            if isinstance(values, list):
+                texts.extend(str(value) for value in values)
+
+    tokens = set()
+    for text in texts:
+        tokens.update(meaningful_tokens(text))
+    return {
+        token
+        for token in tokens
+        if len(token) >= 4 and token not in GENERIC_REVIEW_TOPIC_TOKENS
+    }
+
+
+def matched_topic_specific_terms(
+    text: object,
+    terms: set[str],
+) -> set[str]:
+    tokens = meaningful_tokens(text)
+    return {token for token in tokens if token in terms}
+
+
+def review_topic_eligibility(
+    topic_contract: dict[str, Any],
+    record: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """Require title and full-text evidence to contain topic-specific terms."""
+    evidence = read_text_evidence(
+        str(record.get("full_text_text_path") or ""),
+        max_chars=MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS,
+    )
+    if not evidence:
+        return False, ["missing readable extracted full text"]
+
+    specific_terms = topic_specific_terms(topic_contract)
+    if not specific_terms:
+        return True, ["no topic-specific contract terms available for filtering"]
+
+    title_matches = matched_topic_specific_terms(
+        record.get("title", ""),
+        specific_terms,
+    )
+    evidence_matches = matched_topic_specific_terms(evidence, specific_terms)
+    if not title_matches:
+        return False, [
+            "review title lacks topic-specific terms",
+            f"available_terms={', '.join(sorted(specific_terms)[:20])}",
+        ]
+    if len(evidence_matches) < 2 and not (title_matches & evidence_matches):
+        return False, [
+            "review full text lacks enough topic-specific evidence",
+            f"title_matches={', '.join(sorted(title_matches))}",
+            f"evidence_matches={', '.join(sorted(evidence_matches)[:20])}",
+        ]
+
+    return True, [
+        f"title_matches={', '.join(sorted(title_matches)[:12])}",
+        f"full_text_matches={', '.join(sorted(evidence_matches)[:20])}",
+    ]
+
+
+def eligible_review_overviews_for_refinement(
+    topic_contract: dict[str, Any],
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    usable_reviews = review_overviews_with_usable_full_text(records)
+    deduped_reviews = deduplicate_review_overviews(usable_reviews)
+    eligible = []
+    for record in deduped_reviews:
+        is_eligible, reasons = review_topic_eligibility(topic_contract, record)
+        if not is_eligible:
+            continue
+        enriched = dict(record)
+        enriched["review_relevance_reasons"] = reasons
+        eligible.append(enriched)
+    return eligible
+
+
 def select_review_overviews_with_full_text(
     topic_contract: dict[str, Any],
     records: list[dict[str, Any]],
@@ -160,8 +372,8 @@ def select_review_overviews_with_full_text(
 ) -> list[dict[str, Any]]:
     if max_results < 1:
         raise ValueError("max_review_overviews must be at least 1.")
-    usable_reviews = review_overviews_with_usable_full_text(records)
-    return select_best_review_overviews(topic_contract, usable_reviews, max_results)
+    eligible_reviews = eligible_review_overviews_for_refinement(topic_contract, records)
+    return select_best_review_overviews(topic_contract, eligible_reviews, max_results)
 
 
 def merge_refined_tagging(
@@ -462,6 +674,11 @@ def run(
     review_overviews = read_jsonl_objects(review_overviews_path)
     warnings = []
     usable_reviews = review_overviews_with_usable_full_text(review_overviews)
+    unique_usable_reviews = deduplicate_review_overviews(usable_reviews)
+    eligible_reviews = eligible_review_overviews_for_refinement(
+        current_contract,
+        review_overviews,
+    )
     selected_reviews = select_review_overviews_with_full_text(
         current_contract,
         review_overviews,
@@ -472,6 +689,13 @@ def run(
             f"{IGNORED_NO_FULL_TEXT_REVIEWS_WARNING} "
             f"ignored={len(review_overviews) - len(usable_reviews)} "
             f"usable={len(usable_reviews)} "
+            f"selected={len(selected_reviews)}."
+        )
+    if usable_reviews and len(eligible_reviews) < len(unique_usable_reviews):
+        warnings.append(
+            f"{IGNORED_OFF_TOPIC_REVIEWS_WARNING} "
+            f"ignored={len(unique_usable_reviews) - len(eligible_reviews)} "
+            f"eligible={len(eligible_reviews)} "
             f"selected={len(selected_reviews)}."
         )
 
@@ -499,6 +723,8 @@ def run(
         row_counts={
             "review_overviews": len(review_overviews),
             "review_full_texts": len(usable_reviews),
+            "review_full_texts_unique": len(unique_usable_reviews),
+            "review_full_texts_topic_eligible": len(eligible_reviews),
             "review_full_texts_selected": len(selected_reviews),
             "tagging_categories": len(categories),
         },

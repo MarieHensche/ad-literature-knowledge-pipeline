@@ -5,6 +5,7 @@ MAIN_PIPELINE = [
     "normalize_metadata",
     "screen_scope",
     "prepare_full_text",
+    "calibrate_topic_contract",
     "normalize_tagging_config",
     "generate_tagging_rules",
     "tag_papers",

@@ -177,6 +177,21 @@ def render_repair_topic_contract_tagging_prompt(
     )
 
 
+def render_calibrate_topic_contract_prompt(
+    topic_description: str,
+    current_contract: dict[str, Any],
+    primary_papers: list[dict[str, Any]],
+) -> str:
+    return render_template(
+        "calibrate_topic_contract_from_papers.md",
+        {
+            "topic_description": topic_description,
+            "current_contract_json": json_block(current_contract),
+            "primary_papers_json": json_block(primary_papers),
+        },
+    )
+
+
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,

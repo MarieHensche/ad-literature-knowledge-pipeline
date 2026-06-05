@@ -40,8 +40,8 @@ Rules:
 - Do not introduce catch-all values such as `unclear`, `not_reported`, `other`,
   `mixed_or_unclear`, `not_applicable`, or `unknown`.
 - If repairing `knowledge_goal`, return the complete replacement
-  `knowledge_goal` category with at least three concrete role-like values,
-  `required` true, `selection` single, and `applies_when` null.
+  `knowledge_goal` category with at least three concrete primary study-focus
+  values, `required` true, `selection` single, and `applies_when` null.
 - If a category depends on a repaired parent value, repair the dependency or
   replace the dependent category.
 - If no extracted review full-text evidence is available, the pipeline should

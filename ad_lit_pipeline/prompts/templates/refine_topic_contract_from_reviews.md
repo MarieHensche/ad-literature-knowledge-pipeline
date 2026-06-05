@@ -43,18 +43,19 @@ Rules:
   evidence.
 - The first tagging category must have category_id `knowledge_goal`, required
   true, selection `single`, and applies_when null.
-- `knowledge_goal` values must form a complete, mutually exclusive partition of
-  the included papers for this topic. This is the main review-derived knowledge
-  axis, similar to a research goal, intervention aim, application type,
-  phenomenon type, disease-stage role, exposure role, or another topic-specific
-  axis discovered from the reviews. Do not copy these example values; infer the
-  actual values from the reviews.
-- `knowledge_goal` values must be role-like nouns or noun phrases, not vague
-  benefit/action phrases. Bad shapes include `improving_x`, `enhancing_y`,
-  `supporting_z`, `studying_x`, or `evaluating_y` because they usually absorb
-  most papers. Prefer partition values like prevention, screening_detection,
-  treatment_effectiveness, implementation_acceptability, diagnosis, prognosis,
-  intervention_response, or other review-derived role values when they fit.
+- Treat `knowledge_goal` as the primary study-focus or primary knowledge
+  contribution partition for the relevant papers. Its values must form a
+  complete, mutually exclusive root axis for what each paper is mainly about.
+  The id stays `knowledge_goal` for pipeline compatibility, but the category is
+  conceptually the paper's primary study focus.
+- `knowledge_goal` values must be role-like nouns or noun phrases grounded in
+  the selected review full texts, not vague benefit/action phrases. Bad shapes
+  include `improving_x`, `enhancing_y`, `supporting_z`, `studying_x`, or
+  `evaluating_y` because they usually absorb most papers. Prefer concrete
+  topic-derived focus values such as intervention_effect,
+  mechanism_explanation, measurement_validation, implementation_barrier,
+  population_difference, tool_application, or other evidence-derived study
+  focus values when they fit. Do not copy these examples.
 - Every `knowledge_goal` value should plausibly receive at least one paper in a
   normal run for this topic, and no single value should be so broad that it
   would absorb almost all papers. If one review-derived value would dominate,

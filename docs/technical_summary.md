@@ -48,6 +48,7 @@ Steps:
 | `normalize_metadata` | `ad_lit_pipeline/steps/metadata/normalize.py` | `data/processed/<collection>_papers_normalized.csv` |
 | `screen_scope` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` | `data/processed/<collection>_scope_screened.csv` |
 | `prepare_full_text` | `ad_lit_pipeline/steps/full_text/prepare.py` | `data/processed/<collection>_scope_screened_full_text.csv`, `data/processed/<collection>_full_text_manifest.csv` |
+| `calibrate_topic_contract` | `ad_lit_pipeline/steps/tagging/calibrate_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
 | `normalize_tagging_config` | `ad_lit_pipeline/steps/tagging/normalize_config.py` | `data/processed/<collection>_tagging_config_normalized.json` |
 | `generate_tagging_rules` | `ad_lit_pipeline/steps/tagging/generate_rules.py` | `data/processed/<collection>_tagging_rules.json` |
 | `tag_papers` | `ad_lit_pipeline/steps/tagging/tag_papers.py` | `data/processed/<collection>_extraction_filled.csv` |
@@ -63,8 +64,10 @@ before LLM tagging. It uses local full-text paths when present, then tries open
 full-text locations from provider metadata, Unpaywall, Europe PMC, and CORE when
 configured. Extracted text is cached outside the project via
 `--full-text-cache-dir` or `AD_LIT_FULL_TEXT_CACHE`; the project stores only a
-manifest and text-path metadata. `tag_papers` reads the extracted text and sends
-a bounded, knowledge-focused evidence view to the LLM.
+manifest and text-path metadata. `calibrate_topic_contract` uses a selected
+set of included primary-paper full texts to refine the review-derived tagging
+ontology before rules are generated. `tag_papers` reads the extracted text and
+sends a bounded, knowledge-focused evidence view to the LLM.
 
 ## Collection Pipeline
 
@@ -142,6 +145,7 @@ The original script names are kept as wrappers or direct CLIs:
 | `scripts/import_ris.py` | `ad_lit_pipeline/steps/importers/ris.py` |
 | `scripts/normalize_metadata.py` | `ad_lit_pipeline/steps/metadata/normalize.py` |
 | `scripts/screen_scope.py` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` |
+| `scripts/calibrate_topic_contract.py` | `ad_lit_pipeline/steps/tagging/calibrate_topic_contract.py` |
 | `scripts/normalize_tagging_config.py` | `ad_lit_pipeline/steps/tagging/normalize_config.py` |
 | `scripts/generate_tagging_rules.py` | `ad_lit_pipeline/steps/tagging/generate_rules.py` |
 | `scripts/tag_papers_with_llm.py` | `ad_lit_pipeline/steps/tagging/tag_papers.py` |
@@ -178,11 +182,12 @@ start from example placeholders, then the review-seeded refinement step replaces
 or improves them from extracted review full-text evidence only. New
 generated/refined contracts must contain at least six concrete knowledge
 categories, reject generic meta-categories, and include a required
-single-selection `knowledge_goal` root category whose concrete values form a
-complete, mutually exclusive topic-specific partition of included papers. The
-`knowledge_goal` values are inferred from review full texts and should use
-`topic_structure.main_topics` as scaffolding for the main knowledge roles papers
-play around the topic. Details that apply only under one root value should be
+single-selection `knowledge_goal` root category whose concrete values form the
+complete, mutually exclusive primary study-focus or knowledge-contribution
+partition of included papers. The `knowledge_goal` values are inferred from
+review full texts, then calibrated against selected primary-paper full texts,
+and should use `topic_structure.main_topics` as scaffolding for the main roles
+papers play around the topic. Details that apply only under one root value should be
 represented as conditional categories with `applies_when`.
 Generated values should avoid `unclear`, `not_reported`, `mixed_or_unclear`,
 and `other`; missing or inapplicable details should usually be represented by

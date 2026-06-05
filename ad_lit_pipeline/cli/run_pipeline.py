@@ -16,7 +16,13 @@ from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
 from ad_lit_pipeline.steps.metadata import normalize
 from ad_lit_pipeline.steps.screening import rule_based_scope
-from ad_lit_pipeline.steps.tagging import audit, generate_rules, normalize_config, tag_papers
+from ad_lit_pipeline.steps.tagging import (
+    audit,
+    calibrate_topic_contract,
+    generate_rules,
+    normalize_config,
+    tag_papers,
+)
 
 
 ImporterRun = Callable[[Path, Path], StepResult]
@@ -97,6 +103,13 @@ def build_step_functions(
             Path(args.full_text_cache_dir).expanduser(),
             args.full_text_email,
             args.core_api_key,
+        ),
+        "calibrate_topic_contract": lambda: calibrate_topic_contract.run(
+            artifacts.scope_screened_full_text_csv,
+            topic_contract_path,
+            model,
+            trace_dir=trace_dir,
+            max_primary_papers=args.max_calibration_papers,
         ),
         "normalize_tagging_config": lambda: normalize_config.run(
             artifacts.tagging_config_normalized_json,
@@ -222,6 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--core-api-key",
         default=os.getenv("CORE_API_KEY"),
         help="Optional CORE API key for additional full-text lookup.",
+    )
+    run_parser.add_argument(
+        "--max-calibration-papers",
+        type=int,
+        default=calibrate_topic_contract.DEFAULT_MAX_PRIMARY_PAPERS,
+        help=(
+            "Maximum included primary-paper full texts used to calibrate the "
+            "topic-contract tagging ontology before tagging."
+        ),
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")
     run_parser.add_argument("--dry-run", action="store_true", help="Print selected steps.")

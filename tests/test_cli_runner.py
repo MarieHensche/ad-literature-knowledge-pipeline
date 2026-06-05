@@ -31,6 +31,7 @@ def test_run_pipeline_explain_lists_steps() -> None:
     result = run_script("scripts/run_pipeline.py", "explain", "--collection", "example")
 
     assert "normalize_metadata" in result.stdout
+    assert "calibrate_topic_contract" in result.stdout
     assert "export_mantis" in result.stdout
     assert "example_mantis_ready.csv" in result.stdout
 
