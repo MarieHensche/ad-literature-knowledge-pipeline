@@ -5,6 +5,17 @@ MAIN_PIPELINE = [
     "normalize_metadata",
     "screen_scope",
     "prepare_full_text",
+    "normalize_tagging_config",
+    "generate_tagging_rules",
+    "tag_papers",
+    "audit_extraction",
+    "export_mantis",
+]
+
+MAIN_PIPELINE_WITH_CALIBRATION = [
+    "normalize_metadata",
+    "screen_scope",
+    "prepare_full_text",
     "calibrate_topic_contract",
     "normalize_tagging_config",
     "generate_tagging_rules",
@@ -18,6 +29,9 @@ COLLECTION_PIPELINE = [
     "fetch_candidates",
     "deduplicate_candidates",
     "screen_title_relevance",
+    "select_calibration_papers",
+    "prepare_calibration_full_text",
+    "calibrate_topic_contract",
     "export_included_candidates",
 ]
 

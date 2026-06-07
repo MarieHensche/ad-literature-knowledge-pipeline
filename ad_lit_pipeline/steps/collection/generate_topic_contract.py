@@ -66,9 +66,9 @@ def prompt_with_validation_feedback(
         "hyphens, spaces, slashes, punctuation, and title case; for example, "
         "`self-help_resources` must become `self_help_resources` or a more "
         "specific topic-derived value.\n"
-        "- The `knowledge_goal` category must be an exhaustive root partition "
-        "of primary study focus or primary knowledge contribution, not vague "
-        "benefit phrases such as "
+        "- The `knowledge_goal` category must be the single primary "
+        "research-focus selector over the topic's main facets. Its values "
+        "should be facet category ids, not broad benefit phrases such as "
         "`improving_x`, `enhancing_y`, or `supporting_z`."
     )
     if best_contract is None:

@@ -65,6 +65,8 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "examples only" in prompt
     assert "`applies_when`" in prompt
     assert "common abbreviations or acronyms" in prompt
+    assert "Make main topics broad enough for title screening" in prompt
+    assert "at least 6 terms" in prompt
     assert "climate change affect human health" in prompt
     assert "at least 6 knowledge tagging categories" not in prompt
     assert "mental distribution check" not in prompt
@@ -98,10 +100,12 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "Do not use titles, abstracts, query metadata" in prompt
     assert "at least 6 knowledge tagging categories" in prompt
     assert "category_id `knowledge_goal`" in prompt
-    assert "primary study-focus" in prompt
-    assert "contribution partition" in prompt
+    assert "primary research-focus selector" in prompt
+    assert "exact `category_id` values of sibling facet" in prompt
+    assert "dominant facet" in prompt
     assert "topic_structure.main_topics" in prompt
-    assert "complete, mutually exclusive root axis" in prompt
+    assert "whole-question" in prompt
+    assert "effect_of_x" in prompt
     assert "mental distribution check" in prompt
     assert "no single value should be so broad" in prompt
     assert "conditional sub-categories" in prompt
@@ -135,9 +139,11 @@ def test_calibrate_topic_contract_prompt_uses_primary_full_text_evidence() -> No
     assert "Selected primary-paper full-text evidence" in prompt
     assert "full_text_evidence" in prompt
     assert "review-derived ontology as the starting point" in prompt
-    assert "primary study-focus" in prompt
-    assert "`paper_assignments`" in prompt
-    assert "Every proposed `knowledge_goal` value must be used" in prompt
+    assert "light polish step" in prompt
+    assert "primary research-focus selector" in prompt
+    assert "exact `category_id` values of sibling facet" in prompt
+    assert "deterministically synchronize `knowledge_goal.values`" in prompt
+    assert "`knowledge_goal` for paper-by-paper assignment" in prompt
     assert "Preserve `research_topic`, `topic_structure`, `scope`" in prompt
     assert "AI tutoring changed classroom engagement" in prompt
     assert "completely new ontology" in prompt
@@ -211,3 +217,4 @@ def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
     assert "Do not combine fallback values" in prompt
     assert "required categories with no fallback_value" in prompt
     assert "Do not select the broadest or first-listed value" in prompt
+    assert "primary research-focus facet" in prompt

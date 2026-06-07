@@ -31,6 +31,9 @@ class CollectionArtifacts:
     candidates_jsonl: Path
     deduped_candidates_jsonl: Path
     candidate_screening_csv: Path
+    calibration_papers_csv: Path
+    calibration_papers_full_text_csv: Path
+    calibration_full_text_manifest_csv: Path
     papers_csv: Path
 
 
@@ -102,6 +105,15 @@ def collection_artifacts(
         ),
         candidate_screening_csv=raw_path(
             collection, "candidate_screening.csv", base_dir
+        ),
+        calibration_papers_csv=raw_path(
+            collection, "calibration_papers.csv", base_dir
+        ),
+        calibration_papers_full_text_csv=raw_path(
+            collection, "calibration_papers_full_text.csv", base_dir
+        ),
+        calibration_full_text_manifest_csv=raw_path(
+            collection, "calibration_full_text_manifest.csv", base_dir
         ),
         papers_csv=raw_path(collection, "papers.csv", base_dir),
     )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,7 @@ from ad_lit_pipeline.core.env import load_dotenv
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.yaml_io import write_yaml_object
 from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
-from ad_lit_pipeline.llm.schemas import topic_contract_calibration_schema
+from ad_lit_pipeline.llm.schemas import topic_contract_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_calibrate_topic_contract_prompt
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import meaningful_tokens
@@ -20,9 +21,15 @@ from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     contract_from_model_payload,
 )
 from ad_lit_pipeline.steps.collection.refine_topic_contract import merge_refined_tagging
+from ad_lit_pipeline.steps.collection.select_calibration_papers import (
+    is_likely_non_primary,
+    is_likely_review,
+)
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.topics.contract import (
+    KNOWLEDGE_GOAL_CATEGORY_ID,
     load_topic_contract,
+    normalize_tagging_label,
     validate_generated_tagging_quality,
     validate_topic_contract,
 )
@@ -37,11 +44,14 @@ STEP = StepSpec(
 )
 
 SYSTEM_MESSAGE = "You calibrate literature-pipeline topic contracts as strict JSON."
-DEFAULT_MAX_PRIMARY_PAPERS = 8
+DEFAULT_MAX_PRIMARY_PAPERS = 3
 MAX_PRIMARY_PAPER_EVIDENCE_CHARS = 8_000
+MIN_FULL_TEXT_TOPIC_TERM_MATCHES = 2
+MAX_DETERMINISTIC_KNOWLEDGE_GOAL_VALUES = 6
 NO_PRIMARY_FULL_TEXT_WARNING = (
-    "No included primary papers had readable extracted full text; topic-contract "
-    "calibration was skipped and the existing tagging ontology was left unchanged."
+    "No included primary papers had readable extracted full text with enough "
+    "topic-specific evidence; topic-contract calibration was skipped and the "
+    "existing tagging ontology was left unchanged."
 )
 
 GENERIC_PRIMARY_TOPIC_TOKENS = {
@@ -203,13 +213,18 @@ def calibration_prompt_with_validation_feedback(
         prompt
         + "\n\nYour previous JSON response failed validation:\n"
         + str(error)
-        + "\n\nReturn corrected JSON with `topic_contract` and "
-        "`paper_assignments`. Keep the non-tagging topic-contract sections "
-        "preserved. Repair the tagging ontology and assignments together so "
-        "each selected `paper_id` is assigned exactly once and every proposed "
-        "`knowledge_goal` value is assigned to at least one selected full-text "
-        "paper."
+        + "\n\nReturn a corrected complete topic contract. Keep the "
+        "non-tagging topic-contract sections preserved. Repair the tagging "
+        "ontology minimally, using the selected primary-paper full text only as "
+        "a light check on the existing review-derived categories and values."
     )
+
+
+def full_text_topic_match_count(topic_contract: dict[str, Any], evidence: str) -> int:
+    specific_terms = topic_specific_terms(topic_contract)
+    if not specific_terms:
+        return 0
+    return len(meaningful_tokens(evidence) & specific_terms)
 
 
 def primary_paper_score(
@@ -244,122 +259,136 @@ def select_primary_papers_for_calibration(
             continue
         seen.add(identity)
 
+        if is_likely_review(row) or is_likely_non_primary(row):
+            continue
+
         evidence = full_text_evidence(row)
         if not evidence:
             continue
 
+        full_text_matches = full_text_topic_match_count(topic_contract, evidence)
+        if full_text_matches < MIN_FULL_TEXT_TOPIC_TERM_MATCHES:
+            continue
+
         scored.append(
-            (primary_paper_score(topic_contract, row, evidence), row, evidence)
+            (
+                full_text_matches,
+                primary_paper_score(topic_contract, row, evidence),
+                row,
+                evidence,
+            )
         )
 
-    scored.sort(key=lambda item: item[0], reverse=True)
-    selected_rows = [row for _score, row, _evidence in scored[:max_papers]]
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    selected_rows = [row for _matches, _score, row, _evidence in scored[:max_papers]]
     compact = [
         {
             "paper_id": row.get("paper_id", "") or f"paper_{index}",
             "full_text_evidence": evidence,
         }
-        for index, (_score, row, evidence) in enumerate(scored[:max_papers], start=1)
+        for index, (_matches, _score, row, evidence) in enumerate(
+            scored[:max_papers],
+            start=1,
+        )
     ]
     return selected_rows, compact
 
 
-def calibration_response_parts(
-    payload: dict[str, Any],
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    if not isinstance(payload, dict):
-        raise ValueError("Calibration response must be a JSON object.")
-
-    topic_contract = payload.get("topic_contract")
-    if not isinstance(topic_contract, dict):
-        raise ValueError("Calibration response must contain topic_contract.")
-
-    assignments = payload.get("paper_assignments")
-    if not isinstance(assignments, list):
-        raise ValueError("Calibration response must contain paper_assignments.")
-    if not all(isinstance(assignment, dict) for assignment in assignments):
-        raise ValueError("Each calibration paper assignment must be an object.")
-
-    return topic_contract, assignments
+def category_values(category: dict[str, Any]) -> list[str]:
+    values = category.get("values")
+    if not isinstance(values, list):
+        return []
+    return [
+        normalize_tagging_label(value)
+        for value in values
+        if isinstance(value, str) and normalize_tagging_label(value)
+    ]
 
 
-def compact_primary_paper_ids(primary_papers: list[dict[str, Any]]) -> list[str]:
-    paper_ids = []
-    for index, paper in enumerate(primary_papers, start=1):
-        paper_id = str(paper.get("paper_id") or f"paper_{index}").strip()
-        if not paper_id:
-            raise ValueError(f"Selected primary paper {index} has no paper_id.")
-        if paper_id in paper_ids:
-            raise ValueError(f"Duplicate selected primary paper_id: {paper_id}")
-        paper_ids.append(paper_id)
-    return paper_ids
+def merge_calibrated_tagging(
+    current_contract: dict[str, Any],
+    proposed_contract: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply primary-paper calibration only to existing tagging categories."""
+    merged = merge_refined_tagging(current_contract, proposed_contract)
+    current_categories = current_contract.get("tagging", {}).get("categories", {})
+    proposed_categories = merged.get("tagging", {}).get("categories", {})
+    if not isinstance(current_categories, dict) or not isinstance(
+        proposed_categories,
+        dict,
+    ):
+        return merged
+    if KNOWLEDGE_GOAL_CATEGORY_ID not in current_categories:
+        return merged
+
+    calibrated_categories = deepcopy(current_categories)
+    for category_id in list(calibrated_categories):
+        proposed_category = proposed_categories.get(category_id)
+        if isinstance(proposed_category, dict):
+            calibrated_categories[category_id] = proposed_category
+
+    merged["tagging"]["categories"] = calibrated_categories
+    return merged
 
 
-def validate_calibration_assignments(
-    contract: dict[str, Any],
-    assignments: list[dict[str, Any]],
-    primary_papers: list[dict[str, Any]],
-) -> None:
-    categories = contract.get("tagging", {}).get("categories", {})
+def synchronize_knowledge_goal_values(
+    current_contract: dict[str, Any],
+    calibrated_contract: dict[str, Any],
+) -> dict[str, Any]:
+    """Make knowledge_goal a deterministic selector over sibling facet IDs."""
+    synchronized = deepcopy(calibrated_contract)
+    categories = synchronized.get("tagging", {}).get("categories", {})
     if not isinstance(categories, dict):
-        raise ValueError("Calibrated contract tagging.categories must be a mapping.")
+        return synchronized
 
-    knowledge_goal = categories.get("knowledge_goal")
+    knowledge_goal = categories.get(KNOWLEDGE_GOAL_CATEGORY_ID)
     if not isinstance(knowledge_goal, dict):
-        raise ValueError("Calibrated contract must include knowledge_goal.")
+        return synchronized
 
-    raw_values = knowledge_goal.get("values")
-    if not isinstance(raw_values, list) or not raw_values:
-        raise ValueError("Calibrated knowledge_goal must contain values.")
-
-    knowledge_goal_values = [str(value).strip() for value in raw_values]
-    allowed_values = set(knowledge_goal_values)
-    paper_ids = compact_primary_paper_ids(primary_papers)
-    assigned_goals_by_paper: dict[str, str] = {}
-
-    for index, assignment in enumerate(assignments, start=1):
-        paper_id = str(assignment.get("paper_id") or "").strip()
-        knowledge_goal_value = str(assignment.get("knowledge_goal") or "").strip()
-
-        if paper_id not in paper_ids:
-            raise ValueError(
-                "Calibration assignment references unknown paper_id "
-                f"{paper_id!r} at index {index}; expected one of {paper_ids}."
-            )
-        if paper_id in assigned_goals_by_paper:
-            raise ValueError(
-                f"Calibration assignment duplicates paper_id {paper_id!r}."
-            )
-        if knowledge_goal_value not in allowed_values:
-            raise ValueError(
-                "Calibration assignment for paper_id "
-                f"{paper_id!r} uses unknown knowledge_goal "
-                f"{knowledge_goal_value!r}; expected one of "
-                f"{knowledge_goal_values}."
-            )
-
-        assigned_goals_by_paper[paper_id] = knowledge_goal_value
-
-    missing_paper_ids = [
-        paper_id for paper_id in paper_ids if paper_id not in assigned_goals_by_paper
+    sibling_ids = [
+        category_id
+        for category_id in categories
+        if category_id != KNOWLEDGE_GOAL_CATEGORY_ID
     ]
-    if missing_paper_ids:
-        raise ValueError(
-            "Calibration assignments must cover every selected primary paper; "
-            f"missing paper_id(s): {missing_paper_ids}."
-        )
+    sibling_set = set(sibling_ids)
+    current_knowledge_goal = (
+        current_contract.get("tagging", {})
+        .get("categories", {})
+        .get(KNOWLEDGE_GOAL_CATEGORY_ID, {})
+    )
 
-    assigned_values = set(assigned_goals_by_paper.values())
-    unused_values = [
-        value for value in knowledge_goal_values if value not in assigned_values
+    preferred_values: list[str] = []
+    for source in (
+        category_values(knowledge_goal),
+        category_values(current_knowledge_goal)
+        if isinstance(current_knowledge_goal, dict)
+        else [],
+    ):
+        for value in source:
+            if value in sibling_set and value not in preferred_values:
+                preferred_values.append(value)
+    if len(preferred_values) < 3:
+        for value in sibling_ids:
+            if value not in preferred_values:
+                preferred_values.append(value)
+            if len(preferred_values) >= 3:
+                break
+
+    knowledge_goal["required"] = True
+    knowledge_goal["selection"] = "single"
+    knowledge_goal["applies_when"] = None
+    knowledge_goal["values"] = preferred_values[
+        :MAX_DETERMINISTIC_KNOWLEDGE_GOAL_VALUES
     ]
-    if unused_values:
-        raise ValueError(
-            "Calibration assignments left knowledge_goal value(s) unused by the "
-            f"selected full-text papers: {unused_values}. Remove, merge, or "
-            "replace unsupported root values so the primary study-focus axis "
-            "is supported by the calibration evidence."
-        )
+
+    ordered_categories: dict[str, Any] = {
+        KNOWLEDGE_GOAL_CATEGORY_ID: knowledge_goal
+    }
+    for category_id, category in categories.items():
+        if category_id != KNOWLEDGE_GOAL_CATEGORY_ID:
+            ordered_categories[category_id] = category
+    synchronized["tagging"]["categories"] = ordered_categories
+    return synchronized
 
 
 def call_llm(
@@ -393,8 +422,8 @@ def call_llm(
             model=model,
             system_message=SYSTEM_MESSAGE,
             prompt=attempt_prompt,
-            schema_name="topic_contract_calibration",
-            schema=topic_contract_calibration_schema(SUPPORTED_PROVIDERS),
+            schema_name="topic_contract",
+            schema=topic_contract_schema(SUPPORTED_PROVIDERS),
             step_name=STEP.name,
             call_id=call_id,
             trace_writer=trace_writer,
@@ -403,16 +432,15 @@ def call_llm(
             trace_paths.extend(result.trace_paths.as_list())
 
         try:
-            proposed_payload, assignments = calibration_response_parts(result.parsed)
-            proposed_contract = contract_from_model_payload(proposed_payload)
+            proposed_contract = contract_from_model_payload(result.parsed)
             validate_topic_contract(proposed_contract)
-            contract = merge_refined_tagging(current_contract, proposed_contract)
+            contract = merge_calibrated_tagging(current_contract, proposed_contract)
+            contract = synchronize_knowledge_goal_values(current_contract, contract)
             validate_topic_contract(contract)
             validate_generated_tagging_quality(
                 contract,
                 label="Calibrated topic contract",
             )
-            validate_calibration_assignments(contract, assignments, primary_papers)
             return contract, trace_paths
         except ValueError as error:
             last_error = error

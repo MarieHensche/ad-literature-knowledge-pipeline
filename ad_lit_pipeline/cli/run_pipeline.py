@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
-from ad_lit_pipeline.core.registry import MAIN_PIPELINE
+from ad_lit_pipeline.core.registry import MAIN_PIPELINE, MAIN_PIPELINE_WITH_CALIBRATION
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
@@ -75,9 +75,19 @@ def explain(collection: str) -> None:
     for step in MAIN_PIPELINE:
         print(f"  - {step}")
     print()
+    print("Optional main-time calibration step:")
+    print("  - calibrate_topic_contract")
+    print()
     print("Conventional outputs:")
     for field, value in artifacts.__dict__.items():
         print(f"  {field}: {value}")
+
+
+def selected_main_pipeline(args: argparse.Namespace) -> list[str]:
+    requested_step = args.only_step or args.from_step
+    if args.calibrate_topic_contract or requested_step == "calibrate_topic_contract":
+        return MAIN_PIPELINE_WITH_CALIBRATION
+    return MAIN_PIPELINE
 
 
 def build_step_functions(
@@ -170,7 +180,7 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
         model=model,
     )
     trace_dir = Path(args.trace_dir) if args.trace_dir else default_trace_dir(manifest)
-    selected = select_steps(MAIN_PIPELINE, args.only_step, args.from_step)
+    selected = select_steps(selected_main_pipeline(args), args.only_step, args.from_step)
     step_functions = build_step_functions(args, trace_dir)
 
     if args.dry_run:
@@ -242,7 +252,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=calibrate_topic_contract.DEFAULT_MAX_PRIMARY_PAPERS,
         help=(
             "Maximum included primary-paper full texts used to calibrate the "
-            "topic-contract tagging ontology before tagging."
+            "topic-contract tagging ontology before tagging when "
+            "--calibrate-topic-contract is enabled."
+        ),
+    )
+    run_parser.add_argument(
+        "--calibrate-topic-contract",
+        action="store_true",
+        help=(
+            "Opt into legacy main-pipeline contract calibration. New collection "
+            "runs calibrate the contract before exporting papers."
         ),
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")

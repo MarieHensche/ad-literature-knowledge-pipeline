@@ -99,10 +99,10 @@ def generated_topic_contract_payload() -> dict:
             "required": True,
             "selection": "single",
             "values": [
-                "performance_effect",
-                "engagement_pattern",
-                "learning_process",
-                "access_equity",
+                "ai_tool_type",
+                "education_level",
+                "outcome_domain",
+                "assessment_signal",
             ],
         },
         "ai_tool_type": {
@@ -457,16 +457,16 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                         {
                             "category_id": "knowledge_goal",
                             "description": (
-                                "Top-level partition of climate-health papers by "
-                                "their main knowledge contribution."
+                                "Primary research-focus selector over "
+                                "climate-health facets."
                             ),
                             "required": True,
                             "selection": "single",
                             "values": [
-                                "exposure_risk_assessment",
-                                "health_impact_estimation",
-                                "adaptation_or_response",
-                                "policy_or_system_planning",
+                                "climate_exposure",
+                                "health_outcome",
+                                "adaptation_strategy",
+                                "exposure_measurement",
                             ],
                             "applies_when": None,
                         },
@@ -725,16 +725,16 @@ def test_refine_topic_contract_adds_review_seeded_categories(
         {
             "category_id": "knowledge_goal",
             "description": (
-                "Review-derived top-level partition of early AD computational "
-                "biology papers by their main knowledge goal."
+                "Review-derived primary research-focus selector over early "
+                "AD detection facets."
             ),
             "required": True,
             "selection": "single",
             "values": [
-                "risk_prediction",
-                "diagnosis",
-                "disease_observation",
-                "intervention_planning",
+                "evidence_signal_family",
+                "detection_outcome",
+                "modeling_approach",
+                "validation_context",
             ],
             "applies_when": None,
         },
@@ -1034,19 +1034,43 @@ def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
             {
                 "category_id": "knowledge_goal",
                 "description": (
-                    "Root partition of early detection papers by knowledge role."
+                    "Primary research-focus selector over early detection facets."
                 ),
                 "required": True,
                 "selection": "single",
                 "values": [
-                    "screening_detection",
-                    "risk_prediction",
-                    "diagnostic_validation",
+                    "screening_modality",
+                    "risk_signal",
+                    "validation_target",
                 ],
                 "applies_when": None,
-            }
+            },
+            {
+                "category_id": "screening_modality",
+                "description": "Early-detection screening modality studied.",
+                "required": False,
+                "selection": "multi",
+                "values": ["speech_marker", "imaging_marker"],
+                "applies_when": None,
+            },
+            {
+                "category_id": "risk_signal",
+                "description": "Predictive signal used for early-risk estimation.",
+                "required": False,
+                "selection": "multi",
+                "values": ["cognitive_score", "biomarker_signal"],
+                "applies_when": None,
+            },
+            {
+                "category_id": "validation_target",
+                "description": "Clinical target used to validate detection.",
+                "required": False,
+                "selection": "multi",
+                "values": ["mci_detection", "dementia_conversion"],
+                "applies_when": None,
+            },
         ],
-        "repair_notes": ["Expanded knowledge_goal to three role-like values."],
+        "repair_notes": ["Expanded knowledge_goal into three backed facet ids."],
     }
     client = StaticJSONClient([weak_payload, repair_patch])
 
@@ -1062,10 +1086,13 @@ def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
     refined = load_topic_contract(contract_path)
     assert list(refined["tagging"]["categories"])[0] == "knowledge_goal"
     assert refined["tagging"]["categories"]["knowledge_goal"]["values"] == [
-        "screening_detection",
-        "risk_prediction",
-        "diagnostic_validation",
+        "screening_modality",
+        "risk_signal",
+        "validation_target",
     ]
+    assert "screening_modality" in refined["tagging"]["categories"]
+    assert "risk_signal" in refined["tagging"]["categories"]
+    assert "validation_target" in refined["tagging"]["categories"]
     assert [request["call_id"] for request in client.requests] == [
         "contract_refinement",
         "contract_refinement_repair",
@@ -1458,13 +1485,13 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     calibrated_payload["tagging"]["categories"] = [
         {
             "category_id": "knowledge_goal",
-            "description": "Primary study-focus partition for AI education papers.",
+            "description": "Primary research-focus facet for AI education papers.",
             "required": True,
             "selection": "single",
             "values": [
-                "learning_outcome_effect",
-                "engagement_motivation_effect",
-                "assessment_feedback_support",
+                "ai_instructional_role",
+                "lesson_activity_supported",
+                "student_performance_signal",
             ],
             "applies_when": None,
         },
@@ -1510,39 +1537,13 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
         },
     ]
     invalid_payload = deepcopy(calibrated_payload)
-    invalid_payload["tagging"]["categories"][0]["values"] = [
-        "learning_outcome_effect",
-        "engagement_motivation_effect",
-        "assessment_feedback_support",
-        "personalized_instruction",
-    ]
-    assignments = [
-        {
-            "paper_id": "p1",
-            "knowledge_goal": "learning_outcome_effect",
-            "reason": "The full text centers on student performance effects.",
-        },
-        {
-            "paper_id": "p2",
-            "knowledge_goal": "assessment_feedback_support",
-            "reason": "The full text centers on assessment and feedback.",
-        },
-        {
-            "paper_id": "p3",
-            "knowledge_goal": "engagement_motivation_effect",
-            "reason": "The full text centers on engagement and motivation.",
-        },
-    ]
+    invalid_payload["tagging"]["categories"] = invalid_payload["tagging"][
+        "categories"
+    ][:3]
     client = StaticJSONClient(
         [
-            {
-                "topic_contract": invalid_payload,
-                "paper_assignments": assignments,
-            },
-            {
-                "topic_contract": calibrated_payload,
-                "paper_assignments": assignments,
-            },
+            invalid_payload,
+            calibrated_payload,
         ]
     )
 
@@ -1565,21 +1566,90 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     assert calibrated["scope"] == contract["scope"]
     assert list(categories)[0] == "knowledge_goal"
     assert categories["knowledge_goal"]["values"] == [
-        "learning_outcome_effect",
-        "engagement_motivation_effect",
-        "assessment_feedback_support",
+        "ai_instructional_role",
+        "lesson_activity_supported",
+        "student_performance_signal",
     ]
     assert len(client.requests) == 2
     assert client.requests[0]["call_id"] == "contract_calibration"
-    assert client.requests[0]["schema_name"] == "topic_contract_calibration"
+    assert client.requests[0]["schema_name"] == "topic_contract"
     assert client.requests[1]["call_id"] == "contract_calibration_retry_2"
-    assert "left knowledge_goal value(s) unused" in client.requests[1]["prompt"]
-    assert "`paper_assignments`" in client.requests[1]["prompt"]
+    assert "weak knowledge tagging categories" in client.requests[1]["prompt"]
+    assert "corrected complete topic contract" in client.requests[1]["prompt"]
     assert "Selected primary-paper full-text evidence" in client.requests[0]["prompt"]
     assert "Primary paper full text reports student performance" in client.requests[0][
         "prompt"
     ]
     assert "AI tutoring in school lessons" not in client.requests[0]["prompt"]
+
+
+def test_calibrate_topic_contract_skips_non_primary_or_off_topic_text(
+    tmp_path: Path,
+) -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract_path = tmp_path / "topic_contract.yaml"
+    write_yaml_object(contract_path, contract)
+    papers_path = tmp_path / "scope_screened_full_text.csv"
+    off_topic_path = tmp_path / "off_topic.txt"
+    off_topic_path.write_text(
+        "This full text discusses unrelated crop irrigation and soil chemistry. "
+        * 20,
+        encoding="utf-8",
+    )
+
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "review",
+                "title": "Systematic review of early detection biomarkers",
+                "abstract": "Relevant review.",
+                "doi": "10.123/review",
+                "scope_decision": "include",
+                "full_text_text_path": str(off_topic_path),
+            },
+            {
+                "paper_id": "protocol",
+                "title": "Trial protocol for early detection screening",
+                "abstract": "Relevant protocol.",
+                "doi": "10.123/protocol",
+                "scope_decision": "include",
+                "full_text_text_path": str(off_topic_path),
+            },
+            {
+                "paper_id": "off_topic",
+                "title": "Primary study with no useful topic evidence",
+                "abstract": "No relevant evidence.",
+                "doi": "10.123/off-topic",
+                "scope_decision": "include",
+                "full_text_text_path": str(off_topic_path),
+            },
+        ],
+        [
+            "paper_id",
+            "title",
+            "abstract",
+            "doi",
+            "scope_decision",
+            "full_text_text_path",
+        ],
+    )
+    client = StaticJSONClient([])
+
+    result = run_calibrate_topic_contract(
+        papers_path,
+        contract_path,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+        max_primary_papers=3,
+    )
+
+    assert result.row_counts["primary_full_texts_selected"] == 0
+    assert result.metadata["calibration_skipped"] is True
+    assert "topic-specific evidence" in result.warnings[0]
+    assert client.requests == []
+    assert load_topic_contract(contract_path) == contract
 
 
 def test_generate_rules_repairs_invalid_fallback_values(tmp_path: Path) -> None:

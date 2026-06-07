@@ -13,6 +13,9 @@ from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     select_best_review_overviews,
 )
 from ad_lit_pipeline.steps.collection import prepare_review_full_text
+from ad_lit_pipeline.steps.collection.select_calibration_papers import (
+    run as run_select_calibration_papers,
+)
 from ad_lit_pipeline.steps.full_text import prepare as full_text_prepare
 from ad_lit_pipeline.steps.full_text.prepare import FullTextResult
 from ad_lit_pipeline.steps.full_text.evidence import build_knowledge_evidence
@@ -912,6 +915,115 @@ def test_export_included_candidates_orders_by_title_tier_and_caps(
     rows = read_csv(output_path)
     assert len(rows) == 1
     assert rows[0]["paper_id"] == "tier_0"
+
+
+def test_select_calibration_papers_skips_reviews_and_protocols(tmp_path: Path) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    output_path = tmp_path / "calibration.csv"
+    candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": "W_review",
+            "doi": "10.123/review",
+            "title": "Systematic review of mobile health interventions",
+            "year": 2024,
+            "rank": 1,
+            "raw_record": {"type": "review"},
+        },
+        {
+            "provider": "openalex",
+            "provider_id": "W_protocol",
+            "doi": "10.123/protocol",
+            "title": "Trial protocol for a mobile health app",
+            "year": 2024,
+            "rank": 2,
+            "raw_record": {"type": "article"},
+        },
+        {
+            "provider": "openalex",
+            "provider_id": "W_primary",
+            "doi": "10.123/primary",
+            "title": "Randomized trial of a mobile health app",
+            "year": 2024,
+            "rank": 3,
+            "abstract": "Trial results.",
+            "raw_record": {"type": "article"},
+        },
+    ]
+    write_jsonl(candidates_path, candidates)
+    fieldnames = [
+        "paper_id",
+        "title",
+        "year",
+        "doi",
+        "provider",
+        "provider_id",
+        "source_rank",
+        "screening_decision",
+        "screening_confidence",
+        "screening_reason",
+        "title_relevance_tier",
+    ]
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "paper_review",
+                "title": "Systematic review of mobile health interventions",
+                "year": "2024",
+                "doi": "10.123/review",
+                "provider": "openalex",
+                "provider_id": "W_review",
+                "source_rank": "1",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant review.",
+                "title_relevance_tier": "0",
+            },
+            {
+                "paper_id": "paper_protocol",
+                "title": "Trial protocol for a mobile health app",
+                "year": "2024",
+                "doi": "10.123/protocol",
+                "provider": "openalex",
+                "provider_id": "W_protocol",
+                "source_rank": "2",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant protocol.",
+                "title_relevance_tier": "0",
+            },
+            {
+                "paper_id": "paper_primary",
+                "title": "Randomized trial of a mobile health app",
+                "year": "2024",
+                "doi": "10.123/primary",
+                "provider": "openalex",
+                "provider_id": "W_primary",
+                "source_rank": "3",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant primary study.",
+                "title_relevance_tier": "0",
+            },
+        ],
+        fieldnames,
+    )
+
+    result = run_select_calibration_papers(
+        candidates_path,
+        screening_path,
+        output_path,
+        max_papers=2,
+    )
+
+    rows = read_csv(output_path)
+    assert [row["paper_id"] for row in rows] == ["paper_primary"]
+    assert rows[0]["scope_decision"] == "include"
+    assert result.row_counts["selected_calibration_papers"] == 1
+    assert result.row_counts["skipped_review_candidates"] == 1
+    assert result.row_counts["skipped_non_primary_candidates"] == 1
 
 
 def test_audit_extraction_writes_expected_issues(tmp_path: Path) -> None:

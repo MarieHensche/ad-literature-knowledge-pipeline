@@ -13,6 +13,7 @@ from ad_lit_pipeline.core.registry import (
     CONTRACT_BOOTSTRAP_PIPELINE,
 )
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
+from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
@@ -21,6 +22,7 @@ SEARCH_BUDGET_HARD_CAP = 5000
 SEARCH_BUDGET_MINIMUM = 30
 SEARCH_BUDGET_MULTIPLIER = 4
 DEFAULT_MAX_REVIEW_OVERVIEWS = 5
+DEFAULT_MAX_CALIBRATION_PAPERS = 3
 DEFAULT_BASE_CONTRACT = (
     Path(__file__).resolve().parents[2]
     / "configs"
@@ -44,7 +46,7 @@ def explain(collection: str) -> None:
     for step in COLLECTION_PIPELINE:
         print(f"  - {step}")
     print()
-    print("Optional preflight step:")
+    print("Optional contract-bootstrap steps:")
     print("  - generate_topic_contract")
     print("  - fetch_review_overviews")
     print("  - prepare_review_full_text")
@@ -201,6 +203,93 @@ def build_step_functions(
             trace_dir=trace_dir,
         )
 
+    def run_select_calibration_papers() -> object:
+        from ad_lit_pipeline.steps.collection import select_calibration_papers
+
+        return select_calibration_papers.run(
+            artifacts.deduped_candidates_jsonl,
+            artifacts.candidate_screening_csv,
+            artifacts.calibration_papers_csv,
+            args.max_calibration_papers,
+        )
+
+    def run_prepare_calibration_full_text() -> object:
+        try:
+            result = prepare_full_text.run(
+                artifacts.calibration_papers_csv,
+                artifacts.calibration_papers_full_text_csv,
+                artifacts.calibration_full_text_manifest_csv,
+                Path(args.full_text_cache_dir).expanduser(),
+                args.full_text_email,
+                args.core_api_key,
+            )
+        except Exception as error:
+            return StepResult(
+                step_name="prepare_calibration_full_text",
+                inputs={"calibration_papers_csv": artifacts.calibration_papers_csv},
+                outputs={
+                    "calibration_papers_full_text_csv": (
+                        artifacts.calibration_papers_full_text_csv
+                    ),
+                    "calibration_full_text_manifest_csv": (
+                        artifacts.calibration_full_text_manifest_csv
+                    ),
+                },
+                warnings=[
+                    "Collection-time calibration full-text preparation failed; "
+                    "the collection will continue with the review-refined "
+                    f"contract. Error: {error}"
+                ],
+                metadata={"calibration_skipped": True},
+            )
+        result.step_name = "prepare_calibration_full_text"
+        result.inputs = {"calibration_papers_csv": artifacts.calibration_papers_csv}
+        result.outputs = {
+            "calibration_papers_full_text_csv": (
+                artifacts.calibration_papers_full_text_csv
+            ),
+            "calibration_full_text_manifest_csv": (
+                artifacts.calibration_full_text_manifest_csv
+            ),
+        }
+        return result
+
+    def run_calibrate_topic_contract() -> object:
+        from ad_lit_pipeline.steps.tagging import calibrate_topic_contract
+
+        try:
+            result = calibrate_topic_contract.run(
+                artifacts.calibration_papers_full_text_csv,
+                topic_contract_path,
+                args.model,
+                trace_dir=trace_dir,
+                max_primary_papers=args.max_calibration_papers,
+            )
+        except Exception as error:
+            return StepResult(
+                step_name="calibrate_topic_contract",
+                inputs={
+                    "calibration_papers_full_text_csv": (
+                        artifacts.calibration_papers_full_text_csv
+                    ),
+                    "topic_contract_yaml": topic_contract_path,
+                },
+                outputs={"topic_contract_yaml": topic_contract_path},
+                warnings=[
+                    "Collection-time contract calibration failed; the "
+                    "collection will continue with the review-refined contract. "
+                    f"Error: {error}"
+                ],
+                metadata={"calibration_skipped": True},
+            )
+        result.inputs = {
+            "calibration_papers_full_text_csv": (
+                artifacts.calibration_papers_full_text_csv
+            ),
+            "topic_contract_yaml": topic_contract_path,
+        }
+        return result
+
     def run_export_included_candidates() -> object:
         from ad_lit_pipeline.steps.collection import export_included
 
@@ -220,6 +309,9 @@ def build_step_functions(
         "fetch_candidates": run_fetch_candidates,
         "deduplicate_candidates": run_deduplicate_candidates,
         "screen_title_relevance": run_screen_title_relevance,
+        "select_calibration_papers": run_select_calibration_papers,
+        "prepare_calibration_full_text": run_prepare_calibration_full_text,
+        "calibrate_topic_contract": run_calibrate_topic_contract,
         "export_included_candidates": run_export_included_candidates,
     }
 
@@ -308,6 +400,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Extracted review full-text seed count used when refining a "
             "generated contract. Review fetch retrieves a larger candidate pool."
+        ),
+    )
+    run_parser.add_argument(
+        "--max-calibration-papers",
+        type=int,
+        default=DEFAULT_MAX_CALIBRATION_PAPERS,
+        help=(
+            "Maximum non-review included papers to read with full text for "
+            "collection-time contract calibration."
         ),
     )
     run_parser.add_argument(

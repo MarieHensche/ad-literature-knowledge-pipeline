@@ -13,12 +13,9 @@ $primary_papers_json
 
 Task:
 Return JSON with:
-- `topic_contract`: a complete topic contract whose non-tagging sections are
-  preserved and whose `tagging.categories` are calibrated against the selected
+- a complete topic contract whose non-tagging sections are preserved and whose
+  existing `tagging.categories` are lightly calibrated against the selected
   primary-paper full-text evidence.
-- `paper_assignments`: one assignment for every selected primary paper mapping
-  its `paper_id` to exactly one proposed `knowledge_goal` value, with a short
-  evidence-grounded reason.
 
 Rules:
 - Use the current review-derived ontology as the starting point. Do not invent a
@@ -26,28 +23,42 @@ Rules:
 - Use primary-paper `full_text_evidence` only to check whether categories and
   values are answerable, too broad, too narrow, missing, redundant, or clearly
   mismatched to the real corpus.
+- This is a light polish step after review-based ontology generation. Improve
+  existing tagging categories and values; do not redesign the ontology around
+  the few primary papers.
 - Preserve `research_topic`, `topic_structure`, `scope`,
   `rule_based_screening`, `candidate_screening`, `collection`, and
   `tagging.fallback_policy`. This task is only about knowledge tagging
   categories and values.
+- Preserve the existing category IDs whenever possible. You may improve
+  category descriptions, add/remove/rename values inside existing categories,
+  and remove values that the selected full texts show are weak or redundant.
+- Do not add a new category unless it is strictly necessary to keep an existing
+  `knowledge_goal` root value backed by a sibling facet category. Do not add
+  categories for distinctions visible in only one selected paper.
 - Remove or replace values that appear contaminated by off-topic review
   evidence or that do not fit the actual research topic.
 - The first tagging category must have category_id `knowledge_goal`, required
   true, selection `single`, and applies_when null.
-- Treat `knowledge_goal` as the primary study-focus or primary knowledge
-  contribution partition for the relevant papers. Its values must form a
-  complete, mutually exclusive root axis for what each paper is mainly about.
-  The id stays `knowledge_goal` for pipeline compatibility, but the category is
-  conceptually the paper's primary study focus.
-- The `paper_assignments` must use every selected `paper_id` exactly once. Every
-  proposed `knowledge_goal` value must be used by at least one selected primary
-  paper. If a root value cannot be assigned to any selected full-text paper,
-  remove it, merge it with a clearer neighbor, or replace the whole root axis.
+- Treat `knowledge_goal` as the primary research-focus selector over the
+  topic's major evidence-derived facets. The id stays `knowledge_goal` for
+  pipeline compatibility, but conceptually this is the paper's dominant facet.
+- `knowledge_goal` values must be exact `category_id` values of sibling facet
+  categories that you also return. Each matching sibling category must contain
+  detailed allowed values for how that facet is researched or reported.
+- The pipeline will deterministically synchronize `knowledge_goal.values` to
+  valid sibling facet category IDs after your response. Do not use
+  `knowledge_goal` for paper-by-paper assignment in this step.
+- Each matching sibling facet category should usually have `applies_when` null
+  so papers can still record secondary information about non-dominant facets.
+  Use conditional categories only for narrower follow-up questions that truly
+  make sense for a subset of facet values.
 - Prefer 3 to 6 `knowledge_goal` values. Do not create more `knowledge_goal`
   values than the selected primary-paper full texts can support.
-- `knowledge_goal` values must be concrete nouns or noun phrases, not vague
-  benefit/action phrases such as `improving_x`, `enhancing_y`, `supporting_z`,
-  `studying_x`, or `evaluating_y`.
+- `knowledge_goal` values must be topic-facet nouns or noun phrases grounded in
+  the evidence, not vague benefit/action or whole-question phrases such as
+  `improving_x`, `enhancing_y`, `supporting_z`, `studying_x`, `evaluating_y`,
+  `effect_of_x`, `impact_of_x`, `role_of_x`, or `relationship_between_x_y`.
 - Keep categories that are useful and answerable across the paper corpus.
 - Add a category or value only when the primary full-text evidence shows that it
   would help tag multiple relevant papers.
@@ -65,6 +76,6 @@ Rules:
   `not_applicable`, or `unknown` as values in generated knowledge categories.
 - Prefer 6 to 10 compact knowledge categories when the evidence supports them.
 - Category IDs and allowed values must use lowercase snake_case.
-- Return JSON matching the calibration schema. In `topic_contract.tagging.categories`,
-  return an array of category objects with `category_id`, `description`,
-  `required`, `selection`, `values`, and `applies_when`.
+- Return JSON matching the topic-contract schema. In `tagging.categories`, return
+  an array of category objects with `category_id`, `description`, `required`,
+  `selection`, `values`, and `applies_when`.

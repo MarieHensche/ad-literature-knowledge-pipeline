@@ -140,10 +140,10 @@ def generated_quality_contract() -> dict:
             "required": True,
             "selection": "single",
             "values": [
-                "performance_improvement",
-                "engagement_support",
-                "learning_process_support",
-                "equity_or_access",
+                "ai_tool_type",
+                "education_level",
+                "outcome_domain",
+                "assessment_signal",
             ],
         },
         "ai_tool_type": {
@@ -251,6 +251,24 @@ def test_generated_tagging_quality_requires_valid_knowledge_goal() -> None:
 
     with pytest.raises(ValueError, match="knowledge_goal"):
         validate_generated_tagging_quality(contract)
+
+
+def test_generated_tagging_quality_requires_knowledge_goal_facet_categories() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "ai_tool_type",
+        "education_level",
+        "missing_facet",
+    ]
+
+    records = generated_tagging_quality_issue_records(contract)
+
+    assert any(
+        record.code == "knowledge_goal_missing_facet_categories"
+        and record.category_id == "knowledge_goal"
+        and "missing_facet" in record.values
+        for record in records
+    )
 
 
 def test_generated_tagging_quality_rejects_catchall_values() -> None:

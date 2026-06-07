@@ -25,13 +25,26 @@ Rules:
     title-selection anchor.
   - `anchor_reason`: a short explanation of why this component is mandatory.
   - `main_topics`: at least two topic components that define the research topic.
-    Each must have `topic_id`, `label`, and broad `terms`.
+    When the question has distinct intervention/exposure, population/context,
+    outcome/target, mechanism, or measurement components, split those into
+    separate main topics so later tagging can become facet-based. Each must
+    have `topic_id`, `label`, and broad `terms`.
   - `secondary_topics`: an array of objects with `main_topic_id` and `terms`.
     Use non-anchor main topic ids and related replacement terms. Do not define
     secondary replacements for the anchor.
+- Make main topics broad enough for title screening. Prefer general component
+  labels such as intervention family, tool family, population/context, outcome
+  family, exposure, or domain over narrow phrases from the user's exact wording.
+  For example, use a broad app/digital-intervention component rather than a
+  single exact product or phrase when the literature may use many labels.
 - Make main-topic `terms` broad enough for title-only matching: include true
   synonyms, common abbreviations, subtypes, concrete platforms/tools, and
-  narrower indicators that still represent the same topic component.
+  narrower indicators that still represent the same topic component. Each main
+  topic should usually have at least 6 terms when the domain vocabulary supports
+  that many. Include singular/plural variants only when they help retrieval.
+- Avoid making abstract outcome words mandatory title components when papers
+  are likely to express that component through concrete outcome names. Put the
+  concrete names in the component's terms or in secondary-topic replacements.
 - Put related-but-not-same concepts in `secondary_topics`, not in the anchor.
 - Make `scope.include_criteria` cover direct papers and meaningfully adjacent
   papers, including reviews unless the research question explicitly asks for
@@ -58,7 +71,9 @@ Rules:
   will be refined from review and overview papers in a later step.
 - Include at least one provisional tagging category. Prefer `knowledge_goal` as
   a simple root placeholder with `required` true, `selection` single,
-  `applies_when` null, and a few lowercase snake_case values.
+  `applies_when` null, and a few lowercase snake_case values that resemble
+  major topic facets rather than benefit claims. The final facet categories
+  will be rebuilt from review full text later.
 - Category IDs and allowed values must use lowercase snake_case. Do not return
   labels with spaces, slashes, punctuation, or title case.
 - For each category, set `selection` to `single` when at most one value should

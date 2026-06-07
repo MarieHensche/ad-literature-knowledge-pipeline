@@ -102,16 +102,23 @@ WEAK_KNOWLEDGE_GOAL_PREFIXES = (
     "assessing_",
     "decreasing_",
     "enhancing_",
+    "effect_of_",
+    "effects_of_",
     "evaluating_",
     "exploring_",
     "facilitating_",
     "improving_",
     "increasing_",
     "investigating_",
+    "impact_of_",
+    "impacts_of_",
     "measuring_",
     "optimizing_",
     "promoting_",
     "reducing_",
+    "relationship_between_",
+    "relationships_between_",
+    "role_of_",
     "strengthening_",
     "studying_",
     "supporting_",
@@ -626,10 +633,10 @@ def generated_tagging_quality_issue_records(
                 message=(
                     f"tagging.categories must include "
                     f"`{KNOWLEDGE_GOAL_CATEGORY_ID}` as the required "
-                    "single-selection root category. Its values should form "
-                    "the main exhaustive, mutually exclusive primary "
-                    "study-focus or knowledge-contribution partition for the "
-                    "topic."
+                    "single-selection primary research-focus category. Its "
+                    "values should be the topic's main facet category ids, "
+                    "so each paper can be tagged by its dominant facet while "
+                    "the facet categories capture detailed values."
                 ),
             )
         )
@@ -664,8 +671,31 @@ def generated_tagging_quality_issue_records(
                     values=tuple(str(value) for value in substantive_values),
                     message=(
                         f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
-                        "must contain at least three concrete partition values "
-                        "so the root category is not too coarse."
+                        "must contain at least three concrete topic-facet "
+                        "category ids so the primary research-focus root is "
+                        "not too coarse."
+                    ),
+                )
+            )
+        missing_facet_categories = [
+            value
+            for value in substantive_values
+            if value != KNOWLEDGE_GOAL_CATEGORY_ID and value not in categories
+        ]
+        if missing_facet_categories:
+            issues.append(
+                TaggingQualityIssue(
+                    code="knowledge_goal_missing_facet_categories",
+                    category_id=KNOWLEDGE_GOAL_CATEGORY_ID,
+                    values=tuple(str(value) for value in missing_facet_categories),
+                    message=(
+                        f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
+                        "must be exact category ids of sibling topic-facet "
+                        "categories. Missing facet category/categories for "
+                        f"value(s) {missing_facet_categories}. Add matching "
+                        "categories with those category_id values, or rename "
+                        "the root values to existing concrete facet category "
+                        "ids."
                     ),
                 )
             )
@@ -683,12 +713,12 @@ def generated_tagging_quality_issue_records(
                     message=(
                         f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
                         f"contains vague benefit/action value(s) {vague_values}. "
-                        "The root category must partition papers by their "
-                        "primary study focus or primary knowledge contribution, "
-                        "such as intervention_effect, mechanism_explanation, "
-                        "measurement_validation, implementation_barrier, "
-                        "population_difference, tool_application, or other "
-                        "evidence-derived focus values."
+                        "The root category must be a primary research-focus "
+                        "facet selector, with values that match concrete "
+                        "sibling facet category ids, for example a topic's "
+                        "intervention, setting, population, exposure, outcome, "
+                        "measurement, or mechanism facets when those facets "
+                        "fit the evidence."
                     ),
                 )
             )

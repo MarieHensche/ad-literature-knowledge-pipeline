@@ -43,38 +43,43 @@ Rules:
   evidence.
 - The first tagging category must have category_id `knowledge_goal`, required
   true, selection `single`, and applies_when null.
-- Treat `knowledge_goal` as the primary study-focus or primary knowledge
-  contribution partition for the relevant papers. Its values must form a
-  complete, mutually exclusive root axis for what each paper is mainly about.
-  The id stays `knowledge_goal` for pipeline compatibility, but the category is
-  conceptually the paper's primary study focus.
-- `knowledge_goal` values must be role-like nouns or noun phrases grounded in
-  the selected review full texts, not vague benefit/action phrases. Bad shapes
-  include `improving_x`, `enhancing_y`, `supporting_z`, `studying_x`, or
-  `evaluating_y` because they usually absorb most papers. Prefer concrete
-  topic-derived focus values such as intervention_effect,
-  mechanism_explanation, measurement_validation, implementation_barrier,
-  population_difference, tool_application, or other evidence-derived study
-  focus values when they fit. Do not copy these examples.
+- Treat `knowledge_goal` as the primary research-focus selector over the
+  topic's major evidence-derived facets. The id stays `knowledge_goal` for
+  pipeline compatibility, but conceptually this is the paper's dominant facet.
+- `knowledge_goal` values must be exact `category_id` values of sibling facet
+  categories that you also return. For example, if `knowledge_goal.values`
+  contains `outcome_measure`, then `tagging.categories` must also contain a
+  concrete `outcome_measure` category with detailed allowed values for how that
+  facet is researched or reported. Do not copy this example unless it fits the
+  review evidence.
+- Each matching sibling facet category should usually have `applies_when` null
+  so papers can still record secondary information about non-dominant facets.
+  Use conditional categories only for narrower follow-up questions that truly
+  make sense for a subset of facet values.
+- `knowledge_goal` values must be topic-facet nouns or noun phrases grounded in
+  the selected review full texts, not vague benefit/action or whole-question
+  phrases. Bad shapes include `improving_x`, `enhancing_y`, `supporting_z`,
+  `studying_x`, `evaluating_y`, `effect_of_x`, `impact_of_x`, `role_of_x`, or
+  `relationship_between_x_y` because they usually absorb most papers.
 - Every `knowledge_goal` value should plausibly receive at least one paper in a
   normal run for this topic, and no single value should be so broad that it
   would absorb almost all papers. If one review-derived value would dominate,
-  split that value into more meaningful knowledge-goal values or choose a
-  better root axis from the review evidence.
+  split the matching facet category into better evidence-derived facets or
+  choose a better root axis from the review evidence.
 - Do a mental distribution check against the seed reviews and the likely primary
   papers they describe: each value in each general category should be useful
   for at least one paper. Do not include values that are merely possible but not
   supported by the review evidence.
-- Use `topic_structure.main_topics` as scaffolding for `knowledge_goal`: the
-  values should describe the main knowledge roles papers play around those
-  topic components, not topical-fit labels and not metadata. Do not simply copy
-  main topic IDs unless they are truly the best knowledge-goal values.
+- Use `topic_structure.main_topics` as scaffolding for the facet categories:
+  the root values should name the main topic components that papers can focus
+  on, while each matching facet category contains the concrete ways that
+  component is studied. Rename, split, or merge topic components when the review
+  full text shows a clearer evidence-derived facet structure.
 - The top-level partition values should cover all papers in the topic and be
   concrete. Do not use `unclear`, `not_reported`, `other`, or metadata
   placeholders as values.
-- Prefer a compact hierarchy: broad required root category first, then
-  conditional sub-categories that apply only for specific `knowledge_goal`
-  values.
+- Prefer a compact ontology: required root category first, then the matching
+  sibling facet categories, then any narrower conditional categories.
 - Create conditional sub-categories when a question only makes sense for one
   `knowledge_goal` value. Do not ask every paper for details that only exist
   for a subset of papers.
@@ -98,14 +103,14 @@ Rules:
   mechanism, data source, measurement, or claim type the paper reports.
 - Each category description must briefly state which review evidence or
   topic-specific distinction motivated the category.
-- Do not create meta-categories whose values are other category types. Avoid
-  category IDs such as `knowledge_dimension`, `tag_type`, `evidence_kind`,
-  `paper_focus`, `research_area`, or `category`.
-- Do not use values such as `method`, `outcome`, `population`, `equity`, or
-  `target` as a substitute for separate concrete categories. If those concepts
-  matter, create separate categories like `ai_tool_type`,
-  `performance_outcome`, `student_group`, `education_setting`,
-  `equity_dimension`, or another topic-specific method/design category.
+- Except for the required `knowledge_goal` facet selector, do not create
+  meta-categories whose values are other category types. Avoid category IDs
+  such as `knowledge_dimension`, `tag_type`, `evidence_kind`, `paper_focus`,
+  `research_area`, or `category`.
+- Outside `knowledge_goal`, do not use values such as `method`, `outcome`,
+  `population`, `equity`, or `target` as a substitute for separate concrete
+  categories. If those concepts matter, create separate categories with
+  topic-specific ids and concrete review-derived values.
 - Do not add generic boilerplate categories such as `study_design`,
   `study_population`, `population_group`, `target_population`,
   `data_source_type`, or `study_type`. If such a distinction is truly central,
