@@ -8,11 +8,12 @@ import os
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from http.client import InvalidURL
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urljoin
+from urllib.parse import quote, urlencode, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
@@ -28,6 +29,7 @@ STEP = StepSpec(
 
 USER_AGENT = "ad-literature-knowledge-pipeline/0.1"
 MIN_FULL_TEXT_CHARS = 1000
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 20.0
 
 FULL_TEXT_COLUMNS = [
     "full_text_status",
@@ -39,6 +41,15 @@ FULL_TEXT_COLUMNS = [
     "full_text_error",
     "full_text_manual_lookup_url",
 ]
+
+REMOTE_FETCH_ERRORS = (
+    HTTPError,
+    URLError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    InvalidURL,
+)
 
 MANIFEST_COLUMNS = [
     "paper_id",
@@ -131,10 +142,49 @@ def manual_lookup_url(row: dict[str, str]) -> str:
     return f"https://scholar.google.com/scholar?q={quote(query)}" if query else ""
 
 
+def request_timeout_seconds() -> float:
+    value = os.getenv("AD_LIT_FULL_TEXT_TIMEOUT_SECONDS", "")
+    if not value:
+        return DEFAULT_REQUEST_TIMEOUT_SECONDS
+
+    try:
+        timeout = float(value)
+    except ValueError:
+        return DEFAULT_REQUEST_TIMEOUT_SECONDS
+
+    return max(1.0, timeout)
+
+
+def validate_http_url(url: str) -> str:
+    cleaned = str(url or "").strip()
+    if not cleaned:
+        raise ValueError("URL is empty.")
+
+    if any(marker in cleaned for marker in ("<", ">", "{{", "}}", "%=")):
+        raise ValueError(f"URL appears to contain a template placeholder: {cleaned!r}")
+
+    if re.search(r"[\x00-\x20\x7f]", cleaned):
+        raise ValueError(f"URL contains control or whitespace characters: {cleaned!r}")
+
+    parsed = urlsplit(cleaned)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"URL must be absolute HTTP(S): {cleaned!r}")
+
+    return cleaned
+
+
+def is_valid_http_url(url: str) -> bool:
+    try:
+        validate_http_url(url)
+        return True
+    except ValueError:
+        return False
+
+
 def request_json(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
     request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
-    request = Request(url, headers=request_headers)
-    with urlopen(request, timeout=60) as response:
+    request = Request(validate_http_url(url), headers=request_headers)
+    with urlopen(request, timeout=request_timeout_seconds()) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object from {url}")
@@ -142,8 +192,8 @@ def request_json(url: str, headers: dict[str, str] | None = None) -> dict[str, A
 
 
 def request_bytes(url: str) -> tuple[bytes, str, str]:
-    request = Request(url, headers={"User-Agent": USER_AGENT})
-    with urlopen(request, timeout=60) as response:
+    request = Request(validate_http_url(url), headers={"User-Agent": USER_AGENT})
+    with urlopen(request, timeout=request_timeout_seconds()) as response:
         data = response.read()
         content_type = response.headers.get("Content-Type", "")
         final_url = response.geturl()
@@ -182,7 +232,10 @@ def pdf_links_from_html(data: bytes, base_url: str) -> list[str]:
     for link in links:
         url = urljoin(base_url, link)
         lower = url.lower()
-        if ".pdf" in lower or "/pdf" in lower or "download" in lower:
+        if (
+            is_valid_http_url(url)
+            and (".pdf" in lower or "/pdf" in lower or "download" in lower)
+        ):
             urls.append(url)
     return dedupe_strings(urls)
 
@@ -263,7 +316,7 @@ def extract_remote_location(
                         text_path=str(text_path),
                         chars=len(text),
                     )
-            except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
+            except REMOTE_FETCH_ERRORS as error:
                 pdf_errors.append(f"{pdf_url}: {type(error).__name__}: {error}")
 
         text = extract_html_text(data)
@@ -427,15 +480,15 @@ def candidate_locations(
     locations.extend(provider_metadata_locations(row))
     try:
         locations.extend(unpaywall_locations(doi, unpaywall_email))
-    except (HTTPError, URLError, ValueError, json.JSONDecodeError):
+    except REMOTE_FETCH_ERRORS:
         pass
     try:
         locations.extend(europe_pmc_locations(doi))
-    except (HTTPError, URLError, ValueError, json.JSONDecodeError):
+    except REMOTE_FETCH_ERRORS:
         pass
     try:
         locations.extend(core_locations(doi, row.get("title", ""), core_api_key))
-    except (HTTPError, URLError, ValueError, json.JSONDecodeError):
+    except REMOTE_FETCH_ERRORS:
         pass
     return dedupe_locations(locations)
 
@@ -458,7 +511,7 @@ def resolve_full_text(
     for location in candidate_locations(row, unpaywall_email, core_api_key):
         try:
             return extract_remote_location(row, location, cache_dir)
-        except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
+        except REMOTE_FETCH_ERRORS as error:
             errors.append(
                 f"{location.source} {location.url}: {type(error).__name__}: {error}"
             )

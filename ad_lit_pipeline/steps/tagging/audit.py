@@ -17,6 +17,9 @@ STEP = StepSpec(
     description="Audit filled extraction rows against config values and fixed rules.",
 )
 
+MIN_ROWS_FOR_DISTRIBUTION_WARNING = 5
+DOMINANT_VALUE_WARNING_THRESHOLD = 0.9
+
 
 def load_json(path: Path) -> dict[str, object]:
     with path.open(encoding="utf-8") as handle:
@@ -61,6 +64,63 @@ def split_values(value: str) -> list[str]:
     return [part.strip() for part in (value or "").split(";") if part.strip()]
 
 
+def allowed_value_names(category: dict[str, object]) -> list[str]:
+    values = category.get("allowed_values", [])
+    if not isinstance(values, list):
+        return []
+    return [
+        str(value.get("value"))
+        for value in values
+        if isinstance(value, dict) and str(value.get("value") or "")
+    ]
+
+
+def applies_when_for_category(
+    category_id: str,
+    category: dict[str, object],
+    rules: dict[str, dict[str, object]],
+) -> dict[str, object] | None:
+    rule_dependency = rules.get(category_id, {}).get("applies_when")
+    if isinstance(rule_dependency, dict):
+        return rule_dependency
+
+    category_dependency = category.get("applies_when")
+    if isinstance(category_dependency, dict):
+        return category_dependency
+
+    return None
+
+
+def row_category_applies(
+    row: dict[str, str],
+    dependency: dict[str, object] | None,
+) -> bool:
+    if dependency is None:
+        return True
+
+    parent_id = str(dependency.get("category_id") or "")
+    triggering_values = {
+        str(value) for value in dependency.get("values", []) if str(value)
+    }
+    parent_values = set(split_values(row.get(parent_id, "")))
+    return bool(parent_values & triggering_values)
+
+
+def distribution_issue(
+    category_id: str,
+    value: str,
+    issue_type: str,
+    count: int,
+    applicable_count: int,
+) -> dict[str, str]:
+    return {
+        "paper_id": "",
+        "field": category_id,
+        "value": value,
+        "issue": f"{issue_type}:{count}_of_{applicable_count}_applicable_rows",
+    }
+
+
 def audit_row(
     row: dict[str, str],
     allowed: dict[str, set[str]],
@@ -72,6 +132,21 @@ def audit_row(
     for category_id, allowed_values in allowed.items():
         values = split_values(row.get(category_id, ""))
         rule = rules[category_id]
+        dependency = rule.get("applies_when")
+        if not isinstance(dependency, dict):
+            dependency = None
+
+        if not row_category_applies(row, dependency):
+            if values:
+                issues.append(
+                    {
+                        "paper_id": paper_id,
+                        "field": category_id,
+                        "value": "; ".join(values),
+                        "issue": "inapplicable_category_has_value",
+                    }
+                )
+            continue
 
         if rule.get("required") and not values:
             issues.append(
@@ -106,6 +181,60 @@ def audit_row(
                     "issue": "single_selection_has_multiple_values",
                 }
             )
+
+    return issues
+
+
+def audit_distribution(
+    rows: list[dict[str, str]],
+    config: dict[str, object],
+    rules: dict[str, dict[str, object]],
+) -> list[dict[str, str]]:
+    if len(rows) < MIN_ROWS_FOR_DISTRIBUTION_WARNING:
+        return []
+
+    issues = []
+    for category in categories_from_config(config):
+        category_id = str(category["category_id"])
+        allowed_values = allowed_value_names(category)
+        if len(allowed_values) < 2:
+            continue
+
+        dependency = applies_when_for_category(category_id, category, rules)
+        applicable_rows = [
+            row for row in rows if row_category_applies(row, dependency)
+        ]
+        applicable_count = len(applicable_rows)
+        if applicable_count < MIN_ROWS_FOR_DISTRIBUTION_WARNING:
+            continue
+
+        counter: Counter[str] = Counter()
+        for row in applicable_rows:
+            counter.update(split_values(row.get(category_id, "")))
+
+        for value in allowed_values:
+            if counter.get(value, 0) == 0:
+                issues.append(
+                    distribution_issue(
+                        category_id,
+                        value,
+                        "unused_value_distribution_warning",
+                        0,
+                        applicable_count,
+                    )
+                )
+
+        for value, count in counter.items():
+            if count / applicable_count >= DOMINANT_VALUE_WARNING_THRESHOLD:
+                issues.append(
+                    distribution_issue(
+                        category_id,
+                        value,
+                        "dominant_value_distribution_warning",
+                        count,
+                        applicable_count,
+                    )
+                )
 
     return issues
 
@@ -156,12 +285,14 @@ def run(
     issues = []
     for row in rows:
         issues.extend(audit_row(row, allowed, rule_map))
+    issues.extend(audit_distribution(rows, config, rule_map))
 
     summarize(rows, config)
     print()
     print(f"Issues found: {len(issues)}")
 
     write_issues(output_path, issues)
+
     return StepResult(
         step_name=STEP.name,
         inputs={

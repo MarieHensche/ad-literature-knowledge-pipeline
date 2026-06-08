@@ -12,7 +12,11 @@ from ad_lit_pipeline.llm.schemas import paper_tags_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_tag_paper_prompt
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
-from ad_lit_pipeline.topics.contract import load_topic_contract
+from ad_lit_pipeline.topics.contract import (
+    FALLBACK_TAG_VALUES,
+    load_topic_contract,
+    normalize_tagging_label,
+)
 
 
 STEP = StepSpec(
@@ -53,11 +57,14 @@ def load_json(path: Path) -> dict[str, object]:
     return data
 
 
-def read_included_papers(path: Path) -> list[dict[str, str]]:
+def read_papers(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        rows = list(reader)
+        return list(reader.fieldnames or []), list(reader)
 
+
+def read_included_papers(path: Path) -> list[dict[str, str]]:
+    _, rows = read_papers(path)
     return [row for row in rows if row.get("scope_decision") == "include"]
 
 
@@ -75,6 +82,13 @@ def rules_by_category(rules: dict[str, object]) -> dict[str, dict[str, object]]:
     return {rule["category_id"]: rule for rule in rule_list}
 
 
+def category_by_id(config: dict[str, object]) -> dict[str, dict[str, object]]:
+    return {
+        str(category["category_id"]): category
+        for category in categories_from_config(config)
+    }
+
+
 def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]:
     allowed = {}
     for category in categories_from_config(config):
@@ -83,6 +97,51 @@ def allowed_values_by_category(config: dict[str, object]) -> dict[str, set[str]]
             value["value"] for value in category.get("allowed_values", [])
         }
     return allowed
+
+
+def is_fallback_tag_value(value: object) -> bool:
+    return normalize_tagging_label(str(value or "")) in FALLBACK_TAG_VALUES
+
+
+def remove_fallback_values_when_concrete_values_exist(values: list[object]) -> list[object]:
+    concrete_values = [value for value in values if not is_fallback_tag_value(value)]
+    if concrete_values and len(concrete_values) != len(values):
+        return concrete_values
+    return values
+
+
+def applies_when_for_category(
+    category_id: str,
+    categories: dict[str, dict[str, object]],
+    rules: dict[str, dict[str, object]],
+) -> dict[str, object] | None:
+    rule_dependency = rules.get(category_id, {}).get("applies_when")
+    if isinstance(rule_dependency, dict):
+        return rule_dependency
+
+    category_dependency = categories.get(category_id, {}).get("applies_when")
+    if isinstance(category_dependency, dict):
+        return category_dependency
+
+    return None
+
+
+def category_applies(
+    tagged: dict[str, object],
+    dependency: dict[str, object] | None,
+) -> bool:
+    if dependency is None:
+        return True
+
+    parent_id = str(dependency.get("category_id") or "")
+    parent_values = tagged.get(parent_id)
+    if not isinstance(parent_values, list):
+        return False
+
+    triggering_values = {
+        str(value) for value in dependency.get("values", []) if str(value)
+    }
+    return any(value in triggering_values for value in parent_values)
 
 
 def paper_text(paper: dict[str, str]) -> dict[str, str]:
@@ -136,6 +195,7 @@ def validate_tagged_row(
     rules: dict[str, object],
 ) -> None:
     allowed = allowed_values_by_category(config)
+    categories = category_by_id(config)
     rule_map = rules_by_category(rules)
 
     for category_id, allowed_values in allowed.items():
@@ -144,33 +204,53 @@ def validate_tagged_row(
         if not isinstance(values, list):
             raise ValueError(f"{category_id} must be a list.")
 
-        if not values:
-            raise ValueError(f"{category_id} has no selected value.")
-
         invalid = [value for value in values if value not in allowed_values]
         if invalid:
             raise ValueError(f"{category_id} has invalid value(s): {invalid}")
 
-        if rule_map[category_id]["selection"] == "single" and len(values) != 1:
-            fallback_value = rule_map[category_id].get("fallback_value")
-            if len(values) > 1:
-                tagged[category_id] = [values[0]]
-            elif fallback_value in allowed_values:
+        values = remove_fallback_values_when_concrete_values_exist(values)
+        tagged[category_id] = values
+
+        rule = rule_map[category_id]
+        if rule["selection"] == "single" and len(values) > 1:
+            tagged[category_id] = [values[0]]
+
+    for category_id, allowed_values in allowed.items():
+        values = tagged.get(category_id)
+        if not isinstance(values, list):
+            raise ValueError(f"{category_id} must be a list.")
+
+        rule = rule_map[category_id]
+        dependency = applies_when_for_category(category_id, categories, rule_map)
+        if not category_applies(tagged, dependency):
+            tagged[category_id] = []
+            continue
+
+        if not values and rule.get("required"):
+            fallback_value = rule.get("fallback_value")
+            if fallback_value in allowed_values:
                 tagged[category_id] = [fallback_value]
+                values = tagged[category_id]
             else:
-                raise ValueError(f"{category_id} must have exactly one selected value.")
+                raise ValueError(f"{category_id} has no selected value.")
+
+        if not values:
+            tagged[category_id] = []
+            continue
 
 
-def output_columns(config: dict[str, object]) -> list[str]:
-    columns = [
-        "paper_id",
-        "title",
-        "year",
-        "doi",
-        "main_knowledge_claim",
-    ]
+def output_columns(
+    input_columns: list[str],
+    config: dict[str, object],
+) -> list[str]:
+    columns = list(input_columns)
+    if "main_knowledge_claim" not in columns:
+        columns.append("main_knowledge_claim")
 
-    columns.extend(category["category_id"] for category in categories_from_config(config))
+    for category in categories_from_config(config):
+        category_id = str(category["category_id"])
+        if category_id not in columns:
+            columns.append(category_id)
 
     return columns
 
@@ -180,17 +260,12 @@ def flatten_tagged_row(
     tagged: dict[str, object],
     config: dict[str, object],
 ) -> dict[str, str]:
-    row = {
-        "paper_id": paper.get("paper_id", ""),
-        "title": paper.get("title", ""),
-        "year": paper.get("year", ""),
-        "doi": paper.get("doi", ""),
-        "main_knowledge_claim": str(tagged.get("main_knowledge_claim", "")),
-    }
+    row = dict(paper)
+    row["main_knowledge_claim"] = str(tagged.get("main_knowledge_claim", ""))
 
     for category in categories_from_config(config):
         category_id = category["category_id"]
-        row[category_id] = "; ".join(tagged[category_id])
+        row[str(category_id)] = "; ".join(tagged[category_id])
 
     return row
 
@@ -199,13 +274,15 @@ def write_rows(
     output_path: Path,
     rows: list[dict[str, str]],
     config: dict[str, object],
+    fieldnames: list[str],
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=output_columns(config))
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
 def run(
@@ -218,7 +295,8 @@ def run(
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
 ) -> StepResult:
-    papers = read_included_papers(papers_path)
+    input_columns, all_papers = read_papers(papers_path)
+    papers = [paper for paper in all_papers if paper.get("scope_decision") == "include"]
     config = load_json(config_path)
     rules = load_json(rules_path)
     topic_contract = load_topic_contract(topic_contract_path) if topic_contract_path else None
@@ -255,7 +333,7 @@ def run(
             print(f"  Warning: {warning}")
             # Paper is skipped, not added to rows
 
-    write_rows(output_path, rows, config)
+    write_rows(output_path, rows, config, output_columns(input_columns, config))
     return StepResult(
         step_name=STEP.name,
         inputs={

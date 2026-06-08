@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -265,8 +266,10 @@ def run(
     warnings = []
 
     for index, candidate in enumerate(candidates, start=1):
+        started_at = time.monotonic()
         print(
-            f"Screening title {index}/{len(candidates)}: {candidate.get('title')}"
+            f"Screening title {index}/{len(candidates)}: {candidate.get('title')}",
+            flush=True,
         )
         try:
             row, trace_paths = screen_candidate(
@@ -279,14 +282,20 @@ def run(
             )
             rows.append(row)
             all_trace_paths.extend(trace_paths)
+            elapsed = time.monotonic() - started_at
+            print(
+                f"  Completed title {index}/{len(candidates)} in {elapsed:.1f}s",
+                flush=True,
+            )
         except ValueError as error:
+            elapsed = time.monotonic() - started_at
             paper_id = make_paper_id(candidate, index)
             warning = (
                 f"Failed to screen title '{paper_id}' after retry "
-                f"(auto-excluded): {error}"
+                f"after {elapsed:.1f}s (auto-excluded): {error}"
             )
             warnings.append(warning)
-            print(f"  Warning: {warning}")
+            print(f"  Warning: {warning}", flush=True)
             rows.append(
                 {
                     "paper_id": paper_id,

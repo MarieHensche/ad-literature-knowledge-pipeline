@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -120,6 +121,22 @@ def render_generate_topic_contract_prompt(
     )
 
 
+def refinement_context_contract(current_contract: dict[str, Any]) -> dict[str, Any]:
+    """Omit provisional bootstrap categories from refinement prompt context."""
+    context = deepcopy(current_contract)
+    tagging = context.get("tagging")
+    if isinstance(tagging, dict):
+        context["tagging"] = {
+            "fallback_policy": deepcopy(tagging.get("fallback_policy", {})),
+            "categories": [],
+            "categories_note": (
+                "Bootstrap categories omitted. Build final tagging categories "
+                "only from extracted review full-text evidence."
+            ),
+        }
+    return context
+
+
 def render_refine_topic_contract_prompt(
     topic_description: str,
     current_contract: dict[str, Any],
@@ -129,8 +146,48 @@ def render_refine_topic_contract_prompt(
         "refine_topic_contract_from_reviews.md",
         {
             "topic_description": topic_description,
-            "current_contract_json": json_block(current_contract),
+            "current_contract_json": json_block(
+                refinement_context_contract(current_contract)
+            ),
             "review_overviews_json": json_block(review_overviews),
+        },
+    )
+
+
+def render_repair_topic_contract_tagging_prompt(
+    topic_description: str,
+    failed_contract: dict[str, Any],
+    review_overviews: list[dict[str, Any]],
+    validation_issues: list[dict[str, Any]],
+    existing_category_ids: list[str],
+    forbidden_generic_ids: list[str],
+    forbidden_catchall_values: list[str],
+) -> str:
+    return render_template(
+        "repair_topic_contract_tagging.md",
+        {
+            "topic_description": topic_description,
+            "failed_contract_json": json_block(failed_contract),
+            "review_overviews_json": json_block(review_overviews),
+            "validation_issues_json": json_block(validation_issues),
+            "existing_category_ids_json": json_block(existing_category_ids),
+            "forbidden_generic_ids_json": json_block(forbidden_generic_ids),
+            "forbidden_catchall_values_json": json_block(forbidden_catchall_values),
+        },
+    )
+
+
+def render_calibrate_topic_contract_prompt(
+    topic_description: str,
+    current_contract: dict[str, Any],
+    primary_papers: list[dict[str, Any]],
+) -> str:
+    return render_template(
+        "calibrate_topic_contract_from_papers.md",
+        {
+            "topic_description": topic_description,
+            "current_contract_json": json_block(current_contract),
+            "primary_papers_json": json_block(primary_papers),
         },
     )
 
@@ -138,7 +195,7 @@ def render_refine_topic_contract_prompt(
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,
-    fallback_recommendations: dict[str, str] | None = None,
+    fallback_recommendations: dict[str, str | None] | None = None,
 ) -> str:
     fallback_policy = {}
     if topic_contract is not None:

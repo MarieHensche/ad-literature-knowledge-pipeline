@@ -10,7 +10,7 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import RULE_RESPONSE_SCHEMA
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_tagging_rules_prompt
-from ad_lit_pipeline.topics.contract import load_topic_contract
+from ad_lit_pipeline.topics.contract import VALID_CATEGORY_SELECTIONS, load_topic_contract
 
 
 STEP = StepSpec(
@@ -68,6 +68,30 @@ def required_by_category(config: dict[str, object]) -> dict[str, bool]:
     }
 
 
+def selection_by_category(config: dict[str, object]) -> dict[str, str | None]:
+    return {
+        category["category_id"]: (
+            str(category.get("selection"))
+            if category.get("selection") in VALID_CATEGORY_SELECTIONS
+            else None
+        )
+        for category in config["categories"]
+    }
+
+
+def applies_when_by_category(
+    config: dict[str, object],
+) -> dict[str, dict[str, object] | None]:
+    return {
+        str(category["category_id"]): (
+            category.get("applies_when")
+            if isinstance(category.get("applies_when"), dict)
+            else None
+        )
+        for category in config["categories"]
+    }
+
+
 def ordered_category_ids(config: dict[str, object]) -> list[str]:
     categories = config.get("categories")
     if not isinstance(categories, list):
@@ -89,8 +113,8 @@ def recommended_fallback_value(
     category_id: str,
     allowed_values: set[str],
     topic_contract: dict[str, object] | None = None,
-) -> str:
-    """Pick a deterministic legal fallback value for a category."""
+) -> str | None:
+    """Pick a deterministic legal fallback value only when the ontology has one."""
     policy = fallback_policy(topic_contract)
 
     explicit = policy.get(category_id)
@@ -110,16 +134,13 @@ def recommended_fallback_value(
     if isinstance(missing_value, str) and missing_value in allowed_values:
         return missing_value
 
-    if not allowed_values:
-        raise ValueError(f"Category has no allowed fallback values: {category_id}")
-
-    return sorted(allowed_values)[0]
+    return None
 
 
 def fallback_recommendations(
     config: dict[str, object],
     topic_contract: dict[str, object] | None = None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     allowed = allowed_values_by_category(config)
     return {
         category_id: recommended_fallback_value(
@@ -165,6 +186,8 @@ def repair_rules(
     """Repair semantically invalid LLM rules using deterministic config policy."""
     allowed = allowed_values_by_category(config)
     required_flags = required_by_category(config)
+    configured_selection = selection_by_category(config)
+    category_dependencies = applies_when_by_category(config)
     recommended = fallback_recommendations(config, topic_contract)
     rule_list = result.get("rules")
     if not isinstance(rule_list, list):
@@ -194,30 +217,63 @@ def repair_rules(
         if rule is None:
             rule = {
                 "category_id": category_id,
-                "selection": "single",
+                "selection": configured_selection[category_id] or "single",
                 "required": required_flags[category_id],
                 "fallback_value": recommended[category_id],
                 "reason": "Defaulted by pipeline because the LLM omitted this category.",
             }
             warnings.append(f"Added missing rule for category: {category_id}")
 
+        selection = rule.get("selection")
+        if selection not in VALID_CATEGORY_SELECTIONS:
+            repaired_selection = configured_selection[category_id] or "single"
+            rule["selection"] = repaired_selection
+            warnings.append(
+                f"Repaired invalid selection for category: {category_id}"
+            )
+
+        if configured_selection[category_id] is not None:
+            configured = configured_selection[category_id]
+            if rule.get("selection") != configured:
+                rule["selection"] = configured
+                warnings.append(
+                    f"Repaired selection from category config for: {category_id}"
+                )
+
         fallback_value = rule.get("fallback_value")
-        if fallback_value not in allowed[category_id]:
+        recommended_fallback = recommended[category_id]
+        if fallback_value != recommended_fallback:
             rule["fallback_value"] = recommended[category_id]
             reason = str(rule.get("reason") or "").strip()
             repair_reason = (
-                " Pipeline replaced an invalid fallback_value with the "
-                "topic-contract recommendation."
+                " Pipeline replaced fallback_value with the topic-contract "
+                "recommendation so required exhaustive categories do not get a "
+                "biased default label."
             )
             rule["reason"] = f"{reason}{repair_reason}".strip()
-            warnings.append(
-                "Repaired invalid fallback_value for "
-                f"{category_id}: {fallback_value} -> {recommended[category_id]}"
-            )
+            if fallback_value is None:
+                warnings.append(
+                    "Added recommended fallback_value for "
+                    f"{category_id}: None -> {recommended_fallback}"
+                )
+            elif fallback_value not in allowed[category_id]:
+                warnings.append(
+                    "Repaired invalid fallback_value for "
+                    f"{category_id}: {fallback_value} -> {recommended_fallback}"
+                )
+            else:
+                warnings.append(
+                    "Repaired biased fallback_value for "
+                    f"{category_id}: {fallback_value} -> {recommended_fallback}"
+                )
 
         if required_flags[category_id] and not rule.get("required"):
             rule["required"] = True
             warnings.append(f"Repaired required flag for category: {category_id}")
+
+        applies_when = category_dependencies[category_id]
+        if applies_when is not None:
+            rule["applies_when"] = applies_when
 
         repaired_rules.append(rule)
 
@@ -244,8 +300,11 @@ def validate_rules(config: dict[str, object], result: dict[str, object]) -> None
         seen.add(category_id)
 
         fallback_value = rule.get("fallback_value")
-        if fallback_value not in allowed[category_id]:
+        if fallback_value is not None and fallback_value not in allowed[category_id]:
             raise ValueError(f"Invalid fallback_value for {category_id}: {fallback_value}")
+
+        if rule.get("selection") not in VALID_CATEGORY_SELECTIONS:
+            raise ValueError(f"Invalid selection for {category_id}: {rule.get('selection')}")
 
         if required_flags[category_id] and not rule.get("required"):
             raise ValueError(f"Required category cannot be made optional: {category_id}")

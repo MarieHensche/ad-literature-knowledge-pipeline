@@ -1,34 +1,112 @@
 #Topic contract: defines the ontology
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
 
 
-REQUIRED_TOPIC_CATEGORY_IDS = ("main_topic_category", "research_target")
-SCREENING_TAG_CATEGORY_EXCLUDES = {"knowledge_confidence", "review_status"}
-SCREENING_TAG_VALUE_EXCLUDES = {
-    "adjacent_but_relevant",
-    "ai_tagged",
-    "conflict",
-    "core_topic",
-    "excluded_from_scope",
-    "full_text_needed",
-    "high",
-    "human_reviewed",
-    "low",
-    "medium",
+LEGACY_TOPIC_FIT_CATEGORY_ID = "main_topic_category"
+LEGACY_RESEARCH_TARGET_CATEGORY_ID = "research_target"
+REQUIRED_TOPIC_CATEGORY_IDS: tuple[str, ...] = ()
+VALID_CATEGORY_SELECTIONS = {"single", "multi"}
+GENERATED_TAGGING_MIN_CATEGORIES = 6
+GENERATED_TAG_LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+RETIRED_TAGGING_CATEGORY_IDS = {
+    "knowledge_goal",
+}
+
+FALLBACK_TAG_VALUES = {
+    "ambiguous",
+    "mixed",
     "mixed_or_unclear",
     "none",
     "not_applicable",
     "not_reported",
     "other",
-    "out_of_scope",
     "unclear",
-    "very_low",
+    "unknown",
 }
+META_TAGGING_CATEGORY_IDS = {
+    "category",
+    "category_type",
+    "dimension",
+    "dimension_type",
+    "knowledge_area",
+    "knowledge_category",
+    "knowledge_dimension",
+    "knowledge_label",
+    "knowledge_type",
+    "label_type",
+    "paper_focus",
+    "paper_type",
+    "research_area",
+    "tag_dimension",
+    "tag_type",
+}
+META_TAGGING_VALUES = {
+    "application",
+    "approach",
+    "category",
+    "claim",
+    "context",
+    "data",
+    "dimension",
+    "domain",
+    "equity",
+    "evidence",
+    "intervention",
+    "mechanism",
+    "method",
+    "outcome",
+    "phenomenon",
+    "population",
+    "research_area",
+    "setting",
+    "target",
+    "technology",
+    "tool",
+}
+
+BOILERPLATE_CATEGORY_IDS = {
+    "data_source_type",
+    "population_group",
+    "study_design",
+    "study_population",
+    "study_type",
+    "target_population",
+}
+BOILERPLATE_CATEGORY_VALUES = {
+    "case_control",
+    "cohort",
+    "cross_sectional",
+    "experimental",
+    "longitudinal",
+    "meta_analysis",
+    "mixed_methods",
+    "observational",
+    "patients",
+    "review",
+    "survey",
+    "systematic_review",
+}
+GENERATED_CATCHALL_TAG_VALUES = {
+    *FALLBACK_TAG_VALUES,
+    "miscellaneous",
+    "other",
+    "not_specified",
+}
+@dataclass(frozen=True)
+class TaggingQualityIssue:
+    """Programmatic description of a generated tagging quality problem."""
+
+    code: str
+    category_id: str | None
+    values: tuple[str, ...] = ()
+    message: str = ""
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -50,18 +128,62 @@ def require_non_empty_string(value: Any, label: str) -> str:
 
 
 def validate_required_topic_categories(categories: dict[str, Any]) -> None:
-    """Require generic category ids used across topic contracts and Mantis export."""
-    missing = [
-        category_id
-        for category_id in REQUIRED_TOPIC_CATEGORY_IDS
-        if category_id not in categories
-    ]
-    if missing:
-        required = ", ".join(REQUIRED_TOPIC_CATEGORY_IDS)
-        missing_text = ", ".join(missing)
+    """Backward-compatible no-op for callers from older scripts."""
+    require_mapping(categories, "tagging.categories")
+
+
+def validate_category_dependency(
+    category_id: str,
+    category: dict[str, Any],
+    categories: dict[str, Any],
+) -> None:
+    """Validate an optional conditional category dependency."""
+    applies_when = category.get("applies_when")
+    if applies_when in (None, {}):
+        return
+
+    dependency = require_mapping(
+        applies_when, f"tagging.categories.{category_id}.applies_when"
+    )
+    parent_id = require_non_empty_string(
+        dependency.get("category_id"),
+        f"tagging.categories.{category_id}.applies_when.category_id",
+    )
+    if parent_id == category_id:
         raise ValueError(
-            "tagging.categories must include the generic topic categories "
-            f"{required}. Missing: {missing_text}"
+            f"tagging.categories.{category_id}.applies_when cannot reference itself."
+        )
+    if parent_id not in categories:
+        raise ValueError(
+            f"tagging.categories.{category_id}.applies_when references unknown "
+            f"category: {parent_id}"
+        )
+
+    parent_map = require_mapping(
+        categories[parent_id], f"tagging.categories.{parent_id}"
+    )
+    parent_values = set(
+        require_list(
+            parent_map.get("values"), f"tagging.categories.{parent_id}.values"
+        )
+    )
+    values = require_list(
+        dependency.get("values"),
+        f"tagging.categories.{category_id}.applies_when.values",
+    )
+    if not values:
+        raise ValueError(
+            f"tagging.categories.{category_id}.applies_when.values must not be empty."
+        )
+    invalid_values = [
+        value
+        for value in values
+        if not isinstance(value, str) or not value.strip() or value not in parent_values
+    ]
+    if invalid_values:
+        raise ValueError(
+            f"tagging.categories.{category_id}.applies_when contains invalid "
+            f"value(s) for {parent_id}: {invalid_values}"
         )
 
 
@@ -189,10 +311,20 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
     categories = require_mapping(tagging.get("categories"), "tagging.categories")
     if not categories:
         raise ValueError("tagging.categories must not be empty.")
-    validate_required_topic_categories(categories)
     for category_id, category in categories.items():
         require_non_empty_string(category_id, "tagging category id")
         category_map = require_mapping(category, f"tagging.categories.{category_id}")
+        if "required" in category_map and not isinstance(
+            category_map.get("required"), bool
+        ):
+            raise ValueError(f"tagging.categories.{category_id}.required must be bool.")
+        selection = category_map.get("selection")
+        if selection is not None and selection not in VALID_CATEGORY_SELECTIONS:
+            allowed = ", ".join(sorted(VALID_CATEGORY_SELECTIONS))
+            raise ValueError(
+                f"tagging.categories.{category_id}.selection must be one of: "
+                f"{allowed}"
+            )
         values = require_list(
             category_map.get("values"), f"tagging.categories.{category_id}.values"
         )
@@ -202,6 +334,14 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
             raise ValueError(
                 f"tagging.categories.{category_id}.values must contain strings."
             )
+        if len(set(values)) != len(values):
+            raise ValueError(
+                f"tagging.categories.{category_id}.values must not contain duplicates."
+            )
+
+    for category_id, category in categories.items():
+        category_map = require_mapping(category, f"tagging.categories.{category_id}")
+        validate_category_dependency(category_id, category_map, categories)
 
     collection = require_mapping(contract.get("collection"), "collection")
     allowed_providers = require_list(
@@ -238,6 +378,306 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
                 )
 
 
+def normalize_tagging_label(value: str) -> str:
+    """Normalize category ids and values for topic-agnostic quality checks."""
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.casefold()).strip("_")
+    return re.sub(r"_+", "_", normalized)
+
+
+def is_retired_tagging_category_id(category_id: object) -> bool:
+    """Return whether a generated category id has been removed from the pipeline."""
+    return normalize_tagging_label(str(category_id)) in RETIRED_TAGGING_CATEGORY_IDS
+
+
+def is_generated_tag_label(value: str) -> bool:
+    """Return whether a generated tag id/value is stable lowercase snake_case."""
+    return GENERATED_TAG_LABEL_PATTERN.fullmatch(value) is not None
+
+
+def substantive_tag_values(values: list[Any]) -> list[str]:
+    """Return non-fallback values from a category value list."""
+    substantive = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = normalize_tagging_label(value)
+        if normalized not in FALLBACK_TAG_VALUES:
+            substantive.append(value)
+    return substantive
+
+
+def generated_tagging_quality_issue_records(
+    contract: dict[str, Any],
+) -> list[TaggingQualityIssue]:
+    """Find weak LLM-generated tagging ontologies as structured records.
+
+    These checks are intentionally not part of general topic-contract loading:
+    legacy contracts may contain operational categories, while newly generated
+    or refined contracts should contain concrete knowledge dimensions discovered
+    for the topic.
+    """
+    issues: list[TaggingQualityIssue] = []
+    tagging = require_mapping(contract.get("tagging"), "tagging")
+    categories = require_mapping(tagging.get("categories"), "tagging.categories")
+
+    if len(categories) < GENERATED_TAGGING_MIN_CATEGORIES:
+        issues.append(
+            TaggingQualityIssue(
+                code="too_few_categories",
+                category_id=None,
+                message=(
+                    "tagging.categories must contain at least "
+                    f"{GENERATED_TAGGING_MIN_CATEGORIES} concrete knowledge "
+                    f"categories; found {len(categories)}."
+                ),
+            )
+        )
+
+    for category_id, category in categories.items():
+        category_label = normalize_tagging_label(str(category_id))
+        category_map = require_mapping(category, f"tagging.categories.{category_id}")
+        values = require_list(
+            category_map.get("values"), f"tagging.categories.{category_id}.values"
+        )
+        normalized_all_values = [
+            normalize_tagging_label(value)
+            for value in values
+            if isinstance(value, str)
+        ]
+        substantive_values = substantive_tag_values(values)
+        normalized_values = [
+            normalize_tagging_label(value)
+            for value in substantive_values
+            if isinstance(value, str)
+        ]
+        catchall_values = [
+            value
+            for value, normalized in zip(values, normalized_all_values)
+            if normalized in GENERATED_CATCHALL_TAG_VALUES
+        ]
+        meta_values = [
+            value
+            for value, normalized in zip(substantive_values, normalized_values)
+            if normalized in META_TAGGING_VALUES
+        ]
+
+        if category_label in META_TAGGING_CATEGORY_IDS:
+            issues.append(
+                TaggingQualityIssue(
+                    code="meta_category_id",
+                    category_id=str(category_id),
+                    message=(
+                        f"tagging.categories.{category_id} is a meta-category. "
+                        "Use separate concrete categories instead."
+                    ),
+                )
+            )
+        if category_label in RETIRED_TAGGING_CATEGORY_IDS:
+            issues.append(
+                TaggingQualityIssue(
+                    code="retired_category_id",
+                    category_id=str(category_id),
+                    message=(
+                        f"tagging.categories.{category_id} is retired and must "
+                        "not be generated. Use topic-specific categories "
+                        "directly instead of a root focus category."
+                    ),
+                )
+            )
+        if not is_generated_tag_label(str(category_id)):
+            issues.append(
+                TaggingQualityIssue(
+                    code="non_snake_category_id",
+                    category_id=str(category_id),
+                    message=(
+                        f"tagging.categories.{category_id} must use lowercase "
+                        "snake_case so generated tags stay stable in CSV exports "
+                        "and downstream analysis."
+                    ),
+                )
+            )
+        if category_label in BOILERPLATE_CATEGORY_IDS:
+            issues.append(
+                TaggingQualityIssue(
+                    code="boilerplate_category_id",
+                    category_id=str(category_id),
+                    message=(
+                        f"tagging.categories.{category_id} is a generic "
+                        "boilerplate category. Use a review-derived, "
+                        "topic-specific category id and values instead, or omit "
+                        "the category."
+                    ),
+                )
+            )
+        if len(substantive_values) < 2:
+            issues.append(
+                TaggingQualityIssue(
+                    code="too_few_values",
+                    category_id=str(category_id),
+                    values=tuple(str(value) for value in substantive_values),
+                    message=(
+                        f"tagging.categories.{category_id} needs at least two "
+                        "substantive non-fallback values."
+                    ),
+                )
+            )
+        if catchall_values:
+            issues.append(
+                TaggingQualityIssue(
+                    code="catchall_values",
+                    category_id=str(category_id),
+                    values=tuple(str(value) for value in catchall_values),
+                    message=(
+                        f"tagging.categories.{category_id}.values contains "
+                        f"catch-all value(s) {catchall_values}. Generated "
+                        "knowledge category values should be concrete, "
+                        "exhaustive, and mutually distinct; make categories "
+                        "optional or conditional instead of adding "
+                        "unclear/not_reported/other values."
+                    ),
+                )
+            )
+
+        if len(meta_values) >= 2 or (
+            meta_values and len(meta_values) == len(substantive_values)
+        ):
+            issues.append(
+                TaggingQualityIssue(
+                    code="meta_values",
+                    category_id=str(category_id),
+                    values=tuple(str(value) for value in meta_values),
+                    message=(
+                        f"tagging.categories.{category_id}.values contains broad "
+                        f"category-type values {meta_values}. Split these into "
+                        "concrete categories with topic-specific values."
+                    ),
+                )
+            )
+        non_snake_values = [
+            value for value in substantive_values if not is_generated_tag_label(value)
+        ]
+        if non_snake_values:
+            issues.append(
+                TaggingQualityIssue(
+                    code="non_snake_values",
+                    category_id=str(category_id),
+                    values=tuple(str(value) for value in non_snake_values),
+                    message=(
+                        f"tagging.categories.{category_id}.values contains "
+                        f"non-snake-case value(s) {non_snake_values}. Use "
+                        "compact lowercase snake_case values such as "
+                        "intervention_effectiveness."
+                    ),
+                )
+            )
+        applies_when = category_map.get("applies_when")
+        if applies_when in (None, {}):
+            continue
+        dependency = require_mapping(
+            applies_when, f"tagging.categories.{category_id}.applies_when"
+        )
+        parent_id = str(dependency.get("category_id") or "")
+        if normalize_tagging_label(parent_id) in META_TAGGING_CATEGORY_IDS:
+            issues.append(
+                TaggingQualityIssue(
+                    code="meta_dependency",
+                    category_id=str(category_id),
+                    values=(parent_id,),
+                    message=(
+                        f"tagging.categories.{category_id}.applies_when depends "
+                        f"on meta-category {parent_id}. Conditional categories "
+                        "should depend on concrete parent values."
+                    ),
+                )
+            )
+        trigger_values = require_list(
+            dependency.get("values"),
+            f"tagging.categories.{category_id}.applies_when.values",
+        )
+        broad_trigger_values = [
+            value
+            for value in trigger_values
+            if isinstance(value, str)
+            and normalize_tagging_label(value) in META_TAGGING_VALUES
+        ]
+        if broad_trigger_values:
+            issues.append(
+                TaggingQualityIssue(
+                    code="broad_dependency_values",
+                    category_id=str(category_id),
+                    values=tuple(str(value) for value in broad_trigger_values),
+                    message=(
+                        f"tagging.categories.{category_id}.applies_when uses "
+                        f"broad trigger value(s) {broad_trigger_values}. Use "
+                        "concrete parent values for sub-category dependencies."
+                    ),
+                )
+            )
+
+    return issues
+
+
+def generated_tagging_quality_issues(contract: dict[str, Any]) -> list[str]:
+    """Return human-readable generated tagging quality issue messages."""
+    return [
+        issue.message for issue in generated_tagging_quality_issue_records(contract)
+    ]
+
+
+def generated_tagging_quality_warnings(contract: dict[str, Any]) -> list[str]:
+    """Find soft quality concerns in generated tagging ontologies.
+
+    These warnings identify generic-looking labels that should be avoided by the
+    prompt, but should not block a run. Some topics can legitimately need a
+    population or design dimension when the values are review-derived.
+    """
+    warnings: list[str] = []
+    tagging = require_mapping(contract.get("tagging"), "tagging")
+    categories = require_mapping(tagging.get("categories"), "tagging.categories")
+
+    for category_id, category in categories.items():
+        category_label = normalize_tagging_label(str(category_id))
+        category_map = require_mapping(category, f"tagging.categories.{category_id}")
+        values = require_list(
+            category_map.get("values"), f"tagging.categories.{category_id}.values"
+        )
+        substantive_values = substantive_tag_values(values)
+        normalized_values = [
+            normalize_tagging_label(value)
+            for value in substantive_values
+            if isinstance(value, str)
+        ]
+
+        if category_label in BOILERPLATE_CATEGORY_IDS:
+            warnings.append(
+                f"tagging.categories.{category_id} looks like a generic "
+                "boilerplate category. Prefer a review-derived, topic-specific "
+                "category id when possible."
+            )
+
+        if substantive_values and all(
+            value in BOILERPLATE_CATEGORY_VALUES for value in normalized_values
+        ):
+            warnings.append(
+                f"tagging.categories.{category_id}.values look like generic "
+                "boilerplate values. Prefer values grounded in the topic and "
+                "review evidence."
+            )
+
+    return warnings
+
+
+def validate_generated_tagging_quality(
+    contract: dict[str, Any],
+    label: str = "Generated topic contract",
+) -> None:
+    """Raise when a generated/refined contract has weak knowledge tags."""
+    issues = generated_tagging_quality_issues(contract)
+    if issues:
+        joined = "\n- ".join(issues)
+        raise ValueError(f"{label} has weak knowledge tagging categories:\n- {joined}")
+
+
 def load_topic_contract(path: Path) -> dict[str, Any]:
     """Load and validate a topic contract from YAML."""
     contract = read_yaml_object(path)
@@ -250,10 +690,30 @@ def tagging_config_from_contract(contract: dict[str, Any]) -> dict[str, Any]:
     validate_topic_contract(contract)
     tagging = require_mapping(contract["tagging"], "tagging")
     categories = require_mapping(tagging["categories"], "tagging.categories")
+    active_categories = {
+        category_id: category
+        for category_id, category in categories.items()
+        if not is_retired_tagging_category_id(category_id)
+    }
+    removed_category_ids = set(categories) - set(active_categories)
+    active_categories = {
+        category_id: category
+        for category_id, category in active_categories.items()
+        if not (
+            isinstance(category, dict)
+            and isinstance(category.get("applies_when"), dict)
+            and (
+                category["applies_when"].get("category_id") in removed_category_ids
+                or is_retired_tagging_category_id(
+                    category["applies_when"].get("category_id")
+                )
+            )
+        )
+    }
 
     return {
         "research_topic": contract["research_topic"],
-        "categories": categories,
+        "categories": active_categories,
     }
 
 
@@ -268,7 +728,7 @@ def rule_based_screening_from_contract(contract: dict[str, Any]) -> dict[str, An
 
 
 def expanded_include_terms(contract: dict[str, Any]) -> list[str]:
-    """Add useful tagging values to screening include terms."""
+    """Add topic-structure terms to screening include terms."""
     rule_based = require_mapping(contract["rule_based_screening"], "rule_based_screening")
     include_terms = list(rule_based.get("include_terms", []))
 
@@ -289,28 +749,6 @@ def expanded_include_terms(contract: dict[str, Any]) -> list[str]:
     for terms_value in secondary_topics.values():
         terms = require_list(terms_value, "topic_structure secondary terms")
         include_terms.extend(str(term).strip() for term in terms if str(term).strip())
-
-    tagging = require_mapping(contract.get("tagging"), "tagging")
-    categories = require_mapping(tagging.get("categories"), "tagging.categories")
-    for category_id, category in categories.items():
-        if category_id in SCREENING_TAG_CATEGORY_EXCLUDES:
-            continue
-
-        category_map = require_mapping(category, f"tagging.categories.{category_id}")
-        values = require_list(
-            category_map.get("values"), f"tagging.categories.{category_id}.values"
-        )
-        for value in values:
-            raw_term = str(value).strip()
-            normalized_term = raw_term.casefold()
-            term = raw_term.replace("_", " ").strip()
-            if (
-                not term
-                or normalized_term in SCREENING_TAG_VALUE_EXCLUDES
-                or term.casefold() in SCREENING_TAG_VALUE_EXCLUDES
-            ):
-                continue
-            include_terms.append(term)
 
     deduped = []
     seen = set()

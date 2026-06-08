@@ -16,18 +16,28 @@ $fallback_recommendations_json
 
 For each category, decide:
 - selection: "single" if exactly one value should usually be chosen, or "multi" if more than one value may be valid.
-- required: true if the category should be filled for every included paper, otherwise false.
-- fallback_value: one allowed value from that category to use when the paper is unclear or not enough information is available.
+- required: true if the category should be filled for every applicable included paper, otherwise false.
+- fallback_value: one allowed value from that category only when the ontology
+  explicitly includes an uncertainty/missing-information value; otherwise null.
 
 Rules:
 - Return exactly one rule per category.
 - Use only the provided category_id values.
-- Use the exact fallback_value shown in the per-category fallback recommendations when one is provided.
-- fallback_value must be one of the allowed values for that exact category.
+- If a category includes `selection`, use that exact selection.
+- Use the exact fallback_value shown in the per-category fallback recommendations
+  when one is provided. If the recommendation is null, return null.
+- fallback_value must be null or one of the allowed values for that exact category.
 - Never use "unclear" as fallback_value unless "unclear" is explicitly listed as an allowed value for that category.
 - If the topic fallback policy prefers unclear and "unclear" is allowed, prefer it as the fallback_value.
 - If the topic fallback policy prefers mixed_or_unclear and "mixed_or_unclear" is allowed while "unclear" is not allowed, use "mixed_or_unclear" as the fallback_value.
 - If "not_reported" is allowed, use it when missing information is the likely issue.
 - Follow category-specific fallback values in the topic fallback policy.
 - If a category is marked required in the input config, keep it required.
+- A category with `applies_when` is a conditional sub-category. It should be
+  empty when its parent category does not contain one of the triggering values.
+- Optional categories may be empty when they are not applicable or not supported
+  by the paper evidence.
+- For required exhaustive categories without a fallback_value, the tagger must
+  choose the best concrete value from the allowed partition rather than returning
+  an uncertainty value.
 - Do not invent new categories or values.

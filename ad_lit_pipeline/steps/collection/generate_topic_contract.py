@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from copy import deepcopy
 from pathlib import Path
@@ -13,7 +14,11 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import topic_contract_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_topic_contract_prompt
-from ad_lit_pipeline.topics.contract import validate_topic_contract
+from ad_lit_pipeline.topics.contract import (
+    is_retired_tagging_category_id,
+    normalize_tagging_label,
+    validate_topic_contract,
+)
 
 
 STEP = StepSpec(
@@ -25,6 +30,7 @@ STEP = StepSpec(
 )
 
 SYSTEM_MESSAGE = "You draft configurable literature-pipeline topic contracts as strict JSON."
+MAX_CONTRACT_VALIDATION_ATTEMPTS = 3
 
 DEFAULT_BASE_CONTRACT = (
     Path(__file__).resolve().parents[3]
@@ -35,26 +41,56 @@ DEFAULT_BASE_CONTRACT = (
 
 SUPPORTED_PROVIDERS = ["openalex"]
 
-REVIEW_STATUS_CATEGORY = {
-    "values": [
-        "ai_tagged",
-        "human_reviewed",
-        "full_text_needed",
-        "excluded_from_scope",
-    ],
-    "required": True,
-}
 
-MAIN_TOPIC_CATEGORY = {
-    "values": [
-        "core_topic",
-        "adjacent_but_relevant",
-        "out_of_scope",
-        "mixed_or_unclear",
-        "unclear",
-    ],
-    "required": True,
-}
+def prompt_with_validation_feedback(
+    prompt: str,
+    error: ValueError,
+    best_contract: dict[str, Any] | None = None,
+) -> str:
+    """Append validation feedback for one LLM correction attempt."""
+    feedback = (
+        prompt
+        + "\n\nYour previous JSON response failed validation:\n"
+        + str(error)
+        + "\n\nReturn a corrected complete JSON response. Before returning, "
+        "check every validation path above and make sure the rejected category "
+        "ids and values are gone or corrected.\n"
+        "- Replace weak, meta, or generic boilerplate categories with concrete "
+        "topic-specific knowledge categories that can be answered from "
+        "individual papers.\n"
+        "- Do not keep generic category ids such as `target_population`, "
+        "`study_design`, `study_type`, or `data_source_type`. If the distinction "
+        "is truly central, replace it with a review-derived category id whose "
+        "words name the topic concept, setting, signal, intervention, exposure, "
+        "or outcome.\n"
+        "- Use compact lowercase snake_case category ids and values. Convert "
+        "hyphens, spaces, slashes, punctuation, and title case; for example, "
+        "`self-help_resources` must become `self_help_resources` or a more "
+        "specific topic-derived value.\n"
+        "- Do not generate retired root categories. Use concrete, "
+        "topic-specific categories directly instead of a single primary-focus "
+        "selector."
+    )
+    if best_contract is None:
+        return feedback
+
+    return (
+        feedback
+        + "\n\nBest response so far, after deterministic snake_case cleanup:\n"
+        + json.dumps(best_contract, indent=2, ensure_ascii=False)
+        + "\n\nRepair this best response minimally. Keep the valid topic-specific "
+        "categories and replace only the categories or values named in the "
+        "validation feedback above."
+    )
+
+
+def validation_error_score(error: ValueError) -> int:
+    """Prefer retry feedback from the smallest semantic validation failure."""
+    message = str(error)
+    issue_count = message.count("\n- ")
+    if issue_count:
+        return issue_count
+    return 1000
 
 
 def read_topic(args: argparse.Namespace) -> str:
@@ -77,7 +113,7 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     categories = tagging.get("categories")
     if isinstance(categories, dict):
-        ensure_required_categories(contract)
+        tagging["categories"] = active_generated_categories(categories)
         return contract
 
     if not isinstance(categories, list):
@@ -88,24 +124,73 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(category, dict):
             raise ValueError("Each generated tagging category must be an object.")
 
-        category_id = str(category.get("category_id") or "").strip()
+        category_id = normalize_tagging_label(str(category.get("category_id") or ""))
         if not category_id:
             raise ValueError("Each generated tagging category needs category_id.")
+        if is_retired_tagging_category_id(category_id):
+            continue
         if category_id in category_map:
             raise ValueError(f"Duplicate generated tagging category: {category_id}")
 
         values = category.get("values")
         if not isinstance(values, list):
             raise ValueError(f"Generated category {category_id} needs values.")
+        normalized_values = [
+            normalize_tagging_label(value) if isinstance(value, str) else value
+            for value in values
+        ]
 
-        category_payload: dict[str, Any] = {"values": values}
-        if bool(category.get("required")):
-            category_payload["required"] = True
+        category_payload: dict[str, Any] = {
+            "required": bool(category.get("required", False)),
+            "values": normalized_values,
+        }
+        description = str(category.get("description") or "").strip()
+        if description:
+            category_payload["description"] = description
+        selection = str(category.get("selection") or "").strip()
+        if selection:
+            category_payload["selection"] = selection
+        applies_when = category.get("applies_when")
+        if isinstance(applies_when, dict):
+            normalized_applies_when = dict(applies_when)
+            normalized_applies_when["category_id"] = normalize_tagging_label(
+                str(applies_when.get("category_id") or "")
+            )
+            trigger_values = applies_when.get("values")
+            if isinstance(trigger_values, list):
+                normalized_applies_when["values"] = [
+                    normalize_tagging_label(value) if isinstance(value, str) else value
+                    for value in trigger_values
+                ]
+            category_payload["applies_when"] = normalized_applies_when
         category_map[category_id] = category_payload
 
-    tagging["categories"] = category_map
-    ensure_required_categories(contract)
+    tagging["categories"] = active_generated_categories(category_map)
     return contract
+
+
+def active_generated_categories(categories: dict[str, Any]) -> dict[str, Any]:
+    """Drop retired generated categories and conditionals that depend on them."""
+    active_categories = {
+        category_id: category
+        for category_id, category in categories.items()
+        if not is_retired_tagging_category_id(category_id)
+    }
+    removed_category_ids = set(categories) - set(active_categories)
+    return {
+        category_id: category
+        for category_id, category in active_categories.items()
+        if not (
+            isinstance(category, dict)
+            and isinstance(category.get("applies_when"), dict)
+            and (
+                category["applies_when"].get("category_id") in removed_category_ids
+                or is_retired_tagging_category_id(
+                    category["applies_when"].get("category_id")
+                )
+            )
+        )
+    }
 
 
 def normalize_topic_structure(contract: dict[str, Any]) -> None:
@@ -113,22 +198,48 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
     if not isinstance(topic_structure, dict):
         return
 
-    anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
+    raw_anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
+    id_map: dict[str, str] = {}
+    main_topics = topic_structure.get("main_topics")
+    if isinstance(main_topics, list):
+        for topic in main_topics:
+            if not isinstance(topic, dict):
+                continue
+            raw_topic_id = str(topic.get("topic_id") or "").strip()
+            normalized_topic_id = normalize_tagging_label(raw_topic_id)
+            if not normalized_topic_id:
+                continue
+            topic["topic_id"] = normalized_topic_id
+            id_map[raw_topic_id] = normalized_topic_id
+            id_map[normalized_topic_id] = normalized_topic_id
+
+    anchor_topic_id = id_map.get(
+        raw_anchor_topic_id,
+        normalize_tagging_label(raw_anchor_topic_id),
+    )
+    if anchor_topic_id:
+        topic_structure["anchor_topic_id"] = anchor_topic_id
+
     secondary_topics = topic_structure.get("secondary_topics")
     normalized: dict[str, Any] = {}
     if isinstance(secondary_topics, dict):
         for main_topic_id, terms in secondary_topics.items():
+            normalized_main_topic_id = normalize_tagging_label(str(main_topic_id))
             if not isinstance(terms, list):
-                normalized[str(main_topic_id).strip()] = terms
+                normalized[normalized_main_topic_id] = terms
                 continue
-            normalized[str(main_topic_id).strip()] = [
+            normalized[normalized_main_topic_id] = [
                 str(term).strip() for term in terms if str(term).strip()
             ]
     elif isinstance(secondary_topics, list):
         for item in secondary_topics:
             if not isinstance(item, dict):
                 continue
-            main_topic_id = str(item.get("main_topic_id") or "").strip()
+            raw_main_topic_id = str(item.get("main_topic_id") or "").strip()
+            main_topic_id = id_map.get(
+                raw_main_topic_id,
+                normalize_tagging_label(raw_main_topic_id),
+            )
             terms = item.get("terms")
             if not main_topic_id or not isinstance(terms, list):
                 continue
@@ -143,23 +254,6 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
     topic_structure["secondary_topics"] = normalized
 
 
-def ensure_required_categories(contract: dict[str, Any]) -> None:
-    tagging = contract.get("tagging")
-    if not isinstance(tagging, dict):
-        raise ValueError("Generated topic contract must contain tagging.")
-
-    categories = tagging.get("categories")
-    if not isinstance(categories, dict):
-        raise ValueError("Generated tagging.categories must be a mapping.")
-
-    categories["main_topic_category"] = deepcopy(MAIN_TOPIC_CATEGORY)
-    categories["review_status"] = deepcopy(REVIEW_STATUS_CATEGORY)
-
-    fallback_policy = tagging.get("fallback_policy")
-    if isinstance(fallback_policy, dict):
-        fallback_policy["review_status"] = "ai_tagged"
-
-
 def call_llm(
     topic_description: str,
     base_contract: dict[str, Any],
@@ -168,20 +262,56 @@ def call_llm(
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, Any], list[Path]]:
     prompt = render_generate_topic_contract_prompt(topic_description, base_contract)
-    result = client.create_json(
-        model=model,
-        system_message=SYSTEM_MESSAGE,
-        prompt=prompt,
-        schema_name="topic_contract",
-        schema=topic_contract_schema(SUPPORTED_PROVIDERS),
-        step_name=STEP.name,
-        call_id="contract",
-        trace_writer=trace_writer,
-    )
-    contract = contract_from_model_payload(result.parsed)
-    validate_topic_contract(contract)
-    trace_paths = result.trace_paths.as_list() if result.trace_paths else []
-    return contract, trace_paths
+    trace_paths: list[Path] = []
+    last_error: ValueError | None = None
+    best_error: ValueError | None = None
+    best_error_score = 1001
+    best_contract: dict[str, Any] | None = None
+
+    for attempt in range(1, MAX_CONTRACT_VALIDATION_ATTEMPTS + 1):
+        attempt_prompt = (
+            prompt
+            if best_error is None
+            else prompt_with_validation_feedback(prompt, best_error, best_contract)
+        )
+        call_id = "contract" if attempt == 1 else f"contract_retry_{attempt}"
+        result = client.create_json(
+            model=model,
+            system_message=SYSTEM_MESSAGE,
+            prompt=attempt_prompt,
+            schema_name="topic_contract",
+            schema=topic_contract_schema(
+                SUPPORTED_PROVIDERS,
+                min_tagging_categories=1,
+            ),
+            step_name=STEP.name,
+            call_id=call_id,
+            trace_writer=trace_writer,
+        )
+        if result.trace_paths:
+            trace_paths.extend(result.trace_paths.as_list())
+
+        try:
+            contract: dict[str, Any] | None = None
+            contract = contract_from_model_payload(result.parsed)
+            validate_topic_contract(contract)
+            return contract, trace_paths
+        except ValueError as error:
+            last_error = error
+            score = validation_error_score(error)
+            if score < best_error_score:
+                best_error = error
+                best_error_score = score
+                if contract is not None:
+                    best_contract = contract
+            if attempt == MAX_CONTRACT_VALIDATION_ATTEMPTS:
+                raise ValueError(
+                    "Generated topic contract failed validation after "
+                    f"{MAX_CONTRACT_VALIDATION_ATTEMPTS} attempts: "
+                    f"{best_error or error}"
+                ) from error
+
+    raise ValueError("Generated topic contract failed validation.")
 
 
 def run(

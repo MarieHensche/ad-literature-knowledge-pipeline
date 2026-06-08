@@ -22,9 +22,21 @@ Rules:
 - Use only the allowed category IDs.
 - Use only allowed values listed for each category.
 - Return every category as an array of selected values.
-- For single-selection categories, return exactly one value in the array.
-- For multi-selection categories, return one or more values if relevant.
-- If the paper does not provide enough information, use the category fallback value from the fixed rules.
+- For required single-selection categories, return exactly one value in the array.
+- For optional single-selection categories, return zero or one value depending
+  on applicability and evidence.
+- For multi-selection categories, return zero, one, or more values depending on
+  applicability and evidence.
+- If a rule includes `applies_when`, return an empty array unless the referenced
+  parent category contains one of the triggering values.
+- Use a category fallback value only when the fixed rule has a non-null
+  fallback_value.
+- For required categories with no fallback_value, choose the best concrete value
+  from the allowed exhaustive partition using the title, abstract, and full-text
+  evidence.
+- For optional categories with no supported value, return an empty array.
+- Do not combine fallback values such as `not_reported`, `unclear`, or
+  `mixed_or_unclear` with concrete values in the same category.
 - Do not invent new values.
 - If `main_topic_category` offers `core_topic`, `adjacent_but_relevant`, and
   `out_of_scope`, use it as a strict topical-fit judgment: choose `core_topic`

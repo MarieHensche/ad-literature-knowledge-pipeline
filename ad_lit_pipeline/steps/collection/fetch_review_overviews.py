@@ -20,7 +20,7 @@ STEP = StepSpec(
     inputs=["topic_contract_yaml"],
     outputs=["review_overviews_jsonl"],
     uses_llm=False,
-    description="Fetch review and overview papers to seed topic-contract tags.",
+    description="Fetch a review and overview candidate pool for contract tags.",
 )
 
 
@@ -293,6 +293,22 @@ def select_best_review_overviews(
     return selected
 
 
+def annotate_review_candidate_pool(
+    topic_contract: dict[str, Any],
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Score every fetched review candidate without trimming the pool."""
+    scored = [
+        (review_score(topic_contract, candidate), index, candidate)
+        for index, candidate in enumerate(candidates)
+    ]
+    scored.sort(key=lambda item: item[0].score, reverse=True)
+    return [
+        annotate_review_candidate(candidate, score)
+        for score, _index, candidate in scored
+    ]
+
+
 def review_query_text(query: str) -> str:
     """Bias a contract query toward review and overview literature."""
     lowered = query.lower()
@@ -407,20 +423,22 @@ def run(
         mailto=mailto,
         sleep_seconds=sleep_seconds,
     )
-    selected = select_best_review_overviews(topic_contract, candidates, max_results)
+    candidate_pool = annotate_review_candidate_pool(topic_contract, candidates)
 
-    write_jsonl(output_path, selected)
+    write_jsonl(output_path, candidate_pool)
     return StepResult(
         step_name=STEP.name,
         inputs={"topic_contract_yaml": topic_contract_path},
         outputs={"review_overviews_jsonl": output_path},
         row_counts={
-            "review_overviews": len(selected),
+            "review_overviews": len(candidate_pool),
             "review_overview_candidates": len(candidates),
+            "review_candidate_pool": len(candidate_pool),
         },
         metadata={
             "provider": provider.name,
             "search_queries": len(plan["search_queries"]),
+            "max_review_overviews": max_results,
             "review_pool_size": pool_size,
         },
     )
@@ -428,7 +446,10 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Fetch review and overview papers for topic-contract bootstrapping."
+        description=(
+            "Fetch a review and overview candidate pool for topic-contract "
+            "bootstrapping."
+        )
     )
     parser.add_argument("--topic-contract", required=True, help="Input topic contract YAML.")
     parser.add_argument("--output", required=True, help="Output review-overview JSONL.")
@@ -436,7 +457,10 @@ def main() -> None:
         "--max-results",
         type=int,
         default=DEFAULT_MAX_REVIEWS,
-        help="Maximum review/overview records to fetch.",
+        help=(
+            "Target review/overview seed count for refinement. The fetch step "
+            "retrieves a larger candidate pool for full-text extraction."
+        ),
     )
     parser.add_argument("--per-page", type=int, default=10, help="Provider page size.")
     parser.add_argument("--mailto", default=None, help="Optional email for OpenAlex.")
@@ -451,7 +475,10 @@ def main() -> None:
         args.mailto,
         args.sleep,
     )
-    print(f"Fetched review/overview papers: {result.row_counts['review_overviews']}")
+    print(
+        "Fetched review/overview candidate pool: "
+        f"{result.row_counts['review_overviews']}"
+    )
     print(f"Wrote {args.output}")
 
 

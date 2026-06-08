@@ -5,6 +5,8 @@ from pathlib import Path
 from ad_lit_pipeline.prompts.render import (
     render_generate_tagging_rules_prompt,
     render_generate_topic_contract_prompt,
+    render_calibrate_topic_contract_prompt,
+    render_repair_topic_contract_tagging_prompt,
     render_refine_topic_contract_prompt,
     render_screen_candidate_prompt,
     render_tag_paper_prompt,
@@ -55,12 +57,22 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
 
     assert "borderline or tangentially relevant candidates are included" in prompt
     assert "collection.search_queries" in prompt
-    assert "multiple topic-specific knowledge tagging categories" in prompt
-    assert "multiple allowed values" in prompt
-    assert "adjacent_but_relevant" in prompt
+    assert "discovery-focused topic contract" in prompt
+    assert "tagging categories in this first contract are provisional" in prompt.lower()
+    assert "final extraction ontology" in prompt
+    assert "Include at least one provisional tagging category" in prompt
+    assert "do not create any root\n  focus selector" in prompt
+    assert "examples only" in prompt
+    assert "`applies_when`" in prompt
     assert "common abbreviations or acronyms" in prompt
-    assert "`review_status`" in prompt
+    assert "Make main topics broad enough for title screening" in prompt
+    assert "at least 6 terms" in prompt
+    assert "mandatory core concept for title screening" in prompt
+    assert "later categories may use those ids directly" in prompt
     assert "climate change affect human health" in prompt
+    assert "at least 6 knowledge tagging categories" not in prompt
+    assert "mental distribution check" not in prompt
+    assert "no single value should be so broad" not in prompt
 
 
 def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -> None:
@@ -70,18 +82,109 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
         contract,
         [
             {
-                "title": "Review of AI biomarkers for early AD detection",
-                "abstract": "A review of modalities and validation practices.",
+                "review_id": "W1",
+                "full_text_evidence": "[Results]\nSpeech and imaging markers matter.",
             }
         ],
     )
 
-    assert "Review and overview seed papers" in prompt
+    assert "Extracted review full-text evidence" in prompt
+    assert "Bootstrap categories omitted" in prompt
+    assert (
+        "Build final tagging categories only from extracted review full-text evidence"
+        in prompt
+    )
+    assert '"categories": []' in prompt
+    assert "main_topic_category" not in prompt
     assert "knowledge categories" in prompt
+    assert "full_text_evidence" in prompt
+    assert "Define tagging categories and allowed values only from `full_text_evidence`" in prompt
+    assert "Do not use titles, abstracts, query metadata" in prompt
+    assert "at least 6 knowledge tagging categories" in prompt
+    assert "Do not create a root focus selector" in prompt
+    assert "Tag papers directly with topic-specific categories" in prompt
+    assert "topic_structure.main_topics" in prompt
+    assert "mandatory core concept for title screening" in prompt
+    assert "improve recall without weakening topical fit" in prompt
+    assert "whole-question" in prompt
+    assert "effect_of_x" in prompt
+    assert "mental distribution check" in prompt
+    assert "conditional sub-categories" in prompt
+    assert "Do not add `unclear`, `mixed_or_unclear`, `not_reported`, or `other`" in prompt
+    assert "generic boilerplate categories" in prompt
+    assert "generic method or participant buckets" in prompt
+    assert "topic-specific id and values" in prompt
     assert "multiple allowed values" in prompt
-    assert "core_topic" in prompt
+    assert "`applies_when`" in prompt
+    assert "may refine only `topic_structure` and `tagging.categories`" in prompt
     assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
+    assert "If no extracted review full-text evidence is available" in prompt
+
+
+def test_calibrate_topic_contract_prompt_uses_primary_full_text_evidence() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    prompt = render_calibrate_topic_contract_prompt(
+        "Use of AI in school lessons and student performance",
+        contract,
+        [
+            {
+                "paper_id": "p1",
+                "full_text_evidence": (
+                    "[Results]\nAI tutoring changed classroom engagement."
+                ),
+            }
+        ],
+    )
+
+    assert "Selected primary-paper full-text evidence" in prompt
+    assert "full_text_evidence" in prompt
+    assert "review-derived ontology as the starting point" in prompt
+    assert "light polish step" in prompt
+    assert "Do not create any root focus selector" in prompt
+    assert "root focus selector" in prompt
+    assert "Preserve `research_topic`, `topic_structure`, `scope`" in prompt
+    assert "AI tutoring changed classroom engagement" in prompt
+    assert "completely new ontology" in prompt
+
+
+def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
+    prompt = render_repair_topic_contract_tagging_prompt(
+        topic_description="How does green space affect sleep?",
+        failed_contract={
+            "topic_id": "green_space_sleep",
+            "tagging": {
+                "categories": {
+                    "study_design": {
+                        "required": False,
+                        "selection": "multi",
+                        "values": ["cross_sectional", "longitudinal"],
+                    }
+                }
+            },
+        },
+        review_overviews=[],
+        validation_issues=[
+            {
+                "code": "boilerplate_category_id",
+                "category_id": "study_design",
+                "values": [],
+                "message": "study_design is generic.",
+            }
+        ],
+        existing_category_ids=["study_design"],
+        forbidden_generic_ids=["study_design"],
+        forbidden_catchall_values=["not_reported", "other"],
+    )
+
+    assert "Return only a JSON patch" in prompt
+    assert "Do not modify `research_topic`, `topic_structure`, `scope`" in prompt
+    assert "Patch only `tagging.categories`" in prompt
+    assert "full_text_evidence" in prompt
+    assert "Do not use abstracts, titles, query" in prompt
+    assert "Do not return a full topic contract" in prompt
+    assert "boilerplate_category_id" in prompt
+    assert "Remove retired categories if they appear" in prompt
 
 
 def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
@@ -111,3 +214,7 @@ def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
 
     assert "Do not return review_status" in prompt
     assert 'Set review_status to ["ai_tagged"]' not in prompt
+    assert "Do not combine fallback values" in prompt
+    assert "required categories with no fallback_value" in prompt
+    assert "Do not select the broadest or first-listed value" in prompt
+    assert "single main-topic value" in prompt

@@ -25,10 +25,15 @@ class CollectionArtifacts:
     """Derived artifact paths for the collection workflow."""
 
     review_overviews_jsonl: Path
+    review_overviews_full_text_jsonl: Path
+    review_full_text_manifest_csv: Path
     plan_json: Path
     candidates_jsonl: Path
     deduped_candidates_jsonl: Path
     candidate_screening_csv: Path
+    calibration_papers_csv: Path
+    calibration_papers_full_text_csv: Path
+    calibration_full_text_manifest_csv: Path
     papers_csv: Path
 
 
@@ -87,6 +92,12 @@ def collection_artifacts(
         review_overviews_jsonl=raw_path(
             collection, "review_overviews.jsonl", base_dir
         ),
+        review_overviews_full_text_jsonl=raw_path(
+            collection, "review_overviews_full_text.jsonl", base_dir
+        ),
+        review_full_text_manifest_csv=raw_path(
+            collection, "review_full_text_manifest.csv", base_dir
+        ),
         plan_json=plan_path(collection, base_dir),
         candidates_jsonl=raw_path(collection, "openalex_candidates.jsonl", base_dir),
         deduped_candidates_jsonl=raw_path(
@@ -94,6 +105,15 @@ def collection_artifacts(
         ),
         candidate_screening_csv=raw_path(
             collection, "candidate_screening.csv", base_dir
+        ),
+        calibration_papers_csv=raw_path(
+            collection, "calibration_papers.csv", base_dir
+        ),
+        calibration_papers_full_text_csv=raw_path(
+            collection, "calibration_papers_full_text.csv", base_dir
+        ),
+        calibration_full_text_manifest_csv=raw_path(
+            collection, "calibration_full_text_manifest.csv", base_dir
         ),
         papers_csv=raw_path(collection, "papers.csv", base_dir),
     )

@@ -12,17 +12,33 @@ MAIN_PIPELINE = [
     "export_mantis",
 ]
 
+MAIN_PIPELINE_WITH_CALIBRATION = [
+    "normalize_metadata",
+    "screen_scope",
+    "prepare_full_text",
+    "calibrate_topic_contract",
+    "normalize_tagging_config",
+    "generate_tagging_rules",
+    "tag_papers",
+    "audit_extraction",
+    "export_mantis",
+]
+
 COLLECTION_PIPELINE = [
     "plan_search",
     "fetch_candidates",
     "deduplicate_candidates",
     "screen_title_relevance",
+    "select_calibration_papers",
+    "prepare_calibration_full_text",
+    "calibrate_topic_contract",
     "export_included_candidates",
 ]
 
 CONTRACT_BOOTSTRAP_PIPELINE = [
     "generate_topic_contract",
     "fetch_review_overviews",
+    "prepare_review_full_text",
     "refine_topic_contract",
 ]
 

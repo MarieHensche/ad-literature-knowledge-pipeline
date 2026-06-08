@@ -51,50 +51,30 @@ candidate_screening:
 
 tagging:
   fallback_policy:
-    prefer_unclear_when_allowed: true
-    prefer_mixed_or_unclear_when_unclear_missing: true
-    missing_information_value: not_reported
-    knowledge_confidence: very_low
-    review_status: ai_tagged
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ""
   categories:
-    main_topic_category:
+    primary_topic_detail:
+      description: Example only. Replace with a concrete topic-specific category.
+      required: false
+      selection: multi
+      values:
+        - subtype_a
+        - subtype_b
+        - subtype_c
+    secondary_focus_detail:
+      description: Example only. Use conditional sub-categories when one parent value requires more detail.
       required: true
+      selection: single
+      applies_when:
+        category_id: primary_topic_detail
+        values:
+          - subtype_b
       values:
-        - core_topic
-        - adjacent_but_relevant
-        - out_of_scope
-        - mixed_or_unclear
-        - unclear
-    research_target:
-      values:
-        - primary_target
-        - related_target
-        - population_or_setting
-        - outcome_or_effect
-        - mixed_or_unclear
-        - unclear
-    study_type:
-      values:
-        - empirical
-        - review
-        - method
-        - dataset_or_resource
-        - mixed_or_unclear
-        - unclear
-    knowledge_confidence:
-      values:
-        - high
-        - medium
-        - low
-        - very_low
-        - conflict
-    review_status:
-      required: true
-      values:
-        - ai_tagged
-        - human_reviewed
-        - full_text_needed
-        - excluded_from_scope
+        - subtype_b1
+        - subtype_b2
+        - subtype_b3
 
 collection:
   allowed_providers:
