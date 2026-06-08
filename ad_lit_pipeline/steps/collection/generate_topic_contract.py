@@ -15,7 +15,6 @@ from ad_lit_pipeline.llm.schemas import topic_contract_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_generate_topic_contract_prompt
 from ad_lit_pipeline.topics.contract import (
-    is_retired_tagging_category_id,
     normalize_tagging_label,
     validate_topic_contract,
 )
@@ -67,9 +66,10 @@ def prompt_with_validation_feedback(
         "hyphens, spaces, slashes, punctuation, and title case; for example, "
         "`self-help_resources` must become `self_help_resources` or a more "
         "specific topic-derived value.\n"
-        "- Do not generate retired root categories. Use concrete, "
-        "topic-specific categories directly instead of a single primary-focus "
-        "selector."
+        "- The `knowledge_goal` category must be the single primary "
+        "research-focus selector over the topic's main facets. Its values "
+        "should be facet category ids, not broad benefit phrases such as "
+        "`improving_x`, `enhancing_y`, or `supporting_z`."
     )
     if best_contract is None:
         return feedback
@@ -113,7 +113,6 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     categories = tagging.get("categories")
     if isinstance(categories, dict):
-        tagging["categories"] = active_generated_categories(categories)
         return contract
 
     if not isinstance(categories, list):
@@ -127,8 +126,6 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         category_id = normalize_tagging_label(str(category.get("category_id") or ""))
         if not category_id:
             raise ValueError("Each generated tagging category needs category_id.")
-        if is_retired_tagging_category_id(category_id):
-            continue
         if category_id in category_map:
             raise ValueError(f"Duplicate generated tagging category: {category_id}")
 
@@ -165,32 +162,8 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
             category_payload["applies_when"] = normalized_applies_when
         category_map[category_id] = category_payload
 
-    tagging["categories"] = active_generated_categories(category_map)
+    tagging["categories"] = category_map
     return contract
-
-
-def active_generated_categories(categories: dict[str, Any]) -> dict[str, Any]:
-    """Drop retired generated categories and conditionals that depend on them."""
-    active_categories = {
-        category_id: category
-        for category_id, category in categories.items()
-        if not is_retired_tagging_category_id(category_id)
-    }
-    removed_category_ids = set(categories) - set(active_categories)
-    return {
-        category_id: category
-        for category_id, category in active_categories.items()
-        if not (
-            isinstance(category, dict)
-            and isinstance(category.get("applies_when"), dict)
-            and (
-                category["applies_when"].get("category_id") in removed_category_ids
-                or is_retired_tagging_category_id(
-                    category["applies_when"].get("category_id")
-                )
-            )
-        )
-    }
 
 
 def normalize_topic_structure(contract: dict[str, Any]) -> None:
@@ -198,48 +171,22 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
     if not isinstance(topic_structure, dict):
         return
 
-    raw_anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
-    id_map: dict[str, str] = {}
-    main_topics = topic_structure.get("main_topics")
-    if isinstance(main_topics, list):
-        for topic in main_topics:
-            if not isinstance(topic, dict):
-                continue
-            raw_topic_id = str(topic.get("topic_id") or "").strip()
-            normalized_topic_id = normalize_tagging_label(raw_topic_id)
-            if not normalized_topic_id:
-                continue
-            topic["topic_id"] = normalized_topic_id
-            id_map[raw_topic_id] = normalized_topic_id
-            id_map[normalized_topic_id] = normalized_topic_id
-
-    anchor_topic_id = id_map.get(
-        raw_anchor_topic_id,
-        normalize_tagging_label(raw_anchor_topic_id),
-    )
-    if anchor_topic_id:
-        topic_structure["anchor_topic_id"] = anchor_topic_id
-
+    anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
     secondary_topics = topic_structure.get("secondary_topics")
     normalized: dict[str, Any] = {}
     if isinstance(secondary_topics, dict):
         for main_topic_id, terms in secondary_topics.items():
-            normalized_main_topic_id = normalize_tagging_label(str(main_topic_id))
             if not isinstance(terms, list):
-                normalized[normalized_main_topic_id] = terms
+                normalized[str(main_topic_id).strip()] = terms
                 continue
-            normalized[normalized_main_topic_id] = [
+            normalized[str(main_topic_id).strip()] = [
                 str(term).strip() for term in terms if str(term).strip()
             ]
     elif isinstance(secondary_topics, list):
         for item in secondary_topics:
             if not isinstance(item, dict):
                 continue
-            raw_main_topic_id = str(item.get("main_topic_id") or "").strip()
-            main_topic_id = id_map.get(
-                raw_main_topic_id,
-                normalize_tagging_label(raw_main_topic_id),
-            )
+            main_topic_id = str(item.get("main_topic_id") or "").strip()
             terms = item.get("terms")
             if not main_topic_id or not isinstance(terms, list):
                 continue

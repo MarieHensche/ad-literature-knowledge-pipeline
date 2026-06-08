@@ -1188,23 +1188,23 @@ def test_audit_extraction_respects_conditional_required_categories(
         [
             {
                 "paper_id": "p1",
-                "research_focus": "screening_detection",
+                "knowledge_goal": "screening_detection",
                 "screening_tool_type": "",
             },
             {
                 "paper_id": "p2",
-                "research_focus": "treatment_effectiveness",
+                "knowledge_goal": "treatment_effectiveness",
                 "screening_tool_type": "",
             },
         ],
-        ["paper_id", "research_focus", "screening_tool_type"],
+        ["paper_id", "knowledge_goal", "screening_tool_type"],
     )
     write_json(
         config_path,
         {
             "categories": [
                 {
-                    "category_id": "research_focus",
+                    "category_id": "knowledge_goal",
                     "allowed_values": [
                         {"value": "screening_detection"},
                         {"value": "treatment_effectiveness"},
@@ -1217,7 +1217,7 @@ def test_audit_extraction_respects_conditional_required_categories(
                         {"value": "risk_model"},
                     ],
                     "applies_when": {
-                        "category_id": "research_focus",
+                        "category_id": "knowledge_goal",
                         "values": ["screening_detection"],
                     },
                 },
@@ -1229,7 +1229,7 @@ def test_audit_extraction_respects_conditional_required_categories(
         {
             "rules": [
                 {
-                    "category_id": "research_focus",
+                    "category_id": "knowledge_goal",
                     "selection": "single",
                     "required": True,
                 },
@@ -1238,7 +1238,7 @@ def test_audit_extraction_respects_conditional_required_categories(
                     "selection": "single",
                     "required": True,
                     "applies_when": {
-                        "category_id": "research_focus",
+                        "category_id": "knowledge_goal",
                         "values": ["screening_detection"],
                     },
                 },
@@ -1269,7 +1269,7 @@ def test_audit_extraction_respects_conditional_required_categories(
     ]
 
 
-def test_audit_extraction_reports_distribution_warnings(
+def test_audit_extraction_blocks_bad_knowledge_goal_distribution(
     tmp_path: Path,
 ) -> None:
     extraction_path = tmp_path / "extraction.csv"
@@ -1278,16 +1278,16 @@ def test_audit_extraction_reports_distribution_warnings(
     output_path = tmp_path / "audit.csv"
 
     rows = [
-        {"paper_id": f"p{index}", "research_focus": "treatment_effectiveness"}
+        {"paper_id": f"p{index}", "knowledge_goal": "treatment_effectiveness"}
         for index in range(1, 7)
     ]
-    write_csv(extraction_path, rows, ["paper_id", "research_focus"])
+    write_csv(extraction_path, rows, ["paper_id", "knowledge_goal"])
     write_json(
         config_path,
         {
             "categories": [
                 {
-                    "category_id": "research_focus",
+                    "category_id": "knowledge_goal",
                     "allowed_values": [
                         {"value": "treatment_effectiveness"},
                         {"value": "screening_detection"},
@@ -1302,7 +1302,7 @@ def test_audit_extraction_reports_distribution_warnings(
         {
             "rules": [
                 {
-                    "category_id": "research_focus",
+                    "category_id": "knowledge_goal",
                     "selection": "single",
                     "required": True,
                     "fallback_value": None,
@@ -1311,31 +1311,41 @@ def test_audit_extraction_reports_distribution_warnings(
         },
     )
 
-    run_script(
-        "scripts/audit_extraction.py",
-        "--input",
-        str(extraction_path),
-        "--config",
-        str(config_path),
-        "--rules",
-        str(rules_path),
-        "--output",
-        str(output_path),
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/audit_extraction.py",
+            "--input",
+            str(extraction_path),
+            "--config",
+            str(config_path),
+            "--rules",
+            str(rules_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
     )
 
+    assert result.returncode != 0
+    assert "Blocking knowledge-tagging distribution issue" in result.stderr
     audit_rows = read_csv(output_path)
     assert {
         "paper_id": "",
-        "field": "research_focus",
+        "field": "knowledge_goal",
         "value": "screening_detection",
-        "issue": "unused_value_distribution_warning:0_of_6_applicable_rows",
+        "issue": "knowledge_goal_unused_value_distribution_error:0_of_6_applicable_rows",
     } in audit_rows
     assert {
         "paper_id": "",
-        "field": "research_focus",
+        "field": "knowledge_goal",
         "value": "treatment_effectiveness",
         "issue": (
-            "dominant_value_distribution_warning:6_of_6_applicable_rows"
+            "knowledge_goal_dominant_value_distribution_error:"
+            "6_of_6_applicable_rows"
         ),
     } in audit_rows
 

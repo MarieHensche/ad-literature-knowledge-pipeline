@@ -84,16 +84,20 @@ providers, and optional seed search queries. Tagging categories are
 topic-specific knowledge dimensions. New generated contracts should replace the
 template examples with categories and values inferred from review/overview seed
 papers. Generated/refined contracts require at least six concrete knowledge
-categories and reject generic meta-categories. Categories and values are
-inferred from topic-relevant review full texts, then calibrated against
-selected primary-paper full texts, and should use `topic_structure.main_topics`
-as scaffolding for topic-specific dimensions. Details that apply only to one
-parent value should be modeled as conditional categories with `applies_when`.
+categories, reject generic meta-categories, and require a `knowledge_goal`
+single-selection root category whose concrete values form a complete,
+mutually exclusive primary study-focus or knowledge-contribution partition of
+the included papers. The `knowledge_goal` values are inferred from
+topic-relevant review full texts, then calibrated against selected primary-paper
+full texts, and should use `topic_structure.main_topics` as scaffolding for the
+main roles papers play around the topic. Details that apply only to one root
+value should be modeled as conditional categories with `applies_when`.
 Generated value lists should avoid `unclear`, `not_reported`,
 `mixed_or_unclear`, and `other`; missing or inapplicable details should usually
 be represented by optional or conditional categories instead.
 The audit step checks observed tag distributions after tagging: unused values
-and highly dominant values are reported as warnings for review.
+and highly dominant values are reported, and bad `knowledge_goal` partitions
+block export so a collapsed root ontology is not treated as Mantis-ready.
 The pipeline also warns about generic boilerplate labels that should be
 rewritten as topic-specific review-derived dimensions.
 

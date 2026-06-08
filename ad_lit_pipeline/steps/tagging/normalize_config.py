@@ -10,7 +10,6 @@ import yaml
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.topics.contract import (
     VALID_CATEGORY_SELECTIONS,
-    is_retired_tagging_category_id,
     load_topic_contract,
     tagging_config_from_contract,
 )
@@ -174,28 +173,10 @@ def normalize_config(config: dict[str, object]) -> dict[str, object]:
     if not normalized_topic["description"]:
         raise ValueError("research_topic.description is required.")
 
-    active_categories = {
-        category_id: category
-        for category_id, category in categories.items()
-        if not is_retired_tagging_category_id(category_id)
-    }
-    active_categories = {
-        category_id: category
-        for category_id, category in active_categories.items()
-        if not (
-            isinstance(category, dict)
-            and isinstance(category.get("applies_when"), dict)
-            and is_retired_tagging_category_id(
-                category["applies_when"].get("category_id")
-            )
-        )
-    }
     normalized_categories = [
         normalize_category(category_id, category)
-        for category_id, category in active_categories.items()
+        for category_id, category in categories.items()
     ]
-    if not normalized_categories:
-        raise ValueError("No active tagging categories remain after filtering.")
     validate_normalized_dependencies(normalized_categories)
 
     return {

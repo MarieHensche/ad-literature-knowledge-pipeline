@@ -27,7 +27,9 @@ from ad_lit_pipeline.steps.collection.select_calibration_papers import (
 )
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.topics.contract import (
+    KNOWLEDGE_GOAL_CATEGORY_ID,
     load_topic_contract,
+    normalize_tagging_label,
     validate_generated_tagging_quality,
     validate_topic_contract,
 )
@@ -45,6 +47,7 @@ SYSTEM_MESSAGE = "You calibrate literature-pipeline topic contracts as strict JS
 DEFAULT_MAX_PRIMARY_PAPERS = 3
 MAX_PRIMARY_PAPER_EVIDENCE_CHARS = 8_000
 MIN_FULL_TEXT_TOPIC_TERM_MATCHES = 2
+MAX_DETERMINISTIC_KNOWLEDGE_GOAL_VALUES = 6
 NO_PRIMARY_FULL_TEXT_WARNING = (
     "No included primary papers had readable extracted full text with enough "
     "topic-specific evidence; topic-contract calibration was skipped and the "
@@ -291,6 +294,17 @@ def select_primary_papers_for_calibration(
     return selected_rows, compact
 
 
+def category_values(category: dict[str, Any]) -> list[str]:
+    values = category.get("values")
+    if not isinstance(values, list):
+        return []
+    return [
+        normalize_tagging_label(value)
+        for value in values
+        if isinstance(value, str) and normalize_tagging_label(value)
+    ]
+
+
 def merge_calibrated_tagging(
     current_contract: dict[str, Any],
     proposed_contract: dict[str, Any],
@@ -304,6 +318,8 @@ def merge_calibrated_tagging(
         dict,
     ):
         return merged
+    if KNOWLEDGE_GOAL_CATEGORY_ID not in current_categories:
+        return merged
 
     calibrated_categories = deepcopy(current_categories)
     for category_id in list(calibrated_categories):
@@ -313,6 +329,66 @@ def merge_calibrated_tagging(
 
     merged["tagging"]["categories"] = calibrated_categories
     return merged
+
+
+def synchronize_knowledge_goal_values(
+    current_contract: dict[str, Any],
+    calibrated_contract: dict[str, Any],
+) -> dict[str, Any]:
+    """Make knowledge_goal a deterministic selector over sibling facet IDs."""
+    synchronized = deepcopy(calibrated_contract)
+    categories = synchronized.get("tagging", {}).get("categories", {})
+    if not isinstance(categories, dict):
+        return synchronized
+
+    knowledge_goal = categories.get(KNOWLEDGE_GOAL_CATEGORY_ID)
+    if not isinstance(knowledge_goal, dict):
+        return synchronized
+
+    sibling_ids = [
+        category_id
+        for category_id in categories
+        if category_id != KNOWLEDGE_GOAL_CATEGORY_ID
+    ]
+    sibling_set = set(sibling_ids)
+    current_knowledge_goal = (
+        current_contract.get("tagging", {})
+        .get("categories", {})
+        .get(KNOWLEDGE_GOAL_CATEGORY_ID, {})
+    )
+
+    preferred_values: list[str] = []
+    for source in (
+        category_values(knowledge_goal),
+        category_values(current_knowledge_goal)
+        if isinstance(current_knowledge_goal, dict)
+        else [],
+    ):
+        for value in source:
+            if value in sibling_set and value not in preferred_values:
+                preferred_values.append(value)
+    if len(preferred_values) < 3:
+        for value in sibling_ids:
+            if value not in preferred_values:
+                preferred_values.append(value)
+            if len(preferred_values) >= 3:
+                break
+
+    knowledge_goal["required"] = True
+    knowledge_goal["selection"] = "single"
+    knowledge_goal["applies_when"] = None
+    knowledge_goal["values"] = preferred_values[
+        :MAX_DETERMINISTIC_KNOWLEDGE_GOAL_VALUES
+    ]
+
+    ordered_categories: dict[str, Any] = {
+        KNOWLEDGE_GOAL_CATEGORY_ID: knowledge_goal
+    }
+    for category_id, category in categories.items():
+        if category_id != KNOWLEDGE_GOAL_CATEGORY_ID:
+            ordered_categories[category_id] = category
+    synchronized["tagging"]["categories"] = ordered_categories
+    return synchronized
 
 
 def call_llm(
@@ -359,6 +435,7 @@ def call_llm(
             proposed_contract = contract_from_model_payload(result.parsed)
             validate_topic_contract(proposed_contract)
             contract = merge_calibrated_tagging(current_contract, proposed_contract)
+            contract = synchronize_knowledge_goal_values(current_contract, contract)
             validate_topic_contract(contract)
             validate_generated_tagging_quality(
                 contract,

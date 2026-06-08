@@ -34,14 +34,22 @@ Rules:
   validation issue.
 - Remove or replace generic boilerplate categories with topic-specific
   review-derived categories.
-- Remove retired categories if they appear in the failed contract, existing
-  category ids, or validation issues. Replace them with direct topic-specific
-  categories when needed.
 - Use only `full_text_evidence` from extracted review records when choosing
   replacement categories and values. Do not use abstracts, titles, query
   metadata, citation metadata, or imagined primary papers to repair the ontology.
 - Do not introduce catch-all values such as `unclear`, `not_reported`, `other`,
   `mixed_or_unclear`, `not_applicable`, or `unknown`.
+- If repairing `knowledge_goal`, return the complete replacement
+  `knowledge_goal` category with at least three concrete primary
+  research-focus facet values, `required` true, `selection` single, and
+  `applies_when` null.
+- Every `knowledge_goal` value must be the exact `category_id` of a sibling
+  facet category that also appears in `upsert_categories` or already exists in
+  the failed contract. If a matching facet category is missing or affected by
+  the issue, include it in `upsert_categories` with detailed allowed values
+  grounded only in review full-text evidence.
+- Do not repair `knowledge_goal` with whole-question or action values such as
+  `effect_of_x`, `impact_of_x`, `role_of_x`, `improving_x`, or `supporting_x`.
 - If a category depends on a repaired parent value, repair the dependency or
   replace the dependent category.
 - If no extracted review full-text evidence is available, the pipeline should

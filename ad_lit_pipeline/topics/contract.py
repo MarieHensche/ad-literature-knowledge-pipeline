@@ -14,10 +14,8 @@ LEGACY_RESEARCH_TARGET_CATEGORY_ID = "research_target"
 REQUIRED_TOPIC_CATEGORY_IDS: tuple[str, ...] = ()
 VALID_CATEGORY_SELECTIONS = {"single", "multi"}
 GENERATED_TAGGING_MIN_CATEGORIES = 6
+KNOWLEDGE_GOAL_CATEGORY_ID = "knowledge_goal"
 GENERATED_TAG_LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
-RETIRED_TAGGING_CATEGORY_IDS = {
-    "knowledge_goal",
-}
 
 FALLBACK_TAG_VALUES = {
     "ambiguous",
@@ -99,6 +97,35 @@ GENERATED_CATCHALL_TAG_VALUES = {
     "other",
     "not_specified",
 }
+WEAK_KNOWLEDGE_GOAL_PREFIXES = (
+    "addressing_",
+    "assessing_",
+    "decreasing_",
+    "enhancing_",
+    "effect_of_",
+    "effects_of_",
+    "evaluating_",
+    "exploring_",
+    "facilitating_",
+    "improving_",
+    "increasing_",
+    "investigating_",
+    "impact_of_",
+    "impacts_of_",
+    "measuring_",
+    "optimizing_",
+    "promoting_",
+    "reducing_",
+    "relationship_between_",
+    "relationships_between_",
+    "role_of_",
+    "strengthening_",
+    "studying_",
+    "supporting_",
+    "understanding_",
+)
+
+
 @dataclass(frozen=True)
 class TaggingQualityIssue:
     """Programmatic description of a generated tagging quality problem."""
@@ -384,11 +411,6 @@ def normalize_tagging_label(value: str) -> str:
     return re.sub(r"_+", "_", normalized)
 
 
-def is_retired_tagging_category_id(category_id: object) -> bool:
-    """Return whether a generated category id has been removed from the pipeline."""
-    return normalize_tagging_label(str(category_id)) in RETIRED_TAGGING_CATEGORY_IDS
-
-
 def is_generated_tag_label(value: str) -> bool:
     """Return whether a generated tag id/value is stable lowercase snake_case."""
     return GENERATED_TAG_LABEL_PATTERN.fullmatch(value) is not None
@@ -469,18 +491,6 @@ def generated_tagging_quality_issue_records(
                     message=(
                         f"tagging.categories.{category_id} is a meta-category. "
                         "Use separate concrete categories instead."
-                    ),
-                )
-            )
-        if category_label in RETIRED_TAGGING_CATEGORY_IDS:
-            issues.append(
-                TaggingQualityIssue(
-                    code="retired_category_id",
-                    category_id=str(category_id),
-                    message=(
-                        f"tagging.categories.{category_id} is retired and must "
-                        "not be generated. Use topic-specific categories "
-                        "directly instead of a root focus category."
                     ),
                 )
             )
@@ -614,6 +624,105 @@ def generated_tagging_quality_issue_records(
                 )
             )
 
+    knowledge_goal = categories.get(KNOWLEDGE_GOAL_CATEGORY_ID)
+    if not isinstance(knowledge_goal, dict):
+        issues.append(
+            TaggingQualityIssue(
+                code="missing_knowledge_goal",
+                category_id=None,
+                message=(
+                    f"tagging.categories must include "
+                    f"`{KNOWLEDGE_GOAL_CATEGORY_ID}` as the required "
+                    "single-selection primary research-focus category. Its "
+                    "values should be the topic's main facet category ids, "
+                    "so each paper can be tagged by its dominant facet while "
+                    "the facet categories capture detailed values."
+                ),
+            )
+        )
+    else:
+        applies_when = knowledge_goal.get("applies_when")
+        if (
+            knowledge_goal.get("required") is not True
+            or knowledge_goal.get("selection") != "single"
+            or applies_when not in (None, {})
+        ):
+            issues.append(
+                TaggingQualityIssue(
+                    code="invalid_knowledge_goal_shape",
+                    category_id=KNOWLEDGE_GOAL_CATEGORY_ID,
+                    message=(
+                        f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID} must "
+                        "be required=true, selection=single, and "
+                        "applies_when=null."
+                    ),
+                )
+            )
+        values = require_list(
+            knowledge_goal.get("values"),
+            f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values",
+        )
+        substantive_values = substantive_tag_values(values)
+        if len(substantive_values) < 3:
+            issues.append(
+                TaggingQualityIssue(
+                    code="too_few_knowledge_goal_values",
+                    category_id=KNOWLEDGE_GOAL_CATEGORY_ID,
+                    values=tuple(str(value) for value in substantive_values),
+                    message=(
+                        f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
+                        "must contain at least three concrete topic-facet "
+                        "category ids so the primary research-focus root is "
+                        "not too coarse."
+                    ),
+                )
+            )
+        missing_facet_categories = [
+            value
+            for value in substantive_values
+            if value != KNOWLEDGE_GOAL_CATEGORY_ID and value not in categories
+        ]
+        if missing_facet_categories:
+            issues.append(
+                TaggingQualityIssue(
+                    code="knowledge_goal_missing_facet_categories",
+                    category_id=KNOWLEDGE_GOAL_CATEGORY_ID,
+                    values=tuple(str(value) for value in missing_facet_categories),
+                    message=(
+                        f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
+                        "must be exact category ids of sibling topic-facet "
+                        "categories. Missing facet category/categories for "
+                        f"value(s) {missing_facet_categories}. Add matching "
+                        "categories with those category_id values, or rename "
+                        "the root values to existing concrete facet category "
+                        "ids."
+                    ),
+                )
+            )
+        vague_values = [
+            value
+            for value in substantive_values
+            if normalize_tagging_label(value).startswith(WEAK_KNOWLEDGE_GOAL_PREFIXES)
+        ]
+        if vague_values:
+            issues.append(
+                TaggingQualityIssue(
+                    code="vague_knowledge_goal_values",
+                    category_id=KNOWLEDGE_GOAL_CATEGORY_ID,
+                    values=tuple(str(value) for value in vague_values),
+                    message=(
+                        f"tagging.categories.{KNOWLEDGE_GOAL_CATEGORY_ID}.values "
+                        f"contains vague benefit/action value(s) {vague_values}. "
+                        "The root category must be a primary research-focus "
+                        "facet selector, with values that match concrete "
+                        "sibling facet category ids, for example a topic's "
+                        "intervention, setting, population, exposure, outcome, "
+                        "measurement, or mechanism facets when those facets "
+                        "fit the evidence."
+                    ),
+                )
+            )
+
     return issues
 
 
@@ -690,30 +799,10 @@ def tagging_config_from_contract(contract: dict[str, Any]) -> dict[str, Any]:
     validate_topic_contract(contract)
     tagging = require_mapping(contract["tagging"], "tagging")
     categories = require_mapping(tagging["categories"], "tagging.categories")
-    active_categories = {
-        category_id: category
-        for category_id, category in categories.items()
-        if not is_retired_tagging_category_id(category_id)
-    }
-    removed_category_ids = set(categories) - set(active_categories)
-    active_categories = {
-        category_id: category
-        for category_id, category in active_categories.items()
-        if not (
-            isinstance(category, dict)
-            and isinstance(category.get("applies_when"), dict)
-            and (
-                category["applies_when"].get("category_id") in removed_category_ids
-                or is_retired_tagging_category_id(
-                    category["applies_when"].get("category_id")
-                )
-            )
-        )
-    }
 
     return {
         "research_topic": contract["research_topic"],
-        "categories": active_categories,
+        "categories": categories,
     }
 
 

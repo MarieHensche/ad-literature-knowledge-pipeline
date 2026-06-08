@@ -67,9 +67,8 @@ def test_topic_contract_template_loads() -> None:
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert contract["collection"]["exclude_openalex_review_type"] is False
     assert contract["collection"]["search_queries"] == []
-    assert "knowledge_goal" not in contract["tagging"]["categories"]
-    assert "primary_topic_detail" in contract["tagging"]["categories"]
-    assert "secondary_focus_detail" in contract["tagging"]["categories"]
+    assert "knowledge_goal" in contract["tagging"]["categories"]
+    assert "example_goal_b_subtype" in contract["tagging"]["categories"]
     assert "research_target" not in contract["tagging"]["categories"]
 
 
@@ -137,7 +136,17 @@ def test_topic_contract_does_not_require_generic_mantis_categories() -> None:
 def generated_quality_contract() -> dict:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
     contract["tagging"]["categories"] = {
-        "ai": {
+        "knowledge_goal": {
+            "required": True,
+            "selection": "single",
+            "values": [
+                "ai_tool_type",
+                "education_level",
+                "outcome_domain",
+                "assessment_signal",
+            ],
+        },
+        "ai_tool_type": {
             "required": False,
             "selection": "multi",
             "values": [
@@ -147,7 +156,7 @@ def generated_quality_contract() -> dict:
                 "generative_ai_assistant",
             ],
         },
-        "formal_education": {
+        "education_level": {
             "required": False,
             "selection": "multi",
             "values": [
@@ -157,7 +166,7 @@ def generated_quality_contract() -> dict:
                 "mixed_levels",
             ],
         },
-        "learning_impact": {
+        "outcome_domain": {
             "required": False,
             "selection": "multi",
             "values": [
@@ -228,26 +237,43 @@ def test_generated_tagging_quality_requires_enough_categories() -> None:
         validate_generated_tagging_quality(contract)
 
 
-def test_generated_tagging_quality_rejects_retired_categories() -> None:
+def test_generated_tagging_quality_requires_root_partition() -> None:
     contract = generated_quality_contract()
-    contract["tagging"]["categories"]["knowledge_goal"] = {
-        "required": True,
-        "selection": "single",
-        "values": ["ai", "formal_education"],
-    }
+    del contract["tagging"]["categories"]["knowledge_goal"]
+
+    with pytest.raises(ValueError, match="knowledge_goal"):
+        validate_generated_tagging_quality(contract)
+
+
+def test_generated_tagging_quality_requires_valid_knowledge_goal() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["selection"] = "multi"
+
+    with pytest.raises(ValueError, match="knowledge_goal"):
+        validate_generated_tagging_quality(contract)
+
+
+def test_generated_tagging_quality_requires_knowledge_goal_facet_categories() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "ai_tool_type",
+        "education_level",
+        "missing_facet",
+    ]
 
     records = generated_tagging_quality_issue_records(contract)
 
     assert any(
-        record.code == "retired_category_id"
+        record.code == "knowledge_goal_missing_facet_categories"
         and record.category_id == "knowledge_goal"
+        and "missing_facet" in record.values
         for record in records
     )
 
 
 def test_generated_tagging_quality_rejects_catchall_values() -> None:
     contract = generated_quality_contract()
-    contract["tagging"]["categories"]["ai"]["values"].append("not_reported")
+    contract["tagging"]["categories"]["ai_tool_type"]["values"].append("not_reported")
 
     issues = generated_tagging_quality_issues(contract)
 
@@ -286,6 +312,10 @@ def test_generated_tagging_quality_issue_records_include_codes() -> None:
             "meta_analysis",
         ],
     }
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "improving_maternal_mental_health",
+        "enhancing_user_engagement",
+    ]
 
     records = generated_tagging_quality_issue_records(contract)
 
@@ -294,11 +324,21 @@ def test_generated_tagging_quality_issue_records_include_codes() -> None:
         and record.category_id == "study_design"
         for record in records
     )
+    assert any(
+        record.code == "too_few_knowledge_goal_values"
+        and record.category_id == "knowledge_goal"
+        for record in records
+    )
+    assert any(
+        record.code == "vague_knowledge_goal_values"
+        and "enhancing_user_engagement" in record.values
+        for record in records
+    )
 
 
 def test_generated_tagging_quality_rejects_non_snake_case_labels() -> None:
     contract = generated_quality_contract()
-    contract["tagging"]["categories"]["learning_impact"]["values"] = [
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
         "performance improvement",
         "engagement_support",
         "learning_process_support",
@@ -307,6 +347,19 @@ def test_generated_tagging_quality_rejects_non_snake_case_labels() -> None:
     issues = generated_tagging_quality_issues(contract)
 
     assert any("non-snake-case" in issue for issue in issues)
+
+
+def test_generated_tagging_quality_rejects_vague_knowledge_goal_values() -> None:
+    contract = generated_quality_contract()
+    contract["tagging"]["categories"]["knowledge_goal"]["values"] = [
+        "improving_maternal_mental_health",
+        "enhancing_user_engagement",
+        "supporting_social_support_networks",
+    ]
+
+    issues = generated_tagging_quality_issues(contract)
+
+    assert any("vague benefit/action" in issue for issue in issues)
 
 
 def test_topic_contract_requires_valid_anchor_topic() -> None:
