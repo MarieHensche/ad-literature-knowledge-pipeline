@@ -55,22 +55,22 @@ tagging:
     prefer_mixed_or_unclear_when_unclear_missing: false
     missing_information_value: ""
   categories:
-    knowledge_goal:
-      description: Example only. Replace with the main review-derived root partition for the topic.
-      required: true
-      selection: single
+    primary_topic_detail:
+      description: Example only. Replace with a concrete topic-specific category.
+      required: false
+      selection: multi
       values:
-        - goal_a
-        - goal_b
-        - goal_c
-    example_goal_b_subtype:
-      description: Example only. Use conditional sub-categories when one root value requires more detail.
+        - subtype_a
+        - subtype_b
+        - subtype_c
+    secondary_focus_detail:
+      description: Example only. Use conditional sub-categories when one parent value requires more detail.
       required: true
       selection: single
       applies_when:
-        category_id: knowledge_goal
+        category_id: primary_topic_detail
         values:
-          - goal_b
+          - subtype_b
       values:
         - subtype_b1
         - subtype_b2

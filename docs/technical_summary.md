@@ -181,23 +181,19 @@ Tagging categories are topic-specific knowledge dimensions. Generated contracts
 start from example placeholders, then the review-seeded refinement step replaces
 or improves them from extracted review full-text evidence only. New
 generated/refined contracts must contain at least six concrete knowledge
-categories, reject generic meta-categories, and include a required
-single-selection `knowledge_goal` root category whose concrete values form the
-complete, mutually exclusive primary study-focus or knowledge-contribution
-partition of included papers. The `knowledge_goal` values are inferred from
-review full texts, then calibrated against selected primary-paper full texts,
-and should use `topic_structure.main_topics` as scaffolding for the main roles
-papers play around the topic. Details that apply only under one root value should be
-represented as conditional categories with `applies_when`.
+categories and reject generic meta-categories. Categories and values are
+inferred from review full texts, then calibrated against selected primary-paper
+full texts, and should use `topic_structure.main_topics` as scaffolding for
+topic-specific dimensions. Details that apply only under one parent value
+should be represented as conditional categories with `applies_when`.
 Generated values should avoid `unclear`, `not_reported`, `mixed_or_unclear`,
 and `other`; missing or inapplicable details should usually be represented by
 optional or conditional categories instead. The audit step checks observed
 tag distributions after paper tagging: unused values and highly dominant values
-are reported, and bad `knowledge_goal` partitions block export so a collapsed
-root ontology is not treated as Mantis-ready. The quality checks also warn
-about boilerplate labels such as `study_design` and `population_group` that
-should be rewritten as topic-specific review-derived dimensions. Category values
-do not expand rule-based screening terms.
+are reported as warnings. The quality checks also warn about boilerplate labels
+such as `study_design` and `population_group` that should be rewritten as
+topic-specific review-derived dimensions. Category values do not expand
+rule-based screening terms.
 
 The legacy `configs/early_detection_tagging_config.yaml` is still supported by
 the direct normalization step, but orchestrated runs require `--topic-contract`.

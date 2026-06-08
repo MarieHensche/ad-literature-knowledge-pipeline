@@ -34,15 +34,6 @@ Rules:
 - For required categories with no fallback_value, choose the best concrete value
   from the allowed exhaustive partition using the title, abstract, and full-text
   evidence.
-- For `knowledge_goal`, choose the single value that best describes the paper's
-  primary research-focus facet: the facet the paper mainly investigates, tests,
-  measures, explains, or applies. Do not select the broadest or first-listed
-  value by default; use the title, abstract, and full-text evidence to
-  distinguish the paper from other likely papers in the collection.
-- When the selected `knowledge_goal` value has the same id as another allowed
-  category, still tag that matching facet category with its best detailed
-  value(s) when evidence is available. Also tag other applicable facet
-  categories when the paper reports them.
 - For optional categories with no supported value, return an empty array.
 - Do not combine fallback values such as `not_reported`, `unclear`, or
   `mixed_or_unclear` with concrete values in the same category.

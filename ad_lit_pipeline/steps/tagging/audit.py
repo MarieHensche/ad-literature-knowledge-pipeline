@@ -7,7 +7,6 @@ from collections import Counter
 from pathlib import Path
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
-from ad_lit_pipeline.topics.contract import KNOWLEDGE_GOAL_CATEGORY_ID
 
 
 STEP = StepSpec(
@@ -20,7 +19,6 @@ STEP = StepSpec(
 
 MIN_ROWS_FOR_DISTRIBUTION_WARNING = 5
 DOMINANT_VALUE_WARNING_THRESHOLD = 0.9
-KNOWLEDGE_GOAL_DOMINANT_VALUE_ERROR_THRESHOLD = 0.75
 
 
 def load_json(path: Path) -> dict[str, object]:
@@ -123,12 +121,6 @@ def distribution_issue(
     }
 
 
-def is_blocking_distribution_issue(issue: dict[str, str]) -> bool:
-    return issue.get("issue", "").endswith("_error") or "_error:" in issue.get(
-        "issue", ""
-    )
-
-
 def audit_row(
     row: dict[str, str],
     allowed: dict[str, set[str]],
@@ -220,41 +212,25 @@ def audit_distribution(
         for row in applicable_rows:
             counter.update(split_values(row.get(category_id, "")))
 
-        is_knowledge_goal = category_id == KNOWLEDGE_GOAL_CATEGORY_ID
         for value in allowed_values:
             if counter.get(value, 0) == 0:
-                issue_type = (
-                    "knowledge_goal_unused_value_distribution_error"
-                    if is_knowledge_goal
-                    else "unused_value_distribution_warning"
-                )
                 issues.append(
                     distribution_issue(
                         category_id,
                         value,
-                        issue_type,
+                        "unused_value_distribution_warning",
                         0,
                         applicable_count,
                     )
                 )
 
-        dominant_threshold = (
-            KNOWLEDGE_GOAL_DOMINANT_VALUE_ERROR_THRESHOLD
-            if is_knowledge_goal
-            else DOMINANT_VALUE_WARNING_THRESHOLD
-        )
         for value, count in counter.items():
-            if count / applicable_count >= dominant_threshold:
-                issue_type = (
-                    "knowledge_goal_dominant_value_distribution_error"
-                    if is_knowledge_goal
-                    else "dominant_value_distribution_warning"
-                )
+            if count / applicable_count >= DOMINANT_VALUE_WARNING_THRESHOLD:
                 issues.append(
                     distribution_issue(
                         category_id,
                         value,
-                        issue_type,
+                        "dominant_value_distribution_warning",
                         count,
                         applicable_count,
                     )
@@ -316,19 +292,6 @@ def run(
     print(f"Issues found: {len(issues)}")
 
     write_issues(output_path, issues)
-    blocking_issues = [
-        issue for issue in issues if is_blocking_distribution_issue(issue)
-    ]
-    if blocking_issues:
-        examples = "; ".join(
-            f"{issue['field']}={issue['value']} ({issue['issue']})"
-            for issue in blocking_issues[:3]
-        )
-        raise ValueError(
-            "Blocking knowledge-tagging distribution issue(s) found. "
-            "Revise the generated topic contract categories/values or rerun "
-            f"contract generation. Examples: {examples}"
-        )
 
     return StepResult(
         step_name=STEP.name,

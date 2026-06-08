@@ -38,7 +38,6 @@ from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.topics.contract import (
     BOILERPLATE_CATEGORY_IDS,
     GENERATED_CATCHALL_TAG_VALUES,
-    KNOWLEDGE_GOAL_CATEGORY_ID,
     TaggingQualityIssue,
     generated_tagging_quality_issue_records,
     load_topic_contract,
@@ -53,7 +52,7 @@ STEP = StepSpec(
     inputs=["topic_description", "topic_contract_yaml", "review_overviews_jsonl"],
     outputs=["topic_contract_yaml"],
     uses_llm=True,
-    description="Refine topic-contract tags from review and overview papers.",
+    description="Refine topic-contract ontology and tags from review papers.",
 )
 
 SYSTEM_MESSAGE = "You refine literature-pipeline topic contracts as strict JSON."
@@ -64,10 +63,7 @@ REPAIRABLE_TAGGING_ISSUE_CODES = {
     "catchall_values",
     "too_few_values",
     "too_few_categories",
-    "invalid_knowledge_goal_shape",
-    "too_few_knowledge_goal_values",
-    "knowledge_goal_missing_facet_categories",
-    "vague_knowledge_goal_values",
+    "retired_category_id",
     "meta_dependency",
     "broad_dependency_values",
 }
@@ -77,10 +73,7 @@ REPLACE_CATEGORY_ISSUE_CODES = {
     "meta_values",
     "catchall_values",
     "too_few_values",
-    "invalid_knowledge_goal_shape",
-    "too_few_knowledge_goal_values",
-    "knowledge_goal_missing_facet_categories",
-    "vague_knowledge_goal_values",
+    "retired_category_id",
     "meta_dependency",
     "broad_dependency_values",
 }
@@ -88,11 +81,13 @@ MISSING_REVIEW_FULL_TEXT_ERROR = (
     "Topic-contract refinement requires extracted full text from at least one "
     "topic-relevant review/overview seed paper. Run prepare_review_full_text "
     "and ensure at least one seed has a readable full_text_text_path and "
-    "enough topic-specific evidence before refining tagging categories."
+    "enough topic-specific evidence before refining the ontology and tagging "
+    "categories."
 )
 IGNORED_NO_FULL_TEXT_REVIEWS_WARNING = (
     "Ignored review/overview seed papers without extracted full text; final "
-    "tagging categories were refined only from review full-text evidence."
+    "ontology and tagging categories were refined only from review full-text "
+    "evidence."
 )
 IGNORED_OFF_TOPIC_REVIEWS_WARNING = (
     "Ignored review/overview seed papers whose title and extracted full text "
@@ -497,9 +492,17 @@ def select_review_overviews_with_full_text(
 def merge_refined_tagging(
     current_contract: dict[str, Any],
     proposed_contract: dict[str, Any],
+    *,
+    include_topic_structure: bool = False,
 ) -> dict[str, Any]:
-    """Apply only review-derived tagging updates to the current contract."""
+    """Apply review-derived ontology updates to the current contract."""
     refined = deepcopy(current_contract)
+    if include_topic_structure:
+        proposed_topic_structure = proposed_contract.get("topic_structure")
+        if not isinstance(proposed_topic_structure, dict):
+            raise ValueError("Refined topic contract must contain topic_structure.")
+        refined["topic_structure"] = deepcopy(proposed_topic_structure)
+
     proposed_tagging = proposed_contract.get("tagging")
     if not isinstance(proposed_tagging, dict):
         raise ValueError("Refined topic contract must contain tagging.")
@@ -572,8 +575,7 @@ def apply_tagging_repair_patch(
         if str(category_id).strip()
     ]
     for category_id in normalized_remove_ids:
-        if category_id != KNOWLEDGE_GOAL_CATEGORY_ID:
-            categories.pop(category_id, None)
+        categories.pop(category_id, None)
 
     original_order = list(categories)
     seen_upsert_ids: set[str] = set()
@@ -590,12 +592,8 @@ def apply_tagging_repair_patch(
         categories[category_id] = category_payload
 
     ordered_categories: dict[str, Any] = {}
-    if KNOWLEDGE_GOAL_CATEGORY_ID in categories:
-        ordered_categories[KNOWLEDGE_GOAL_CATEGORY_ID] = categories[
-            KNOWLEDGE_GOAL_CATEGORY_ID
-        ]
     for category_id in original_order:
-        if category_id != KNOWLEDGE_GOAL_CATEGORY_ID and category_id in categories:
+        if category_id in categories:
             ordered_categories[category_id] = categories[category_id]
     for category_id, category in categories.items():
         if category_id not in ordered_categories:
@@ -726,7 +724,11 @@ def call_llm(
         try:
             proposed_contract = contract_from_model_payload(result.parsed)
             validate_topic_contract(proposed_contract)
-            contract = merge_refined_tagging(current_contract, proposed_contract)
+            contract = merge_refined_tagging(
+                current_contract,
+                proposed_contract,
+                include_topic_structure=True,
+            )
             validate_topic_contract(contract)
         except ValueError as error:
             last_error = error

@@ -61,12 +61,14 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "tagging categories in this first contract are provisional" in prompt.lower()
     assert "final extraction ontology" in prompt
     assert "Include at least one provisional tagging category" in prompt
-    assert "knowledge_goal" in prompt
+    assert "do not create any root\n  focus selector" in prompt
     assert "examples only" in prompt
     assert "`applies_when`" in prompt
     assert "common abbreviations or acronyms" in prompt
     assert "Make main topics broad enough for title screening" in prompt
     assert "at least 6 terms" in prompt
+    assert "mandatory core concept for title screening" in prompt
+    assert "later categories may use those ids directly" in prompt
     assert "climate change affect human health" in prompt
     assert "at least 6 knowledge tagging categories" not in prompt
     assert "mental distribution check" not in prompt
@@ -99,15 +101,14 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "Define tagging categories and allowed values only from `full_text_evidence`" in prompt
     assert "Do not use titles, abstracts, query metadata" in prompt
     assert "at least 6 knowledge tagging categories" in prompt
-    assert "category_id `knowledge_goal`" in prompt
-    assert "primary research-focus selector" in prompt
-    assert "exact `category_id` values of sibling facet" in prompt
-    assert "dominant facet" in prompt
+    assert "Do not create a root focus selector" in prompt
+    assert "Tag papers directly with topic-specific categories" in prompt
     assert "topic_structure.main_topics" in prompt
+    assert "mandatory core concept for title screening" in prompt
+    assert "improve recall without weakening topical fit" in prompt
     assert "whole-question" in prompt
     assert "effect_of_x" in prompt
     assert "mental distribution check" in prompt
-    assert "no single value should be so broad" in prompt
     assert "conditional sub-categories" in prompt
     assert "Do not add `unclear`, `mixed_or_unclear`, `not_reported`, or `other`" in prompt
     assert "generic boilerplate categories" in prompt
@@ -115,7 +116,7 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "topic-specific id and values" in prompt
     assert "multiple allowed values" in prompt
     assert "`applies_when`" in prompt
-    assert "only about knowledge tagging" in prompt
+    assert "may refine only `topic_structure` and `tagging.categories`" in prompt
     assert "know-how" not in prompt
     assert "imagined primary papers" in prompt
     assert "If no extracted review full-text evidence is available" in prompt
@@ -140,10 +141,8 @@ def test_calibrate_topic_contract_prompt_uses_primary_full_text_evidence() -> No
     assert "full_text_evidence" in prompt
     assert "review-derived ontology as the starting point" in prompt
     assert "light polish step" in prompt
-    assert "primary research-focus selector" in prompt
-    assert "exact `category_id` values of sibling facet" in prompt
-    assert "deterministically synchronize `knowledge_goal.values`" in prompt
-    assert "`knowledge_goal` for paper-by-paper assignment" in prompt
+    assert "Do not create any root focus selector" in prompt
+    assert "root focus selector" in prompt
     assert "Preserve `research_topic`, `topic_structure`, `scope`" in prompt
     assert "AI tutoring changed classroom engagement" in prompt
     assert "completely new ontology" in prompt
@@ -185,6 +184,7 @@ def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
     assert "Do not use abstracts, titles, query" in prompt
     assert "Do not return a full topic contract" in prompt
     assert "boilerplate_category_id" in prompt
+    assert "Remove retired categories if they appear" in prompt
 
 
 def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
@@ -217,4 +217,4 @@ def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:
     assert "Do not combine fallback values" in prompt
     assert "required categories with no fallback_value" in prompt
     assert "Do not select the broadest or first-listed value" in prompt
-    assert "primary research-focus facet" in prompt
+    assert "single main-topic value" in prompt

@@ -95,17 +95,7 @@ def generated_topic_contract_payload() -> dict:
         ),
     }
     payload["tagging"]["categories"] = {
-        "knowledge_goal": {
-            "required": True,
-            "selection": "single",
-            "values": [
-                "ai_tool_type",
-                "education_level",
-                "outcome_domain",
-                "assessment_signal",
-            ],
-        },
-        "ai_tool_type": {
+        "ai": {
             "required": False,
             "selection": "multi",
             "values": [
@@ -115,7 +105,7 @@ def generated_topic_contract_payload() -> dict:
                 "generative_ai_assistant",
             ],
         },
-        "education_level": {
+        "formal_education": {
             "required": False,
             "selection": "multi",
             "values": [
@@ -125,7 +115,7 @@ def generated_topic_contract_payload() -> dict:
                 "mixed_levels",
             ],
         },
-        "outcome_domain": {
+        "learning_impact": {
             "required": False,
             "selection": "multi",
             "values": [
@@ -169,21 +159,104 @@ def generated_topic_contract_payload() -> dict:
     return payload
 
 
-def test_generated_contract_payload_normalizes_tag_labels() -> None:
-    payload = generated_topic_contract_payload()
-    payload["tagging"]["categories"] = [
-        {
-            "category_id": "Knowledge Goal",
-            "description": "Root category.",
-            "required": True,
-            "selection": "single",
+def refined_early_detection_contract_payload() -> dict:
+    payload = deepcopy(load_topic_contract(TOPIC_CONTRACT))
+    payload["tagging"]["categories"] = {
+        "early_detection": {
+            "description": (
+                "Review evidence distinguishes early-detection tasks studied "
+                "in AD and related impairment papers."
+            ),
+            "required": False,
+            "selection": "multi",
             "values": [
-                "Sleep Quality Analysis",
-                "stress-outcome evaluation",
-                "urban/design effects",
+                "screening",
+                "early_diagnosis",
+                "classification",
+                "conversion_prediction",
             ],
             "applies_when": None,
         },
+        "disease_state": {
+            "description": (
+                "Disease or impairment states targeted by early-detection "
+                "evidence in the reviews."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "alzheimers_disease",
+                "mci",
+                "dementia",
+                "preclinical_ad",
+            ],
+            "applies_when": None,
+        },
+        "evidence_signal": {
+            "description": (
+                "Evidence signal families used for early AD detection in the "
+                "review full text."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "neuroimaging",
+                "speech_language",
+                "cognitive_assessment",
+                "fluid_biomarker",
+            ],
+            "applies_when": None,
+        },
+        "modeling_approach": {
+            "description": (
+                "Analytic modeling approaches used for early detection."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "machine_learning",
+                "deep_learning",
+                "statistical_modeling",
+                "clinical_rule",
+            ],
+            "applies_when": None,
+        },
+        "validation_context": {
+            "description": (
+                "Validation settings reported for detection evidence."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "internal_validation",
+                "external_validation",
+                "cross_validation",
+                "clinical_validation",
+            ],
+            "applies_when": None,
+        },
+        "clinical_detection_context": {
+            "description": (
+                "Review evidence distinguishes screening, diagnosis, and "
+                "risk-stratification contexts."
+            ),
+            "required": False,
+            "selection": "multi",
+            "values": [
+                "population_screening",
+                "clinical_diagnosis",
+                "risk_stratification",
+                "disease_monitoring",
+            ],
+            "applies_when": None,
+        },
+    }
+    return payload
+
+
+def test_generated_contract_payload_normalizes_tag_labels() -> None:
+    payload = generated_topic_contract_payload()
+    payload["tagging"]["categories"] = [
         {
             "category_id": "Green Space Type",
             "description": "Green-space forms studied in the paper.",
@@ -209,14 +282,8 @@ def test_generated_contract_payload_normalizes_tag_labels() -> None:
     categories = contract["tagging"]["categories"]
 
     assert list(categories) == [
-        "knowledge_goal",
         "green_space_type",
         "green_space_detail",
-    ]
-    assert categories["knowledge_goal"]["values"] == [
-        "sleep_quality_analysis",
-        "stress_outcome_evaluation",
-        "urban_design_effects",
     ]
     assert categories["green_space_type"]["values"] == [
         "community_gardens",
@@ -402,6 +469,16 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                                 "morbidity",
                             ],
                         },
+                        {
+                            "topic_id": "adaptation_strategy",
+                            "label": "Adaptation strategy",
+                            "terms": [
+                                "adaptation",
+                                "public health adaptation",
+                                "heat action plan",
+                                "preparedness",
+                            ],
+                        },
                     ],
                     "secondary_topics": {
                         "climate_change": [
@@ -455,23 +532,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                     },
                     "categories": [
                         {
-                            "category_id": "knowledge_goal",
-                            "description": (
-                                "Primary research-focus selector over "
-                                "climate-health facets."
-                            ),
-                            "required": True,
-                            "selection": "single",
-                            "values": [
-                                "climate_exposure",
-                                "health_outcome",
-                                "adaptation_strategy",
-                                "exposure_measurement",
-                            ],
-                            "applies_when": None,
-                        },
-                        {
-                            "category_id": "climate_exposure",
+                            "category_id": "climate_change",
                             "description": "Climate-related exposures examined in the paper.",
                             "required": False,
                             "selection": "multi",
@@ -484,7 +545,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                             "applies_when": None,
                         },
                         {
-                            "category_id": "health_outcome",
+                            "category_id": "human_health",
                             "description": "Health outcomes studied in climate-health papers.",
                             "required": False,
                             "selection": "multi",
@@ -594,7 +655,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     assert contract["topic_id"] == "climate_health"
     assert "main_topic_category" not in contract["tagging"]["categories"]
     assert "review_status" not in contract["tagging"]["categories"]
-    assert contract["tagging"]["categories"]["health_outcome"]["selection"] == "multi"
+    assert contract["tagging"]["categories"]["human_health"]["selection"] == "multi"
     assert contract["tagging"]["categories"]["heat_adaptation_detail"][
         "applies_when"
     ] == {"category_id": "adaptation_strategy", "values": ["heat_action_plan"]}
@@ -643,7 +704,7 @@ def test_generate_topic_contract_accepts_weak_provisional_tagging(
     ]["minItems"] == 1
     assert "target_population" in categories
     assert "study_design" in categories
-    assert result.row_counts["tagging_categories"] == 10
+    assert result.row_counts["tagging_categories"] == 9
 
 
 def test_generate_topic_contract_still_retries_on_structural_errors(
@@ -662,7 +723,7 @@ def test_generate_topic_contract_still_retries_on_structural_errors(
         trace_dir=tmp_path / "traces",
     )
 
-    assert result.row_counts["tagging_categories"] == 7
+    assert result.row_counts["tagging_categories"] == 6
     assert len(client.requests) == 2
     assert client.requests[0]["call_id"] == "contract"
     assert client.requests[1]["call_id"] == "contract_retry_2"
@@ -719,110 +780,11 @@ def test_refine_topic_contract_adds_review_seeded_categories(
         ],
     )
 
-    refined_payload = deepcopy(contract)
+    refined_payload = refined_early_detection_contract_payload()
     refined_payload["research_topic"]["title"] = "Changed outside tagging"
-    refined_payload["tagging"]["categories"] = [
-        {
-            "category_id": "knowledge_goal",
-            "description": (
-                "Review-derived primary research-focus selector over early "
-                "AD detection facets."
-            ),
-            "required": True,
-            "selection": "single",
-            "values": [
-                "evidence_signal_family",
-                "detection_outcome",
-                "modeling_approach",
-                "validation_context",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "evidence_signal_family",
-            "description": "Evidence signal families used for early AD detection.",
-            "required": False,
-            "selection": "multi",
-            "values": [
-                "neuroimaging",
-                "speech_language",
-                "cognitive_assessment",
-                "fluid_biomarker",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "detection_outcome",
-            "description": "Detection outcomes emphasized by review evidence.",
-            "required": False,
-            "selection": "multi",
-            "values": [
-                "diagnostic_accuracy",
-                "conversion_prediction",
-                "screening_feasibility",
-                "treatment_response_prediction",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "modeling_approach",
-            "description": "Analytic modeling approaches used for early detection.",
-            "required": False,
-            "selection": "multi",
-            "values": [
-                "machine_learning",
-                "deep_learning",
-                "statistical_modeling",
-                "clinical_rule",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "validation_context",
-            "description": "Validation settings reported for detection evidence.",
-            "required": False,
-            "selection": "multi",
-            "values": [
-                "internal_validation",
-                "external_validation",
-                "cross_validation",
-                "clinical_validation",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "clinical_detection_context",
-            "description": (
-                "Review evidence distinguishes screening, diagnosis, and "
-                "monitoring contexts."
-            ),
-            "required": False,
-            "selection": "multi",
-            "values": [
-                "population_screening",
-                "clinical_diagnosis",
-                "risk_stratification",
-                "disease_monitoring",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "biomarker_data_source",
-            "description": (
-                "Review evidence reports different data sources used for early "
-                "detection biomarkers."
-            ),
-            "required": False,
-            "selection": "multi",
-            "values": [
-                "imaging_data",
-                "speech_language_data",
-                "cognitive_test_data",
-                "blood_or_csf_data",
-            ],
-            "applies_when": None,
-        },
-    ]
+    refined_payload["topic_structure"]["main_topics"][2]["terms"].append(
+        "fluid assay"
+    )
     client = StaticJSONClient([refined_payload])
 
     result = run_refine_topic_contract(
@@ -839,20 +801,23 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     categories = refined["tagging"]["categories"]
     assert "main_topic_category" not in categories
     assert refined["research_topic"] == contract["research_topic"]
-    assert refined["topic_structure"] == contract["topic_structure"]
-    assert "evidence_signal_family" in categories
-    assert "detection_outcome" in categories
+    assert refined["scope"] == contract["scope"]
+    assert refined["topic_structure"] != contract["topic_structure"]
+    assert "fluid assay" in refined["topic_structure"]["main_topics"][2]["terms"]
+    assert "knowledge_goal" not in categories
+    assert "evidence_signal" in categories
+    assert "early_detection" in categories
     assert result.row_counts["review_overviews"] == 3
     assert result.row_counts["review_full_texts"] == 2
     assert result.row_counts["review_full_texts_unique"] == 2
     assert result.row_counts["review_full_texts_topic_eligible"] == 1
     assert result.row_counts["review_full_texts_selected"] == 1
-    assert result.row_counts["tagging_categories"] == 7
+    assert result.row_counts["tagging_categories"] == 6
     assert result.warnings == [
         (
             "Ignored review/overview seed papers without extracted full text; "
-            "final tagging categories were refined only from review full-text "
-            "evidence. ignored=1 usable=2 selected=1."
+            "final ontology and tagging categories were refined only from "
+            "review full-text evidence. ignored=1 usable=2 selected=1."
         ),
         (
             "Ignored review/overview seed papers whose title and extracted full "
@@ -961,7 +926,7 @@ def test_refine_topic_contract_repairs_boilerplate_category(
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
     write_jsonl(review_path, [review_seed_with_full_text(tmp_path, "W1")])
-    weak_payload = generated_topic_contract_payload()
+    weak_payload = refined_early_detection_contract_payload()
     weak_payload["tagging"]["categories"]["study_design"] = {
         "required": False,
         "selection": "multi",
@@ -1015,7 +980,7 @@ def test_refine_topic_contract_repairs_boilerplate_category(
     assert any("repair" in path.name for path in result.trace_paths)
 
 
-def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
+def test_refine_topic_contract_repair_removes_retired_knowledge_goal(
     tmp_path: Path,
 ) -> None:
     contract = load_topic_contract(TOPIC_CONTRACT)
@@ -1023,54 +988,16 @@ def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
     write_jsonl(review_path, [review_seed_with_full_text(tmp_path, "W1")])
-    weak_payload = generated_topic_contract_payload()
-    weak_payload["tagging"]["categories"]["knowledge_goal"]["values"] = [
-        "diagnosis",
-        "prognosis",
-    ]
+    weak_payload = refined_early_detection_contract_payload()
+    weak_payload["tagging"]["categories"]["knowledge_goal"] = {
+        "required": True,
+        "selection": "single",
+        "values": ["early_detection", "disease_state"],
+    }
     repair_patch = {
-        "remove_category_ids": [],
-        "upsert_categories": [
-            {
-                "category_id": "knowledge_goal",
-                "description": (
-                    "Primary research-focus selector over early detection facets."
-                ),
-                "required": True,
-                "selection": "single",
-                "values": [
-                    "screening_modality",
-                    "risk_signal",
-                    "validation_target",
-                ],
-                "applies_when": None,
-            },
-            {
-                "category_id": "screening_modality",
-                "description": "Early-detection screening modality studied.",
-                "required": False,
-                "selection": "multi",
-                "values": ["speech_marker", "imaging_marker"],
-                "applies_when": None,
-            },
-            {
-                "category_id": "risk_signal",
-                "description": "Predictive signal used for early-risk estimation.",
-                "required": False,
-                "selection": "multi",
-                "values": ["cognitive_score", "biomarker_signal"],
-                "applies_when": None,
-            },
-            {
-                "category_id": "validation_target",
-                "description": "Clinical target used to validate detection.",
-                "required": False,
-                "selection": "multi",
-                "values": ["mci_detection", "dementia_conversion"],
-                "applies_when": None,
-            },
-        ],
-        "repair_notes": ["Expanded knowledge_goal into three backed facet ids."],
+        "remove_category_ids": ["knowledge_goal"],
+        "upsert_categories": [],
+        "repair_notes": ["Removed retired root category."],
     }
     client = StaticJSONClient([weak_payload, repair_patch])
 
@@ -1084,15 +1011,10 @@ def test_refine_topic_contract_repair_fixes_knowledge_goal_values(
     )
 
     refined = load_topic_contract(contract_path)
-    assert list(refined["tagging"]["categories"])[0] == "knowledge_goal"
-    assert refined["tagging"]["categories"]["knowledge_goal"]["values"] == [
-        "screening_modality",
-        "risk_signal",
-        "validation_target",
-    ]
-    assert "screening_modality" in refined["tagging"]["categories"]
-    assert "risk_signal" in refined["tagging"]["categories"]
-    assert "validation_target" in refined["tagging"]["categories"]
+    assert "knowledge_goal" not in refined["tagging"]["categories"]
+    assert "early_detection" in refined["tagging"]["categories"]
+    assert "disease_state" in refined["tagging"]["categories"]
+    assert "evidence_signal" in refined["tagging"]["categories"]
     assert [request["call_id"] for request in client.requests] == [
         "contract_refinement",
         "contract_refinement_repair",
@@ -1107,7 +1029,7 @@ def test_refine_topic_contract_falls_back_when_targeted_repair_fails(
     write_yaml_object(contract_path, contract)
     review_path = tmp_path / "review_overviews.jsonl"
     write_jsonl(review_path, [review_seed_with_full_text(tmp_path, "W1")])
-    weak_payload = generated_topic_contract_payload()
+    weak_payload = refined_early_detection_contract_payload()
     weak_payload["tagging"]["categories"]["study_design"] = {
         "required": False,
         "selection": "multi",
@@ -1128,7 +1050,11 @@ def test_refine_topic_contract_falls_back_when_targeted_repair_fails(
         "repair_notes": ["This patch should fail semantic validation."],
     }
     client = StaticJSONClient(
-        [weak_payload, bad_repair_patch, generated_topic_contract_payload()]
+        [
+            weak_payload,
+            bad_repair_patch,
+            refined_early_detection_contract_payload(),
+        ]
     )
 
     result = run_refine_topic_contract(
@@ -1147,7 +1073,7 @@ def test_refine_topic_contract_falls_back_when_targeted_repair_fails(
         "contract_refinement_retry_2",
     ]
     assert "study_design" not in refined["tagging"]["categories"]
-    assert "ai_tool_type" in refined["tagging"]["categories"]
+    assert "early_detection" in refined["tagging"]["categories"]
     assert any(
         "contract_refinement_repair" in path.name for path in result.trace_paths
     )
@@ -1415,6 +1341,9 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     tmp_path: Path,
 ) -> None:
     contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    contract["tagging"]["categories"] = generated_topic_contract_payload()["tagging"][
+        "categories"
+    ]
     contract_path = tmp_path / "topic_contract.yaml"
     write_yaml_object(contract_path, contract)
     papers_path = tmp_path / "scope_screened_full_text.csv"
@@ -1484,23 +1413,27 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     calibrated_payload = deepcopy(contract)
     calibrated_payload["tagging"]["categories"] = [
         {
-            "category_id": "knowledge_goal",
-            "description": "Primary research-focus facet for AI education papers.",
-            "required": True,
-            "selection": "single",
-            "values": [
-                "ai_instructional_role",
-                "lesson_activity_supported",
-                "student_performance_signal",
-            ],
-            "applies_when": None,
-        },
-        {
-            "category_id": "ai_instructional_role",
+            "category_id": "ai",
             "description": "Role played by AI in the lesson or learning activity.",
             "required": False,
             "selection": "multi",
             "values": ["tutor", "feedback_provider", "content_generator"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "formal_education",
+            "description": "Formal education context represented in the paper.",
+            "required": False,
+            "selection": "multi",
+            "values": ["classroom_lesson", "assessment_activity", "teacher_guided_use"],
+            "applies_when": None,
+        },
+        {
+            "category_id": "learning_impact",
+            "description": "Student impact signal used to judge AI education use.",
+            "required": False,
+            "selection": "multi",
+            "values": ["test_score", "course_grade", "engagement"],
             "applies_when": None,
         },
         {
@@ -1509,22 +1442,6 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
             "required": False,
             "selection": "multi",
             "values": ["practice_exercise", "writing_task", "assessment_activity"],
-            "applies_when": None,
-        },
-        {
-            "category_id": "student_performance_signal",
-            "description": "Performance signal used to judge student impact.",
-            "required": False,
-            "selection": "multi",
-            "values": ["test_score", "course_grade", "task_accuracy"],
-            "applies_when": None,
-        },
-        {
-            "category_id": "education_context",
-            "description": "Formal education context represented in the paper.",
-            "required": False,
-            "selection": "multi",
-            "values": ["primary_school", "secondary_school", "higher_education"],
             "applies_when": None,
         },
         {
@@ -1564,11 +1481,11 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
     assert result.trace_paths
     assert calibrated["research_topic"] == contract["research_topic"]
     assert calibrated["scope"] == contract["scope"]
-    assert list(categories)[0] == "knowledge_goal"
-    assert categories["knowledge_goal"]["values"] == [
-        "ai_instructional_role",
-        "lesson_activity_supported",
-        "student_performance_signal",
+    assert list(categories)[0] == "ai"
+    assert categories["ai"]["values"] == [
+        "tutor",
+        "feedback_provider",
+        "content_generator",
     ]
     assert len(client.requests) == 2
     assert client.requests[0]["call_id"] == "contract_calibration"
@@ -1786,7 +1703,7 @@ def test_generate_rules_removes_biased_concrete_fallback_for_exhaustive_category
         "research_topic": {"title": "Topic", "description": "Description"},
         "categories": [
             {
-                "category_id": "knowledge_goal",
+                "category_id": "dominant_focus",
                 "required": True,
                 "selection": "single",
                 "allowed_values": [
@@ -1803,7 +1720,7 @@ def test_generate_rules_removes_biased_concrete_fallback_for_exhaustive_category
             {
                 "rules": [
                     {
-                        "category_id": "knowledge_goal",
+                        "category_id": "dominant_focus",
                         "selection": "single",
                         "required": True,
                         "fallback_value": "treatment_effectiveness",
@@ -1827,7 +1744,7 @@ def test_generate_rules_removes_biased_concrete_fallback_for_exhaustive_category
     assert payload["rules"][0]["fallback_value"] is None
     assert result.warnings == [
         (
-            "Repaired biased fallback_value for knowledge_goal: "
+            "Repaired biased fallback_value for dominant_focus: "
             "treatment_effectiveness -> None"
         ),
     ]

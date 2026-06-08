@@ -25,13 +25,29 @@ Rules:
     title-selection anchor.
   - `anchor_reason`: a short explanation of why this component is mandatory.
   - `main_topics`: at least two topic components that define the research topic.
-    When the question has distinct intervention/exposure, population/context,
-    outcome/target, mechanism, or measurement components, split those into
-    separate main topics so later tagging can become facet-based. Each must
-    have `topic_id`, `label`, and broad `terms`.
+    These are the compact ontology dimensions that guide screening and later
+    topic-specific tagging. When the question has distinct
+    intervention/tool/exposure, population/context, outcome/target, mechanism,
+    setting, or measurement components, split those into separate main topics.
+    Each must have `topic_id`, `label`, and broad `terms`.
   - `secondary_topics`: an array of objects with `main_topic_id` and `terms`.
     Use non-anchor main topic ids and related replacement terms. Do not define
     secondary replacements for the anchor.
+- Choose the anchor topic as the mandatory core concept for title screening: a
+  title must show this concept to enter the collection. Make it broad enough to
+  catch synonyms and abbreviations, but not so broad that unrelated papers enter.
+- Choose main topics as compact terms or directions, not full sentences or
+  generic metadata buckets. Good shapes include a tool/intervention family,
+  population/context, outcome/target, setting, evidence signal, mechanism, or
+  measurement dimension that a paper could primarily focus on.
+- Prefer 3 to 6 main topics when the research question and vocabulary support
+  that many, but never use fewer than 2. Avoid creating so many main topics
+  that screening and tagging categories become inconsistent.
+- The main topic ids should be stable lowercase snake_case ids because later
+  categories may use those ids directly.
+- Use secondary topics only as replacement wording for non-anchor main topics
+  when titles use adjacent language. Secondary topics should improve recall
+  without weakening topical fit.
 - Make main topics broad enough for title screening. Prefer general component
   labels such as intervention family, tool family, population/context, outcome
   family, exposure, or domain over narrow phrases from the user's exact wording.
@@ -69,11 +85,11 @@ Rules:
   simple structurally valid tagging section so the contract can pass shape
   validation. Do not spend effort building the final extraction ontology; that
   will be refined from review and overview papers in a later step.
-- Include at least one provisional tagging category. Prefer `knowledge_goal` as
-  a simple root placeholder with `required` true, `selection` single,
-  `applies_when` null, and a few lowercase snake_case values that resemble
-  major topic facets rather than benefit claims. The final facet categories
-  will be rebuilt from review full text later.
+- Include at least one provisional tagging category, but do not create any root
+  focus selector. Prefer a simple topic-specific category whose id matches one
+  important main topic and whose values are provisional concrete subtypes. The
+  final detailed categories and values will be rebuilt from review full text
+  later.
 - Category IDs and allowed values must use lowercase snake_case. Do not return
   labels with spaces, slashes, punctuation, or title case.
 - For each category, set `selection` to `single` when at most one value should

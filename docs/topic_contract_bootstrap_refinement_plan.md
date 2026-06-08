@@ -126,7 +126,6 @@ Keep rules for:
 
 Remove or drastically shorten rules for:
 
-- final `knowledge_goal` partition quality
 - six to ten final knowledge categories
 - review-derived ontology quality
 - generic/boilerplate category rejection
@@ -288,10 +287,7 @@ Suggested issue codes:
 - `non_snake_values`
 - `meta_dependency`
 - `broad_dependency_values`
-- `missing_knowledge_goal`
-- `invalid_knowledge_goal_shape`
-- `too_few_knowledge_goal_values`
-- `vague_knowledge_goal_values`
+- `retired_category_id`
 
 Tests:
 
@@ -314,9 +310,7 @@ Repairable issue types:
 - `catchall_values`
 - `too_few_values`
 - `too_few_categories`
-- `invalid_knowledge_goal_shape`
-- `too_few_knowledge_goal_values`
-- `vague_knowledge_goal_values`
+- `retired_category_id`
 - `meta_dependency`
 - `broad_dependency_values`
 
@@ -327,7 +321,6 @@ Usually deterministic or already normalized:
 
 Full refinement retry should remain the fallback when:
 
-- `knowledge_goal` is missing entirely
 - the contract is structurally invalid
 - more than half the categories require replacement
 - targeted repair fails validation
@@ -399,9 +392,8 @@ candidate_screening, or collection.
 Keep valid existing categories unless they are directly affected by a listed
 validation issue.
 
-If repairing knowledge_goal, return the complete replacement knowledge_goal
-category with at least three concrete role-like values, required=true,
-selection=single, and applies_when=null.
+If repairing a retired category, remove it and replace it with direct
+topic-specific categories only when needed.
 
 If a category depends on a repaired parent value, repair the dependency or
 replace the dependent category.
@@ -428,11 +420,9 @@ Behavior:
 - Deep-copy the failed refined contract.
 - Normalize all patch category ids and values with `normalize_tagging_label()`.
 - Normalize `applies_when.category_id` and `applies_when.values`.
-- Remove listed categories except do not remove `knowledge_goal`; replace it via
-  upsert instead.
+- Remove listed categories, including retired categories.
 - Upsert replacement categories.
 - Preserve category order where practical.
-- Keep `knowledge_goal` first when present.
 - Validate with `validate_topic_contract()`.
 - Validate with `validate_generated_tagging_quality()`.
 
@@ -478,7 +468,7 @@ Update `tests/test_llm_steps.py`:
 - Refined contract semantic failures trigger targeted repair before full retry.
 - Targeted repair replaces `study_design` without changing scope, collection, or
   topic structure.
-- Targeted repair fixes `knowledge_goal` with fewer than three values.
+- Targeted repair removes retired categories when they appear.
 - Failed targeted repair falls back to full refinement retry.
 - Repair trace paths are returned.
 
@@ -576,4 +566,3 @@ active virtual environment or report the exact command that failed.
 - Add focused tests for every behavior change.
 - Keep code straightforward and typed for public helpers.
 - Avoid broad refactors and unrelated formatting churn.
-

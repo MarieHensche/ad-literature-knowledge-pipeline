@@ -373,32 +373,6 @@ def topic_contract_schema(
     }
 
 
-def topic_contract_calibration_schema(provider_names: list[str]) -> dict[str, Any]:
-    """Build the schema for contract calibration plus root-axis assignments."""
-    return {
-        "type": "object",
-        "properties": {
-            "topic_contract": topic_contract_schema(provider_names),
-            "paper_assignments": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "paper_id": {"type": "string"},
-                        "knowledge_goal": {"type": "string"},
-                        "reason": {"type": "string"},
-                    },
-                    "required": ["paper_id", "knowledge_goal", "reason"],
-                    "additionalProperties": False,
-                },
-            },
-        },
-        "required": ["topic_contract", "paper_assignments"],
-        "additionalProperties": False,
-    }
-
-
 def topic_contract_tagging_repair_schema() -> dict[str, Any]:
     """Build the JSON schema for patch-only topic tagging repairs."""
     category_dependency_schema = {
