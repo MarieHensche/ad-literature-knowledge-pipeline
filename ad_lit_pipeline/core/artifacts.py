@@ -13,6 +13,7 @@ class MainPipelineArtifacts:
     scope_screened_csv: Path
     scope_screened_full_text_csv: Path
     full_text_manifest_csv: Path
+    tagging_categories_review_yaml: Path
     tagging_config_normalized_json: Path
     tagging_rules_json: Path
     extraction_filled_csv: Path
@@ -68,6 +69,9 @@ def main_pipeline_artifacts(
         ),
         full_text_manifest_csv=processed_path(
             collection, "full_text_manifest.csv", base_dir
+        ),
+        tagging_categories_review_yaml=processed_path(
+            collection, "tagging_categories_review.yaml", base_dir
         ),
         tagging_config_normalized_json=processed_path(
             collection, "tagging_config_normalized.json", base_dir

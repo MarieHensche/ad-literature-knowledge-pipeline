@@ -98,6 +98,21 @@ function updateCollectionStepControls() {
   refillStepSelect($("collectionFromStep"), steps);
 }
 
+function mainStepsForCurrentMode() {
+  if (!state.config) {
+    return [];
+  }
+  return $("mainReviewTaggingCategories").checked
+    ? state.config.steps.mainWithReview
+    : state.config.steps.main;
+}
+
+function updateMainStepControls() {
+  const steps = mainStepsForCurrentMode();
+  refillStepSelect($("mainOnlyStep"), steps);
+  refillStepSelect($("mainFromStep"), steps);
+}
+
 function selectedCollectionStepValue(element, usesBootstrap) {
   const steps = usesBootstrap
     ? state.config.steps.collectionWithContract
@@ -118,8 +133,7 @@ async function loadConfig() {
   fillSelect($("mainContractSelect"), state.config.contracts, "Choose a contract");
   fillSelect($("paperInputSelect"), state.config.paperInputs, "Choose an input file");
   updateCollectionStepControls();
-  fillStepSelect($("mainOnlyStep"), state.config.steps.main);
-  fillStepSelect($("mainFromStep"), state.config.steps.main);
+  updateMainStepControls();
   renderManifestList(state.config.manifests);
 
   if (state.config.contracts[0] && !$("mainContractPath").value) {
@@ -190,6 +204,7 @@ function collectionPayload(workflow = "collection") {
     fromStep: selectedCollectionStepValue($("collectionFromStep"), usesBootstrap),
     traceDir: $("collectionTraceDir").value.trim(),
     runMainAfterCollection: $("runMainAfterCollection").checked,
+    reviewTaggingCategories: $("collectionReviewTaggingCategories").checked,
   };
   if (workflow === "contract") {
     payload.topicContract = "";
@@ -215,6 +230,7 @@ function mainPayload() {
     runId: $("mainRunId").value.trim(),
     dryRun: $("mainDryRun").checked,
     resume: $("mainResume").checked,
+    reviewTaggingCategories: $("mainReviewTaggingCategories").checked,
     onlyStep: $("mainOnlyStep").value,
     fromStep: $("mainFromStep").value,
     traceDir: $("mainTraceDir").value.trim(),
@@ -519,6 +535,7 @@ function bindEvents() {
   $("collectionName").addEventListener("input", updateCollectionStepControls);
   $("contractPath").addEventListener("input", updateCollectionStepControls);
   $("generateInRun").addEventListener("change", updateCollectionStepControls);
+  $("mainReviewTaggingCategories").addEventListener("change", updateMainStepControls);
   $("contractSelect").addEventListener("change", (event) => {
     $("contractPath").value = event.target.value;
     $("mainContractPath").value = event.target.value;

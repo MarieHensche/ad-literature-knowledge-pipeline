@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from dotenv import load_dotenv
 
-from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
+from ad_lit_pipeline.core.artifacts import collection_artifacts, main_pipeline_artifacts
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
 from ad_lit_pipeline.core.registry import MAIN_PIPELINE, MAIN_PIPELINE_WITH_CALIBRATION
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
@@ -21,6 +21,7 @@ from ad_lit_pipeline.steps.tagging import (
     calibrate_topic_contract,
     generate_rules,
     normalize_config,
+    review_categories,
     tag_papers,
 )
 
@@ -78,6 +79,9 @@ def explain(collection: str) -> None:
     print("Optional main-time calibration step:")
     print("  - calibrate_topic_contract")
     print()
+    print("Optional human review step:")
+    print("  - review_tagging_categories")
+    print()
     print("Conventional outputs:")
     for field, value in artifacts.__dict__.items():
         print(f"  {field}: {value}")
@@ -86,8 +90,25 @@ def explain(collection: str) -> None:
 def selected_main_pipeline(args: argparse.Namespace) -> list[str]:
     requested_step = args.only_step or args.from_step
     if args.calibrate_topic_contract or requested_step == "calibrate_topic_contract":
-        return MAIN_PIPELINE_WITH_CALIBRATION
-    return MAIN_PIPELINE
+        pipeline = MAIN_PIPELINE_WITH_CALIBRATION
+    else:
+        pipeline = MAIN_PIPELINE
+
+    if args.review_tagging_categories or requested_step == "review_tagging_categories":
+        return pipeline_with_tagging_review(pipeline)
+    return pipeline
+
+
+def pipeline_with_tagging_review(pipeline: list[str]) -> list[str]:
+    """Insert the human review step before category normalization."""
+    if "review_tagging_categories" in pipeline:
+        return list(pipeline)
+    insertion_index = pipeline.index("normalize_tagging_config")
+    return [
+        *pipeline[:insertion_index],
+        "review_tagging_categories",
+        *pipeline[insertion_index:],
+    ]
 
 
 def build_step_functions(
@@ -95,6 +116,7 @@ def build_step_functions(
     trace_dir: Path,
 ) -> dict[str, object]:
     artifacts = main_pipeline_artifacts(args.collection)
+    collection_paths = collection_artifacts(args.collection)
     topic_contract_path = Path(args.topic_contract)
     config_path = Path(args.tagging_config) if args.tagging_config else None
     model = args.model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -120,6 +142,14 @@ def build_step_functions(
             model,
             trace_dir=trace_dir,
             max_primary_papers=args.max_calibration_papers,
+        ),
+        "review_tagging_categories": lambda: review_categories.run(
+            topic_contract_path,
+            artifacts.tagging_categories_review_yaml,
+            model,
+            review_overviews_path=collection_paths.review_overviews_full_text_jsonl,
+            papers_path=artifacts.scope_screened_full_text_csv,
+            trace_dir=trace_dir,
         ),
         "normalize_tagging_config": lambda: normalize_config.run(
             artifacts.tagging_config_normalized_json,
@@ -187,7 +217,15 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
         print(f"Run id: {manifest.run_id}")
         print(f"Manifest: {manifest.manifest_path}")
 
-    run_selected_steps(selected, step_functions, manifest, args.dry_run)
+    status = run_selected_steps(selected, step_functions, manifest, args.dry_run)
+    if status == "paused":
+        artifacts = main_pipeline_artifacts(args.collection)
+        print()
+        print("Pipeline paused for tagging category review.")
+        print(f"Run id: {manifest.run_id}")
+        print(f"Manifest: {manifest.manifest_path}")
+        print(f"Review file: {artifacts.tagging_categories_review_yaml}")
+        return
 
     artifacts = main_pipeline_artifacts(args.collection)
     print()
@@ -262,6 +300,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Opt into legacy main-pipeline contract calibration. New collection "
             "runs calibrate the contract before exporting papers."
+        ),
+    )
+    run_parser.add_argument(
+        "--review-tagging-categories",
+        action="store_true",
+        help=(
+            "Pause before tagging-rule generation so the user can review and "
+            "edit tagging categories and values."
         ),
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")

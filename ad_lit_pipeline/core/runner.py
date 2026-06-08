@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from ad_lit_pipeline.core.errors import PipelinePause
 from ad_lit_pipeline.core.manifest import ManifestRecorder, utc_now
 from ad_lit_pipeline.core.step import StepResult
 
@@ -38,7 +39,7 @@ def run_selected_steps(
     step_functions: dict[str, StepCallable],
     manifest: ManifestRecorder,
     dry_run: bool = False,
-) -> None:
+) -> str:
     """Run selected steps and record each result in a manifest."""
     for step_name in selected_steps:
         if dry_run:
@@ -56,6 +57,19 @@ def run_selected_steps(
             result.metadata["ended_at"] = utc_now()
             manifest.record_step(result)
             print(f"Completed: {step_name} ({result.elapsed_seconds:.1f}s)")
+        except PipelinePause as pause:
+            pause_result = pause.result
+            if not isinstance(pause_result, StepResult):
+                pause_result = StepResult(step_name=step_name)
+            pause_result.elapsed_seconds = time.monotonic() - started
+            pause_result.metadata["started_at"] = started_at
+            pause_result.metadata["ended_at"] = utc_now()
+            pause_result.metadata["pause_message"] = str(pause)
+            manifest.record_step(pause_result, status="paused")
+            manifest.finish(status="paused")
+            print(f"Paused: {step_name} ({pause_result.elapsed_seconds:.1f}s)")
+            print(str(pause))
+            return "paused"
         except Exception as error:
             result = StepResult(
                 step_name=step_name,
@@ -68,6 +82,7 @@ def run_selected_steps(
             raise
 
     manifest.finish(status="dry_run" if dry_run else "succeeded")
+    return "dry_run" if dry_run else "succeeded"
 
 
 def default_trace_dir(manifest: ManifestRecorder) -> Path:

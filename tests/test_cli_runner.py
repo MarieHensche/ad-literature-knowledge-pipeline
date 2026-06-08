@@ -96,6 +96,50 @@ def test_run_pipeline_dry_run_can_opt_into_calibration() -> None:
     assert "Would run step: calibrate_topic_contract" in result.stdout
 
 
+def test_run_pipeline_dry_run_can_opt_into_tag_review() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--review-tagging-categories",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-with-tag-review-dry-run",
+    )
+
+    assert "Would run step: prepare_full_text" in result.stdout
+    assert "Would run step: review_tagging_categories" in result.stdout
+    assert result.stdout.index("review_tagging_categories") < result.stdout.index(
+        "normalize_tagging_config"
+    )
+
+
+def test_run_pipeline_dry_run_can_start_at_tag_review() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--from-step",
+        "review_tagging_categories",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-from-tag-review-dry-run",
+    )
+
+    assert "Would run step: review_tagging_categories" in result.stdout
+    assert "Would run step: normalize_tagging_config" in result.stdout
+
+
 def test_run_pipeline_prepares_supported_non_csv_papers(tmp_path: Path) -> None:
     inputs = [
         ROOT / "data/raw/example_papers.bib",

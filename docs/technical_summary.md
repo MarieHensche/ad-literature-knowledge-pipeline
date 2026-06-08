@@ -49,6 +49,7 @@ Steps:
 | `screen_scope` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` | `data/processed/<collection>_scope_screened.csv` |
 | `prepare_full_text` | `ad_lit_pipeline/steps/full_text/prepare.py` | `data/processed/<collection>_scope_screened_full_text.csv`, `data/processed/<collection>_full_text_manifest.csv` |
 | `calibrate_topic_contract` | `ad_lit_pipeline/steps/tagging/calibrate_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
+| `review_tagging_categories` | `ad_lit_pipeline/steps/tagging/review_categories.py` | `data/processed/<collection>_tagging_categories_review.yaml`, topic contract YAML |
 | `normalize_tagging_config` | `ad_lit_pipeline/steps/tagging/normalize_config.py` | `data/processed/<collection>_tagging_config_normalized.json` |
 | `generate_tagging_rules` | `ad_lit_pipeline/steps/tagging/generate_rules.py` | `data/processed/<collection>_tagging_rules.json` |
 | `tag_papers` | `ad_lit_pipeline/steps/tagging/tag_papers.py` | `data/processed/<collection>_extraction_filled.csv` |
@@ -68,6 +69,18 @@ manifest and text-path metadata. `calibrate_topic_contract` uses a selected
 set of included primary-paper full texts to refine the review-derived tagging
 ontology before rules are generated. `tag_papers` reads the extracted text and
 sends a bounded, knowledge-focused evidence view to the LLM.
+
+Passing `--review-tagging-categories` inserts an optional human review step
+between contract calibration and `normalize_tagging_config`. On the first pass,
+the step writes `data/processed/<collection>_tagging_categories_review.yaml`
+with only category ids and values, records the run as paused, and waits for the
+user to edit the file and set `status: approved`. The user can remove
+categories, remove values, add values, add categories with explicit values, or
+add categories with `values: auto` / `values: []`. Auto-valued categories are
+completed from available review full text first and included-paper full text as
+fallback, then merged back into the topic contract before rules are generated.
+Resume with `--resume --run-id <run_id>` or rerun with
+`--from-step review_tagging_categories` after approving the review file.
 
 ## Collection Pipeline
 
@@ -146,6 +159,7 @@ The original script names are kept as wrappers or direct CLIs:
 | `scripts/normalize_metadata.py` | `ad_lit_pipeline/steps/metadata/normalize.py` |
 | `scripts/screen_scope.py` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` |
 | `scripts/calibrate_topic_contract.py` | `ad_lit_pipeline/steps/tagging/calibrate_topic_contract.py` |
+| `scripts/review_tagging_categories.py` | `ad_lit_pipeline/steps/tagging/review_categories.py` |
 | `scripts/normalize_tagging_config.py` | `ad_lit_pipeline/steps/tagging/normalize_config.py` |
 | `scripts/generate_tagging_rules.py` | `ad_lit_pipeline/steps/tagging/generate_rules.py` |
 | `scripts/tag_papers_with_llm.py` | `ad_lit_pipeline/steps/tagging/tag_papers.py` |

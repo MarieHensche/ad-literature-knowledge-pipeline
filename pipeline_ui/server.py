@@ -193,6 +193,17 @@ def collection_step_names(
     return COLLECTION_PIPELINE
 
 
+def main_step_names(review_tagging_categories: bool = False) -> list[str]:
+    if not review_tagging_categories:
+        return MAIN_PIPELINE
+    insertion_index = MAIN_PIPELINE.index("normalize_tagging_config")
+    return [
+        *MAIN_PIPELINE[:insertion_index],
+        "review_tagging_categories",
+        *MAIN_PIPELINE[insertion_index:],
+    ]
+
+
 def with_valid_collection_step_options(
     payload: dict[str, Any],
     generate_contract: bool,
@@ -235,6 +246,8 @@ def build_main_command(payload: dict[str, Any], root: Path = ROOT) -> CommandSpe
     ]
     if model:
         command.extend(["--model", model])
+    if payload.get("reviewTaggingCategories"):
+        command.append("--review-tagging-categories")
     add_step_options(command, payload)
     return CommandSpec(
         label="Tag papers",
@@ -428,6 +441,7 @@ def app_config(root: Path = ROOT) -> dict[str, Any]:
         "manifests": list_manifests(root),
         "steps": {
             "main": MAIN_PIPELINE,
+            "mainWithReview": main_step_names(review_tagging_categories=True),
             "collection": COLLECTION_PIPELINE,
             "collectionWithContract": COLLECTION_WITH_CONTRACT_PIPELINE,
         },

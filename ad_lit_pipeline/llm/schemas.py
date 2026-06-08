@@ -443,6 +443,38 @@ def topic_contract_tagging_repair_schema() -> dict[str, Any]:
     }
 
 
+def tagging_category_value_completion_schema(category_ids: list[str]) -> dict[str, Any]:
+    """Build the schema for filling values for user-requested categories."""
+    category_id_schema: dict[str, Any] = {"type": "string"}
+    if category_ids:
+        category_id_schema["enum"] = category_ids
+
+    return {
+        "type": "object",
+        "properties": {
+            "categories": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category_id": category_id_schema,
+                        "values": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {"type": "string"},
+                        },
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["category_id", "values", "reason"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["categories"],
+        "additionalProperties": False,
+    }
+
+
 def title_relevance_schema(main_topic_ids: list[str]) -> dict[str, Any]:
     """Build the candidate title relevance response schema."""
     topic_id_schema: dict[str, Any] = {"type": "string"}

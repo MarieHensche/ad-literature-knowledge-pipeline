@@ -192,6 +192,24 @@ def render_calibrate_topic_contract_prompt(
     )
 
 
+def render_complete_tagging_category_values_prompt(
+    topic_contract: dict[str, Any],
+    existing_categories: dict[str, Any],
+    requested_categories: list[dict[str, Any]],
+    evidence: list[dict[str, Any]],
+) -> str:
+    return render_template(
+        "complete_tagging_category_values.md",
+        {
+            "research_topic_json": json_block(topic_contract["research_topic"]),
+            "topic_structure_json": json_block(topic_contract.get("topic_structure", {})),
+            "existing_categories_json": json_block(existing_categories),
+            "requested_categories_json": json_block(requested_categories),
+            "evidence_json": json_block(evidence),
+        },
+    )
+
+
 def render_generate_tagging_rules_prompt(
     config: dict[str, object],
     topic_contract: dict[str, Any] | None = None,

@@ -56,6 +56,22 @@ def test_build_main_command_uses_existing_pipeline_cli(tmp_path: Path) -> None:
     assert command.command[only_step_index + 1] == "normalize_metadata"
 
 
+def test_build_main_command_can_enable_tag_review(tmp_path: Path) -> None:
+    command = server.build_main_command(
+        {
+            "collection": "example",
+            "papers": "data/raw/example_papers.csv",
+            "topicContract": "configs/topics/early_detection_ad.yaml",
+            "runId": "ui-test-main-review",
+            "reviewTaggingCategories": True,
+        },
+        tmp_path,
+    ).command
+
+    assert command[:3] == [sys.executable, "scripts/run_pipeline.py", "run"]
+    assert "--review-tagging-categories" in command
+
+
 def test_ui_has_main_contract_dropdown() -> None:
     html = (Path(__file__).resolve().parents[1] / "pipeline_ui/static/index.html").read_text(
         encoding="utf-8"
