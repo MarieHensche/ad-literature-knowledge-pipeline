@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import html
 import re
 from typing import Any
 
@@ -198,9 +199,33 @@ def fields_for_match(candidate: dict[str, Any], field: str) -> list[tuple[str, s
     return [("title", title), ("abstract", abstract)]
 
 
+def normalize_match_text(value: str) -> str:
+    normalized = html.unescape(value)
+    normalized = re.sub(r"<[^>]+>", " ", normalized)
+    normalized = re.sub(r"[\u2010-\u2015]", "-", normalized)
+    normalized = re.sub(r"[\u2018\u2019\u02bc']", "", normalized)
+    return normalized
+
+
+def term_token_pattern(token: str) -> str:
+    escaped = re.escape(token)
+    if not token.isalpha() or len(token) <= 2:
+        return escaped
+
+    folded = token.casefold()
+    if folded.endswith("s"):
+        return escaped
+    if folded.endswith("y") and len(token) > 3 and folded[-2] not in "aeiou":
+        return rf"{re.escape(token[:-1])}(?:y|ies)"
+    return rf"{escaped}s?"
+
+
 def term_pattern(term: str) -> re.Pattern[str]:
-    parts = [re.escape(part) for part in re.split(r"\s+", term.strip()) if part]
-    pattern = r"\s+".join(parts)
+    normalized = normalize_match_text(term.strip())
+    parts = [
+        term_token_pattern(part) for part in re.split(r"\s+", normalized) if part
+    ]
+    pattern = r"[\s\-]+".join(parts)
     if term[:1].isalnum():
         pattern = rf"(?<![A-Za-z0-9]){pattern}"
     if term[-1:].isalnum():
@@ -219,7 +244,8 @@ def matched_values(
     for term in terms:
         pattern = term_pattern(term)
         for field_name, text in candidate_fields:
-            if not text or not pattern.search(text):
+            normalized_text = normalize_match_text(text)
+            if not normalized_text or not pattern.search(normalized_text):
                 continue
             key = (term.casefold(), field_name)
             if key in seen:

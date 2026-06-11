@@ -802,6 +802,44 @@ def test_candidate_topic_matches_record_values_and_fields() -> None:
     assert matches["anchor_present"] is True
 
 
+def test_candidate_topic_matches_handles_markup_dashes_and_plurals() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    for topic in contract["topic_structure"]["main_topics"]:
+        topic["field"] = "title"
+        if topic["topic_id"] == "ai":
+            topic["matching_terms"] = ["LLM"]
+        elif topic["topic_id"] == "formal_education":
+            topic["matching_terms"] = ["middle school"]
+        elif topic["topic_id"] == "learning_impact":
+            topic["matching_terms"] = ["student performance"]
+
+    candidate = {
+        "title": (
+            "<scp>LLMs</scp> for Middle\u2011School Students' "
+            "Performance"
+        ),
+        "abstract": "",
+    }
+
+    annotated = annotate_candidate_topic_matches(
+        candidate,
+        topic_match_spec_from_contract(contract),
+    )
+    matches = annotated["topic_matches"]
+
+    assert {"value": "LLM", "field": "title"} in matches["main_topic_values"][
+        "ai"
+    ]
+    assert {"value": "middle school", "field": "title"} in matches[
+        "main_topic_values"
+    ]["formal_education"]
+    assert {"value": "student performance", "field": "title"} in matches[
+        "main_topic_values"
+    ]["learning_impact"]
+    assert matches["anchor_present"] is True
+    assert matches["missing_main_topics"] == []
+
+
 def test_query_groups_keep_secondary_replacement_groups_separate() -> None:
     contract = {
         "topic_structure": {

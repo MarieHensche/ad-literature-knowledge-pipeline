@@ -238,6 +238,31 @@ def has_title_value(value_items: object) -> bool:
     )
 
 
+def is_strict_title_retrieval_candidate(candidate: dict[str, Any]) -> bool:
+    if str(candidate.get("retrieval_phase") or "").strip() == "strict_title":
+        return True
+
+    try:
+        retrieval_tier = int(candidate.get("retrieval_tier"))
+    except (TypeError, ValueError):
+        return False
+    return retrieval_tier == 0 and candidate.get("requires_title_screening") is False
+
+
+def row_base(candidate: dict[str, Any], index: int) -> dict[str, str]:
+    return {
+        "paper_id": make_paper_id(candidate, index),
+        "title": str(candidate.get("title") or ""),
+        "year": str(candidate.get("year") or ""),
+        "doi": str(candidate.get("doi") or ""),
+        "provider": str(candidate.get("provider") or ""),
+        "provider_id": str(candidate.get("provider_id") or ""),
+        "source_rank": str(candidate.get("rank") or ""),
+        "source_query": str(candidate.get("query") or ""),
+        "source_query_reason": str(candidate.get("query_reason") or ""),
+    }
+
+
 def deterministic_tier0_screening(
     topic_contract: dict[str, Any],
     candidate: dict[str, Any],
@@ -262,21 +287,14 @@ def deterministic_tier0_screening(
         return None
 
     ids = main_topic_ids(topic_contract)
-    matched_main = [topic_id for topic_id in ids if has_title_value(value_map.get(topic_id))]
+    matched_main = [
+        topic_id for topic_id in ids if has_title_value(value_map.get(topic_id))
+    ]
     if set(matched_main) != set(ids):
         return None
 
-    paper_id = make_paper_id(candidate, index)
     return {
-        "paper_id": paper_id,
-        "title": str(candidate.get("title") or ""),
-        "year": str(candidate.get("year") or ""),
-        "doi": str(candidate.get("doi") or ""),
-        "provider": str(candidate.get("provider") or ""),
-        "provider_id": str(candidate.get("provider_id") or ""),
-        "source_rank": str(candidate.get("rank") or ""),
-        "source_query": str(candidate.get("query") or ""),
-        "source_query_reason": str(candidate.get("query_reason") or ""),
+        **row_base(candidate, index),
         "screening_decision": "include",
         "screening_confidence": "high",
         "screening_reason": (
@@ -290,6 +308,60 @@ def deterministic_tier0_screening(
             topic_matches.get("secondary_topic_values")
         ),
         "title_missing_main_topics": "",
+    }
+
+
+def deterministic_local_reject_screening(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+    index: int,
+) -> dict[str, str] | None:
+    if not is_strict_title_retrieval_candidate(candidate):
+        return None
+
+    topic_matches = candidate.get("topic_matches")
+    if local_topic_match_tier(topic_matches) != EXCLUDED_TIER or not isinstance(
+        topic_matches,
+        dict,
+    ):
+        return None
+
+    ids = main_topic_ids(topic_contract)
+    structure = topic_structure(topic_contract)
+    anchor_id = str(structure["anchor_topic_id"])
+    value_map = topic_matches.get("main_topic_values")
+    if not isinstance(value_map, dict):
+        return None
+
+    matched_main = [
+        topic_id
+        for topic_id in ids
+        if isinstance(value_map.get(topic_id), list)
+        and value_map.get(topic_id)
+    ]
+    missing = [topic_id for topic_id in ids if topic_id not in set(matched_main)]
+    anchor_present = topic_matches.get("anchor_present") is True
+    if anchor_present and anchor_id not in missing:
+        return None
+    if anchor_id not in missing:
+        missing.insert(0, anchor_id)
+
+    return {
+        **row_base(candidate, index),
+        "screening_decision": "exclude",
+        "screening_confidence": "high",
+        "screening_reason": (
+            "Deterministic local reject: anchor topic "
+            f"'{anchor_id}' has no local evidence in the required field for "
+            "strict title retrieval."
+        ),
+        "title_anchor_present": "no",
+        "title_relevance_tier": str(EXCLUDED_TIER),
+        "title_matched_main_topics": "; ".join(matched_main),
+        "title_matched_secondary_topics": format_secondary_topic_values(
+            topic_matches.get("secondary_topic_values")
+        ),
+        "title_missing_main_topics": "; ".join(missing),
     }
 
 
@@ -400,15 +472,7 @@ def screen_candidate(
     )
     return (
         {
-            "paper_id": paper_id,
-            "title": str(candidate.get("title") or ""),
-            "year": str(candidate.get("year") or ""),
-            "doi": str(candidate.get("doi") or ""),
-            "provider": str(candidate.get("provider") or ""),
-            "provider_id": str(candidate.get("provider_id") or ""),
-            "source_rank": str(candidate.get("rank") or ""),
-            "source_query": str(candidate.get("query") or ""),
-            "source_query_reason": str(candidate.get("query_reason") or ""),
+            **row_base(candidate, index),
             **result,
         },
         trace_paths,
@@ -443,6 +507,7 @@ def run(
     all_trace_paths: list[Path] = []
     warnings = []
     deterministic_tier0_included = 0
+    deterministic_local_excluded = 0
     llm_screened = 0
 
     for index, candidate in enumerate(candidates, start=1):
@@ -456,6 +521,21 @@ def run(
             deterministic_tier0_included += 1
             print(
                 "Auto-included deterministic tier-0 title "
+                f"{index}/{len(candidates)}: {candidate.get('title')}",
+                flush=True,
+            )
+            continue
+
+        deterministic_row = deterministic_local_reject_screening(
+            topic_contract,
+            candidate,
+            index,
+        )
+        if deterministic_row is not None:
+            rows.append(deterministic_row)
+            deterministic_local_excluded += 1
+            print(
+                "Auto-excluded deterministic local anchor miss "
                 f"{index}/{len(candidates)}: {candidate.get('title')}",
                 flush=True,
             )
@@ -494,15 +574,7 @@ def run(
             print(f"  Warning: {warning}", flush=True)
             rows.append(
                 {
-                    "paper_id": paper_id,
-                    "title": str(candidate.get("title") or ""),
-                    "year": str(candidate.get("year") or ""),
-                    "doi": str(candidate.get("doi") or ""),
-                    "provider": str(candidate.get("provider") or ""),
-                    "provider_id": str(candidate.get("provider_id") or ""),
-                    "source_rank": str(candidate.get("rank") or ""),
-                    "source_query": str(candidate.get("query") or ""),
-                    "source_query_reason": str(candidate.get("query_reason") or ""),
+                    **row_base(candidate, index),
                     "screening_decision": "exclude",
                     "screening_confidence": "n/a",
                     "screening_reason": f"Auto-excluded due to LLM error: {error}",
@@ -534,6 +606,7 @@ def run(
             "included": included,
             "excluded": excluded,
             "deterministic_tier0_included": deterministic_tier0_included,
+            "deterministic_local_excluded": deterministic_local_excluded,
             "llm_screened": llm_screened,
         },
         trace_paths=all_trace_paths,

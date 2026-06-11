@@ -1507,6 +1507,147 @@ def test_title_relevance_auto_includes_deterministic_tier_zero(
     assert client.requests == []
 
 
+def test_title_relevance_auto_excludes_strict_title_anchor_miss(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/anchor-miss",
+                "title": "Deeper learning in high school improves grades",
+                "year": 2024,
+                "rank": 1,
+                "query": "strict title",
+                "retrieval_tier": 0,
+                "retrieval_phase": "strict_title",
+                "requires_title_screening": False,
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": False,
+                    "matched_main_topics": [
+                        "formal_education",
+                        "learning_impact",
+                    ],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": ["ai"],
+                    "main_topic_values": {
+                        "ai": [],
+                        "formal_education": [
+                            {"value": "high school", "field": "title"}
+                        ],
+                        "learning_impact": [
+                            {"value": "grades", "field": "title"}
+                        ],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = StaticJSONClient([])
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "exclude"
+    assert rows[0]["title_anchor_present"] == "no"
+    assert rows[0]["title_missing_main_topics"] == "ai"
+    assert "Deterministic local reject" in rows[0]["screening_reason"]
+    assert result.row_counts["deterministic_local_excluded"] == 1
+    assert result.row_counts["llm_screened"] == 0
+    assert client.requests == []
+
+
+def test_title_relevance_keeps_non_anchor_local_miss_for_llm(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/non-anchor-miss",
+                "title": "ChatGPT in high school higher-order thinking",
+                "year": 2024,
+                "rank": 1,
+                "query": "strict title",
+                "retrieval_tier": 0,
+                "retrieval_phase": "strict_title",
+                "requires_title_screening": False,
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": True,
+                    "matched_main_topics": ["ai", "formal_education"],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": ["learning_impact"],
+                    "main_topic_values": {
+                        "ai": [{"value": "ChatGPT", "field": "title"}],
+                        "formal_education": [
+                            {"value": "high school", "field": "title"}
+                        ],
+                        "learning_impact": [],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "medium",
+                "reason": "The title uses a learning impact synonym.",
+            }
+        ]
+    )
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "include"
+    assert result.row_counts["deterministic_local_excluded"] == 0
+    assert result.row_counts["llm_screened"] == 1
+    assert len(client.requests) == 1
+
+
 def test_title_relevance_screens_tier_zero_when_main_topic_only_in_abstract(
     tmp_path: Path,
 ) -> None:
