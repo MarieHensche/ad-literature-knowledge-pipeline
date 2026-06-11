@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
+from ad_lit_pipeline.steps.collection.export_included import run as run_export_included
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     review_pool_size,
     run as run_fetch_review_overviews,
@@ -1136,6 +1137,68 @@ def test_export_included_candidates_orders_by_title_tier_and_caps(
     rows = read_csv(output_path)
     assert len(rows) == 1
     assert rows[0]["paper_id"] == "tier_0"
+
+
+def test_export_included_warns_when_below_requested_count(tmp_path: Path) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    output_path = tmp_path / "papers.csv"
+    write_jsonl(
+        candidates_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.123/one",
+                "title": "Only Included",
+                "year": 2024,
+                "rank": 1,
+            }
+        ],
+    )
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "one",
+                "title": "Only Included",
+                "year": "2024",
+                "doi": "10.123/one",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "source_rank": "1",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_relevance_tier": "0",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "provider",
+            "provider_id",
+            "source_rank",
+            "screening_decision",
+            "screening_confidence",
+            "screening_reason",
+            "title_relevance_tier",
+        ],
+    )
+
+    result = run_export_included(
+        candidates_path,
+        screening_path,
+        output_path,
+        max_results=2,
+    )
+
+    assert result.row_counts["included_rows_exported"] == 1
+    assert result.metadata["target_export_rows"] == 2
+    assert result.metadata["export_target_policy"] == "requested_max_results"
+    assert "fewer included papers than requested" in result.warnings[0]
 
 
 def test_select_calibration_papers_skips_reviews_and_protocols(tmp_path: Path) -> None:

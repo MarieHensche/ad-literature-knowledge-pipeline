@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +20,6 @@ STEP = StepSpec(
     uses_llm=False,
     description="Export included screened candidates to canonical paper CSV.",
 )
-
-MINIMUM_EXPORT_RATIO = 0.9
 
 OUTPUT_COLUMNS = [
     "paper_id",
@@ -91,6 +88,9 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
         f"screening_confidence={screening.get('screening_confidence', '')}",
         f"screening_reason={screening.get('screening_reason', '')}",
     ]
+    screening_status = screening.get("screening_status")
+    if screening_status:
+        notes.append(f"screening_status={screening_status}")
     for key in [
         "title_anchor_present",
         "title_relevance_tier",
@@ -219,21 +219,15 @@ def run(
     excluded_screening_rows = sum(
         1 for row in screening_rows if row.get("screening_decision") == "exclude"
     )
-    warnings = []
-    minimum_expected = (
-        math.ceil(max_results * MINIMUM_EXPORT_RATIO)
-        if max_results is not None
-        else None
+    review_screening_rows = sum(
+        1 for row in screening_rows if row.get("screening_decision") == "review"
     )
-    if (
-        max_results is not None
-        and minimum_expected is not None
-        and len(output_rows) < minimum_expected
-    ):
+    warnings = []
+    if max_results is not None and len(output_rows) < max_results:
         warnings.append(
-            "Exported fewer included papers than the minimum threshold: "
-            f"requested={max_results} threshold={minimum_expected} "
-            f"exported={len(output_rows)}."
+            "Exported fewer included papers than requested; candidate sources "
+            "may have been exhausted before the target was reached: "
+            f"requested={max_results} exported={len(output_rows)}."
         )
 
     return StepResult(
@@ -247,14 +241,15 @@ def run(
             "screened_rows": len(screening_rows),
             "included_screening_rows": included_screening_rows,
             "excluded_screening_rows": excluded_screening_rows,
+            "review_screening_rows": review_screening_rows,
             "included_rows_exported": len(output_rows),
             "skipped_by_export_cap": max(0, included_screening_rows - len(output_rows)),
         },
         warnings=warnings,
         metadata={
             "max_results": max_results,
-            "minimum_export_ratio": MINIMUM_EXPORT_RATIO,
-            "minimum_expected_rows": minimum_expected,
+            "target_export_rows": max_results,
+            "export_target_policy": "requested_max_results",
         },
     )
 

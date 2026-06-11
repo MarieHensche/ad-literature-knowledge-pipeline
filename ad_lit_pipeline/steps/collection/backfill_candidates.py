@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 from pathlib import Path
 from typing import Any
 
@@ -33,10 +32,6 @@ STEP = StepSpec(
     description="Fetch and screen replacement candidates when title screening drops too many papers.",
 )
 
-BACKFILL_TRIGGER_RATIO = 0.9
-BACKFILL_CANDIDATE_BUDGET_MULTIPLIER = 1
-
-
 def included_count(screening_rows: list[dict[str, str]]) -> int:
     return sum(
         1 for row in screening_rows if row.get("screening_decision") == "include"
@@ -44,8 +39,16 @@ def included_count(screening_rows: list[dict[str, str]]) -> int:
 
 
 def should_backfill(included: int, max_results: int) -> tuple[bool, int]:
-    minimum_without_backfill = math.ceil(max_results * BACKFILL_TRIGGER_RATIO)
-    return included < minimum_without_backfill, minimum_without_backfill
+    return included < max_results, max_results
+
+
+def provider_queues_exhausted(diagnostics: dict[str, Any]) -> bool:
+    try:
+        exhausted_count = int(diagnostics.get("exhausted_query_count") or 0)
+        execution_count = int(diagnostics.get("execution_query_count") or 0)
+    except (TypeError, ValueError):
+        return False
+    return execution_count > 0 and exhausted_count >= execution_count
 
 
 def fetch_additional_candidates(
@@ -125,7 +128,11 @@ def screen_new_candidates(
             "included": 0,
             "excluded": 0,
             "deterministic_tier0_included": 0,
+            "deterministic_local_excluded": 0,
             "llm_screened": 0,
+            "llm_error_rows": 0,
+            "llm_error_auto_excluded": 0,
+            "manual_review_rows": 0,
         }
 
     work_dir = trace_dir if trace_dir is not None else screening_path.parent
@@ -206,8 +213,8 @@ def run(
             metadata={"reason": "No positive max_results value supplied."},
         )
 
-    needs_backfill, threshold = should_backfill(initial_included, max_results)
-    missing = max(0, max_results - initial_included)
+    needs_backfill, target = should_backfill(initial_included, max_results)
+    missing = max(0, target - initial_included)
     if not needs_backfill or missing <= 0:
         return StepResult(
             step_name=STEP.name,
@@ -226,11 +233,12 @@ def run(
                 "backfill_triggered": 0,
                 "initial_screened_rows": initial_screened,
                 "initial_included_rows": initial_included,
-                "minimum_included_without_backfill": threshold,
+                "target_included_rows": target,
             },
             metadata={
                 "max_results": max_results,
-                "backfill_trigger_ratio": BACKFILL_TRIGGER_RATIO,
+                "backfill_target_policy": "requested_max_results",
+                "backfill_stop_reason": "target_already_reached",
             },
         )
 
@@ -243,21 +251,15 @@ def run(
     total_backfill_screened = 0
     total_backfill_included = 0
     total_backfill_excluded = 0
-    max_backfill_candidates = max_results * BACKFILL_CANDIDATE_BUDGET_MULTIPLIER
+    total_backfill_manual_review = 0
+    total_backfill_llm_errors = 0
+    total_backfill_llm_error_auto_excluded = 0
+    backfill_stop_reason = "target_reached"
 
-    while included_count(combined_screening_rows) < threshold:
-        remaining_budget = max_backfill_candidates - total_backfill_fetched
-        if remaining_budget <= 0:
-            warnings.append(
-                "Backfill stopped before reaching the inclusion threshold because "
-                f"the backfill candidate budget was exhausted: threshold={threshold} "
-                f"included={included_count(combined_screening_rows)}."
-            )
-            break
-
+    while included_count(combined_screening_rows) < target:
         backfill_rounds += 1
-        missing_to_threshold = threshold - included_count(combined_screening_rows)
-        fetch_count = min(missing_to_threshold, remaining_budget)
+        missing_to_target = target - included_count(combined_screening_rows)
+        fetch_count = missing_to_target
         existing_candidates = read_jsonl_objects(deduped_path)
         new_candidates, diagnostics = fetch_additional_candidates(
             plan,
@@ -270,9 +272,10 @@ def run(
         )
         diagnostics_by_round.append(diagnostics)
         if not new_candidates:
+            backfill_stop_reason = "exhausted_no_new_candidates"
             warnings.append(
-                "Backfill stopped before reaching the inclusion threshold because "
-                f"no new candidates were returned: threshold={threshold} "
+                "Backfill stopped before reaching the requested paper count because "
+                f"no new candidates were returned: target={target} "
                 f"included={included_count(combined_screening_rows)}."
             )
             break
@@ -299,16 +302,30 @@ def run(
         total_backfill_screened += screening_counts.get("screened_candidates", 0)
         total_backfill_included += screening_counts.get("included", 0)
         total_backfill_excluded += screening_counts.get("excluded", 0)
+        total_backfill_manual_review += screening_counts.get("manual_review_rows", 0)
+        total_backfill_llm_errors += screening_counts.get("llm_error_rows", 0)
+        total_backfill_llm_error_auto_excluded += screening_counts.get(
+            "llm_error_auto_excluded",
+            0,
+        )
         combined_screening_rows = append_screening_rows(
             screening_path,
             new_screening_rows,
         )
+        if (
+            included_count(combined_screening_rows) < target
+            and len(new_candidates) < fetch_count
+            and provider_queues_exhausted(diagnostics)
+        ):
+            backfill_stop_reason = "exhausted_all_provider_queries"
+            break
 
     final_included = included_count(combined_screening_rows)
-    if final_included < threshold:
+    if final_included < target:
         warnings.append(
-            "Backfill completed but fewer included papers than the threshold are "
-            f"available: threshold={threshold} included={final_included}."
+            "Backfill completed with fewer included papers than requested because "
+            "candidate sources were exhausted before the target was reached: "
+            f"target={target} included={final_included}."
         )
 
     return StepResult(
@@ -330,13 +347,15 @@ def run(
             "backfill_rounds": backfill_rounds,
             "initial_screened_rows": initial_screened,
             "initial_included_rows": initial_included,
-            "minimum_included_without_backfill": threshold,
+            "target_included_rows": target,
             "missing_to_target_before_backfill": missing,
-            "missing_to_threshold_before_backfill": max(0, threshold - initial_included),
             "backfill_candidates_fetched": total_backfill_fetched,
             "backfill_screened_rows": total_backfill_screened,
             "backfill_included_rows": total_backfill_included,
             "backfill_excluded_rows": total_backfill_excluded,
+            "backfill_manual_review_rows": total_backfill_manual_review,
+            "backfill_llm_error_rows": total_backfill_llm_errors,
+            "backfill_llm_error_auto_excluded": total_backfill_llm_error_auto_excluded,
             "final_screened_rows": len(combined_screening_rows),
             "final_included_rows": final_included,
             "final_deduped_candidates": len(combined_deduped),
@@ -345,8 +364,8 @@ def run(
         warnings=warnings,
         metadata={
             "max_results": max_results,
-            "backfill_trigger_ratio": BACKFILL_TRIGGER_RATIO,
-            "backfill_candidate_budget": max_backfill_candidates,
+            "backfill_target_policy": "requested_max_results",
+            "backfill_stop_reason": backfill_stop_reason,
             "fetch_diagnostics_by_round": diagnostics_by_round,
             "fetch_diagnostics": diagnostics_by_round[-1] if diagnostics_by_round else {},
         },

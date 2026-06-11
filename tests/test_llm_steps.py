@@ -55,6 +55,16 @@ def write_csv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> 
         writer.writerows(rows)
 
 
+class RaisingJSONClient:
+    def __init__(self, error: ValueError) -> None:
+        self.error = error
+        self.requests: list[dict[str, object]] = []
+
+    def create_json(self, **request: object) -> object:
+        self.requests.append(request)
+        raise self.error
+
+
 def review_seed_with_full_text(
     tmp_path: Path,
     stem: str = "review",
@@ -1648,6 +1658,144 @@ def test_title_relevance_keeps_non_anchor_local_miss_for_llm(
     assert len(client.requests) == 1
 
 
+def test_title_relevance_marks_ambiguous_llm_error_for_review(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/llm-error-review",
+                "title": "ChatGPT in high school higher-order thinking",
+                "year": 2024,
+                "rank": 1,
+                "query": "AI high school",
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": True,
+                    "matched_main_topics": ["ai", "formal_education"],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": ["learning_impact"],
+                    "main_topic_values": {
+                        "ai": [{"value": "ChatGPT", "field": "title"}],
+                        "formal_education": [
+                            {"value": "high school", "field": "title"}
+                        ],
+                        "learning_impact": [],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = RaisingJSONClient(
+        ValueError(
+            "OpenAI request failed for screen_title_relevance/test "
+            "with model test-model: Error code: 403"
+        )
+    )
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "review"
+    assert rows[0]["screening_status"] == "llm_error"
+    assert rows[0]["needs_manual_review"] == "yes"
+    assert rows[0]["llm_error_type"] == "openai_403"
+    assert rows[0]["title_anchor_present"] == "yes"
+    assert result.row_counts["excluded"] == 0
+    assert result.row_counts["manual_review_rows"] == 1
+    assert result.row_counts["llm_error_rows"] == 1
+    assert "marked for manual review" in result.warnings[0]
+    raw_trace_paths = [
+        path for path in result.trace_paths if path.name.endswith("_raw_response.json")
+    ]
+    assert raw_trace_paths
+    raw_payload = json.loads(raw_trace_paths[0].read_text(encoding="utf-8"))
+    assert raw_payload["error_type"] == "openai_403"
+    assert len(client.requests) == 1
+
+
+def test_title_relevance_auto_excludes_llm_error_when_local_anchor_absent(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/llm-error-anchor-miss",
+                "title": "Deeper learning in high school improves grades",
+                "year": 2024,
+                "rank": 1,
+                "query": "high school grades",
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": False,
+                    "matched_main_topics": [
+                        "formal_education",
+                        "learning_impact",
+                    ],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": ["ai"],
+                    "main_topic_values": {
+                        "ai": [],
+                        "formal_education": [
+                            {"value": "high school", "field": "title"}
+                        ],
+                        "learning_impact": [
+                            {"value": "grades", "field": "title"}
+                        ],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = RaisingJSONClient(ValueError("OpenAI request failed: Error code: 403"))
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "exclude"
+    assert rows[0]["screening_status"] == "llm_error_auto_excluded_anchor_missing"
+    assert rows[0]["needs_manual_review"] == "no"
+    assert rows[0]["title_anchor_present"] == "no"
+    assert rows[0]["title_missing_main_topics"] == "ai"
+    assert result.row_counts["excluded"] == 1
+    assert result.row_counts["manual_review_rows"] == 0
+    assert result.row_counts["llm_error_auto_excluded"] == 1
+    assert "auto-excluded after local anchor miss" in result.warnings[0]
+    assert len(client.requests) == 1
+
+
 def test_title_relevance_screens_tier_zero_when_main_topic_only_in_abstract(
     tmp_path: Path,
 ) -> None:
@@ -1896,7 +2044,7 @@ def test_backfill_fetches_and_screens_when_title_screening_drops_too_many(
     assert len(client.requests) == 1
 
 
-def test_backfill_repeats_until_threshold_is_reached(
+def test_backfill_repeats_until_target_or_provider_exhaustion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2006,17 +2154,19 @@ def test_backfill_repeats_until_threshold_is_reached(
                         "query": "AI school performance",
                     },
                 ]
-            return [
-                {
-                    "provider": "openalex",
-                    "provider_id": "W13",
-                    "doi": "10.1/backfill-second-include",
-                    "title": "Machine learning school academic achievement",
-                    "year": 2024,
-                    "rank": 13,
-                    "query": "AI school performance",
-                }
-            ]
+            if backfill_round == 2:
+                return [
+                    {
+                        "provider": "openalex",
+                        "provider_id": "W13",
+                        "doi": "10.1/backfill-second-include",
+                        "title": "Machine learning school academic achievement",
+                        "year": 2024,
+                        "rank": 13,
+                        "query": "AI school performance",
+                    }
+                ]
+            return []
 
     fake_provider = FakeProvider()
     monkeypatch.setitem(fetch_candidates_step.PROVIDERS, "openalex", fake_provider)
@@ -2076,13 +2226,159 @@ def test_backfill_repeats_until_threshold_is_reached(
     )
 
     assert result.row_counts["backfill_triggered"] == 1
-    assert result.row_counts["backfill_rounds"] == 2
+    assert result.row_counts["backfill_rounds"] == 3
+    assert result.row_counts["target_included_rows"] == 10
+    assert result.row_counts["missing_to_target_before_backfill"] == 3
     assert result.row_counts["backfill_candidates_fetched"] == 3
     assert result.row_counts["backfill_included_rows"] == 2
     assert result.row_counts["final_included_rows"] == 9
-    assert fake_provider.calls == [(1, 10, 2), (2, 12, 1)]
+    assert result.metadata["backfill_target_policy"] == "requested_max_results"
+    assert result.metadata["backfill_stop_reason"] == "exhausted_no_new_candidates"
+    assert fake_provider.calls == [(1, 10, 3), (2, 12, 2), (3, 13, 1)]
     assert len(read_jsonl_objects(deduped_path)) == 13
     assert len(client.requests) == 3
+    assert len(result.warnings) == 2
+    assert "no new candidates were returned" in result.warnings[0]
+    assert "fewer included papers than requested" in result.warnings[1]
+
+
+def test_backfill_runs_when_initial_includes_reach_old_threshold(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    candidates_path = tmp_path / "candidates.jsonl"
+    deduped_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "recommended_provider": "openalex",
+                "provider_specific_plan": {
+                    "provider": "openalex",
+                    "query": "AI school performance",
+                    "filters": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    existing_candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": f"W{i}",
+            "doi": f"10.1/existing-threshold-{i}",
+            "title": f"Existing candidate {i}",
+            "year": 2024,
+            "rank": i,
+            "query": "AI school performance",
+        }
+        for i in range(1, 11)
+    ]
+    write_jsonl(candidates_path, existing_candidates)
+    write_jsonl(deduped_path, existing_candidates)
+    screening_rows = []
+    for i, candidate in enumerate(existing_candidates, start=1):
+        include = i <= 9
+        screening_rows.append(
+            {
+                "paper_id": f"existing_threshold_{i}",
+                "title": str(candidate["title"]),
+                "year": "2024",
+                "doi": str(candidate["doi"]),
+                "provider": "openalex",
+                "provider_id": str(candidate["provider_id"]),
+                "source_rank": str(i),
+                "source_query": "AI school performance",
+                "source_query_reason": "",
+                "screening_decision": "include" if include else "exclude",
+                "screening_confidence": "high",
+                "screening_reason": "Initial screening.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "0" if include else "999",
+                "title_matched_main_topics": (
+                    "ai; formal_education; learning_impact" if include else "ai"
+                ),
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "" if include else "learning_impact",
+            }
+        )
+    write_csv(screening_path, screening_rows, TITLE_RELEVANCE_COLUMNS)
+
+    class FakeProvider:
+        name = "openalex"
+        last_fetch_diagnostics = {
+            "mode": "fake_target_backfill",
+            "target_candidates": 1,
+        }
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            pass
+
+        def fetch_additional_candidates(
+            self,
+            plan: dict[str, object],
+            existing_candidates: list[dict[str, object]],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+            backfill_round: int = 1,
+        ) -> list[dict[str, object]]:
+            assert max_results == 1
+            return [
+                {
+                    "provider": "openalex",
+                    "provider_id": "W11",
+                    "doi": "10.1/backfill-target",
+                    "title": "Machine learning school academic achievement",
+                    "year": 2024,
+                    "rank": 11,
+                    "query": "AI school performance",
+                }
+            ]
+
+    fake_provider = FakeProvider()
+    monkeypatch.setitem(fetch_candidates_step.PROVIDERS, "openalex", fake_provider)
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "The title contains all components.",
+            }
+        ]
+    )
+
+    result = run_backfill_candidates(
+        plan_path,
+        candidates_path,
+        deduped_path,
+        screening_path,
+        ROOT / "configs/topics/ai_in_education.yaml",
+        "test-model",
+        max_results=10,
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    assert result.row_counts["backfill_triggered"] == 1
+    assert result.row_counts["backfill_rounds"] == 1
+    assert result.row_counts["target_included_rows"] == 10
+    assert result.row_counts["backfill_candidates_fetched"] == 1
+    assert result.row_counts["backfill_included_rows"] == 1
+    assert result.row_counts["final_included_rows"] == 10
+    assert len(read_jsonl_objects(deduped_path)) == 11
+    assert len(client.requests) == 1
     assert not result.warnings
 
 

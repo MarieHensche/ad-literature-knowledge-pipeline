@@ -56,9 +56,18 @@ OUTPUT_COLUMNS = [
     "title_matched_main_topics",
     "title_matched_secondary_topics",
     "title_missing_main_topics",
+    "screening_status",
+    "needs_manual_review",
+    "llm_error_type",
+    "llm_error_message",
 ]
 
 EXCLUDED_TIER = 999
+SCREENING_STATUS_DETERMINISTIC_INCLUDE = "deterministic_include"
+SCREENING_STATUS_DETERMINISTIC_EXCLUDE = "deterministic_exclude"
+SCREENING_STATUS_LLM_SCREENED = "llm_screened"
+SCREENING_STATUS_LLM_ERROR = "llm_error"
+SCREENING_STATUS_LLM_ERROR_AUTO_EXCLUDED = "llm_error_auto_excluded_anchor_missing"
 
 
 def topic_structure(contract: dict[str, Any]) -> dict[str, Any]:
@@ -263,6 +272,66 @@ def row_base(candidate: dict[str, Any], index: int) -> dict[str, str]:
     }
 
 
+def local_main_topic_values(candidate: dict[str, Any]) -> dict[str, Any]:
+    topic_matches = candidate.get("topic_matches")
+    if not isinstance(topic_matches, dict):
+        return {}
+    value_map = topic_matches.get("main_topic_values")
+    if not isinstance(value_map, dict):
+        return {}
+    return value_map
+
+
+def local_matched_main_topics(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+) -> list[str]:
+    value_map = local_main_topic_values(candidate)
+    return [
+        topic_id
+        for topic_id in main_topic_ids(topic_contract)
+        if isinstance(value_map.get(topic_id), list) and value_map.get(topic_id)
+    ]
+
+
+def local_anchor_absent(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+) -> bool:
+    topic_matches = candidate.get("topic_matches")
+    if not isinstance(topic_matches, dict):
+        return False
+    structure = topic_structure(topic_contract)
+    anchor_id = str(structure["anchor_topic_id"])
+    value_map = local_main_topic_values(candidate)
+    anchor_values = value_map.get(anchor_id)
+    return (
+        topic_matches.get("anchor_present") is False
+        and isinstance(anchor_values, list)
+        and not anchor_values
+    )
+
+
+def llm_error_type(error: ValueError) -> str:
+    error_text = str(error).casefold()
+    if "error code: 403" in error_text or "status code: 403" in error_text:
+        return "openai_403"
+    if "rate limit" in error_text or "error code: 429" in error_text:
+        return "openai_rate_limit"
+    if "timeout" in error_text or "timed out" in error_text:
+        return "openai_timeout"
+    if "malformed json" in error_text or "json" in error_text:
+        return "llm_malformed_json"
+    return type(error).__name__
+
+
+def truncate_error_message(error: ValueError, max_length: int = 1000) -> str:
+    message = str(error)
+    if len(message) <= max_length:
+        return message
+    return message[: max_length - 3] + "..."
+
+
 def deterministic_tier0_screening(
     topic_contract: dict[str, Any],
     candidate: dict[str, Any],
@@ -308,6 +377,10 @@ def deterministic_tier0_screening(
             topic_matches.get("secondary_topic_values")
         ),
         "title_missing_main_topics": "",
+        "screening_status": SCREENING_STATUS_DETERMINISTIC_INCLUDE,
+        "needs_manual_review": "no",
+        "llm_error_type": "",
+        "llm_error_message": "",
     }
 
 
@@ -333,12 +406,7 @@ def deterministic_local_reject_screening(
     if not isinstance(value_map, dict):
         return None
 
-    matched_main = [
-        topic_id
-        for topic_id in ids
-        if isinstance(value_map.get(topic_id), list)
-        and value_map.get(topic_id)
-    ]
+    matched_main = local_matched_main_topics(topic_contract, candidate)
     missing = [topic_id for topic_id in ids if topic_id not in set(matched_main)]
     anchor_present = topic_matches.get("anchor_present") is True
     if anchor_present and anchor_id not in missing:
@@ -362,6 +430,10 @@ def deterministic_local_reject_screening(
             topic_matches.get("secondary_topic_values")
         ),
         "title_missing_main_topics": "; ".join(missing),
+        "screening_status": SCREENING_STATUS_DETERMINISTIC_EXCLUDE,
+        "needs_manual_review": "no",
+        "llm_error_type": "",
+        "llm_error_message": "",
     }
 
 
@@ -420,6 +492,10 @@ def normalize_screening_result(
         "title_matched_main_topics": "; ".join(matched_main),
         "title_matched_secondary_topics": format_secondary_matches(secondary),
         "title_missing_main_topics": "; ".join(missing),
+        "screening_status": SCREENING_STATUS_LLM_SCREENED,
+        "needs_manual_review": "no",
+        "llm_error_type": "",
+        "llm_error_message": "",
     }
 
 
@@ -479,6 +555,110 @@ def screen_candidate(
     )
 
 
+def write_llm_error_trace(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+    model: str,
+    trace_writer: LLMTraceWriter | None,
+    call_id: str,
+    error: ValueError,
+) -> list[Path]:
+    if trace_writer is None:
+        return []
+
+    error_message = truncate_error_message(error)
+    error_payload = {
+        "screening_status": SCREENING_STATUS_LLM_ERROR,
+        "error_type": llm_error_type(error),
+        "error_message": error_message,
+    }
+    trace_paths = trace_writer.write_trace(
+        step_name=STEP.name,
+        call_id=call_id,
+        system_message=SYSTEM_MESSAGE,
+        prompt=render_screen_title_relevance_prompt(
+            topic_contract,
+            candidate_for_prompt(candidate),
+        ),
+        model=model,
+        schema_name="title_relevance_screening",
+        schema=title_relevance_schema(
+            main_topic_ids(topic_contract),
+            secondary_topic_ids(topic_contract),
+        ),
+        raw_response=error_payload,
+        parsed_response=error_payload,
+        validation={"error": True},
+    )
+    return trace_paths.as_list()
+
+
+def llm_error_screening_row(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+    index: int,
+    error: ValueError,
+) -> dict[str, str]:
+    structure = topic_structure(topic_contract)
+    anchor_id = str(structure["anchor_topic_id"])
+    matched_main = local_matched_main_topics(topic_contract, candidate)
+    missing = [
+        topic_id
+        for topic_id in main_topic_ids(topic_contract)
+        if topic_id not in set(matched_main)
+    ]
+    error_message = truncate_error_message(error)
+    error_kind = llm_error_type(error)
+    if local_anchor_absent(topic_contract, candidate):
+        if anchor_id not in missing:
+            missing.insert(0, anchor_id)
+        return {
+            **row_base(candidate, index),
+            "screening_decision": "exclude",
+            "screening_confidence": "n/a",
+            "screening_reason": (
+                "LLM screening failed, but local matching already shows the "
+                f"anchor topic '{anchor_id}' is absent in the required field."
+            ),
+            "title_anchor_present": "no",
+            "title_relevance_tier": str(EXCLUDED_TIER),
+            "title_matched_main_topics": "; ".join(matched_main),
+            "title_matched_secondary_topics": "",
+            "title_missing_main_topics": "; ".join(missing),
+            "screening_status": SCREENING_STATUS_LLM_ERROR_AUTO_EXCLUDED,
+            "needs_manual_review": "no",
+            "llm_error_type": error_kind,
+            "llm_error_message": error_message,
+        }
+
+    topic_matches = candidate.get("topic_matches")
+    anchor_present = ""
+    if isinstance(topic_matches, dict):
+        if topic_matches.get("anchor_present") is True:
+            anchor_present = "yes"
+        elif topic_matches.get("anchor_present") is False:
+            anchor_present = "no"
+
+    return {
+        **row_base(candidate, index),
+        "screening_decision": "review",
+        "screening_confidence": "n/a",
+        "screening_reason": (
+            "LLM screening failed before a relevance decision could be made; "
+            "manual review or targeted retry is required."
+        ),
+        "title_anchor_present": anchor_present,
+        "title_relevance_tier": str(EXCLUDED_TIER),
+        "title_matched_main_topics": "; ".join(matched_main),
+        "title_matched_secondary_topics": "",
+        "title_missing_main_topics": "; ".join(missing),
+        "screening_status": SCREENING_STATUS_LLM_ERROR,
+        "needs_manual_review": "yes",
+        "llm_error_type": error_kind,
+        "llm_error_message": error_message,
+    }
+
+
 def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -509,6 +689,8 @@ def run(
     deterministic_tier0_included = 0
     deterministic_local_excluded = 0
     llm_screened = 0
+    llm_error_rows = 0
+    llm_error_auto_excluded = 0
 
     for index, candidate in enumerate(candidates, start=1):
         deterministic_row = deterministic_tier0_screening(
@@ -566,33 +748,46 @@ def run(
         except ValueError as error:
             elapsed = time.monotonic() - started_at
             paper_id = make_paper_id(candidate, index)
+            error_row = llm_error_screening_row(
+                topic_contract,
+                candidate,
+                index,
+                error,
+            )
+            rows.append(error_row)
+            error_trace_paths = write_llm_error_trace(
+                topic_contract,
+                candidate,
+                model,
+                trace_writer,
+                paper_id,
+                error,
+            )
+            all_trace_paths.extend(error_trace_paths)
+            llm_error_rows += 1
+            if error_row["screening_decision"] == "exclude":
+                llm_error_auto_excluded += 1
+                action = "auto-excluded after local anchor miss"
+            else:
+                action = "marked for manual review"
             warning = (
                 f"Failed to screen title '{paper_id}' after retry "
-                f"after {elapsed:.1f}s (auto-excluded): {error}"
+                f"after {elapsed:.1f}s ({action}): {error}"
             )
             warnings.append(warning)
             print(f"  Warning: {warning}", flush=True)
-            rows.append(
-                {
-                    **row_base(candidate, index),
-                    "screening_decision": "exclude",
-                    "screening_confidence": "n/a",
-                    "screening_reason": f"Auto-excluded due to LLM error: {error}",
-                    "title_anchor_present": "no",
-                    "title_relevance_tier": str(EXCLUDED_TIER),
-                    "title_matched_main_topics": "",
-                    "title_matched_secondary_topics": "",
-                    "title_missing_main_topics": "",
-                }
-            )
 
     write_csv(output_path, rows)
     included = sum(1 for row in rows if row["screening_decision"] == "include")
     excluded = sum(1 for row in rows if row["screening_decision"] == "exclude")
+    manual_review = sum(1 for row in rows if row["screening_decision"] == "review")
     tier_counts: dict[str, int] = {}
+    screening_status_counts: dict[str, int] = {}
     for row in rows:
         tier = row.get("title_relevance_tier", "")
         tier_counts[tier] = tier_counts.get(tier, 0) + 1
+        status = row.get("screening_status", "")
+        screening_status_counts[status] = screening_status_counts.get(status, 0) + 1
 
     return StepResult(
         step_name=STEP.name,
@@ -608,10 +803,16 @@ def run(
             "deterministic_tier0_included": deterministic_tier0_included,
             "deterministic_local_excluded": deterministic_local_excluded,
             "llm_screened": llm_screened,
+            "llm_error_rows": llm_error_rows,
+            "llm_error_auto_excluded": llm_error_auto_excluded,
+            "manual_review_rows": manual_review,
         },
         trace_paths=all_trace_paths,
         warnings=warnings,
-        metadata={"tier_counts": tier_counts},
+        metadata={
+            "tier_counts": tier_counts,
+            "screening_status_counts": screening_status_counts,
+        },
     )
 
 
