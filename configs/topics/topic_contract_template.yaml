@@ -10,18 +10,42 @@ topic_structure:
   main_topics:
     - topic_id: primary_topic
       label: Primary topic
+      field: title_or_abstract
       terms:
+        - replace with primary topic
+        - replace with synonym
+      retrieval_terms:
+        - replace with primary topic
+        - replace with synonym
+      matching_terms:
         - replace with primary topic
         - replace with synonym
     - topic_id: secondary_focus
       label: Secondary focus
+      field: title_or_abstract
       terms:
+        - replace with secondary focus
+        - replace with close variant
+      retrieval_terms:
+        - replace with secondary focus
+        - replace with close variant
+      matching_terms:
         - replace with secondary focus
         - replace with close variant
   secondary_topics:
     secondary_focus:
-      - replace with adjacent secondary focus
-      - replace with related context
+      - secondary_topic_id: adjacent_secondary_focus
+        label: Adjacent secondary focus
+        field: title_or_abstract
+        terms:
+          - replace with adjacent secondary focus
+          - replace with related context
+        retrieval_terms:
+          - replace with adjacent secondary focus
+          - replace with related context
+        matching_terms:
+          - replace with adjacent secondary focus
+          - replace with related context
 
 scope:
   include_criteria:

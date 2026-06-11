@@ -179,7 +179,7 @@ def build_step_functions(
         return fetch_candidates.run(
             artifacts.plan_json,
             artifacts.candidates_jsonl,
-            candidate_search_budget(args.max_results),
+            args.max_results,
             mailto=args.mailto,
         )
 
@@ -199,7 +199,22 @@ def build_step_functions(
             artifacts.candidate_screening_csv,
             args.model,
             topic_contract_path,
-            limit=candidate_search_budget(args.max_results),
+            limit=args.max_results,
+            trace_dir=trace_dir,
+        )
+
+    def run_backfill_candidates() -> object:
+        from ad_lit_pipeline.steps.collection import backfill_candidates
+
+        return backfill_candidates.run(
+            artifacts.plan_json,
+            artifacts.candidates_jsonl,
+            artifacts.deduped_candidates_jsonl,
+            artifacts.candidate_screening_csv,
+            topic_contract_path,
+            args.model,
+            args.max_results,
+            mailto=args.mailto,
             trace_dir=trace_dir,
         )
 
@@ -309,6 +324,7 @@ def build_step_functions(
         "fetch_candidates": run_fetch_candidates,
         "deduplicate_candidates": run_deduplicate_candidates,
         "screen_title_relevance": run_screen_title_relevance,
+        "backfill_candidates": run_backfill_candidates,
         "select_calibration_papers": run_select_calibration_papers,
         "prepare_calibration_full_text": run_prepare_calibration_full_text,
         "calibrate_topic_contract": run_calibrate_topic_contract,

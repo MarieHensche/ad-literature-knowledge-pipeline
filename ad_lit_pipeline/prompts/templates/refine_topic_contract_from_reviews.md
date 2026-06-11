@@ -20,6 +20,9 @@ Rules:
   from `full_text_evidence` in the extracted review records. Do not use titles,
   abstracts, query metadata, citation metadata, or imagined primary papers to
   define tags.
+- Do not use titles, abstracts, query metadata, citation metadata, or imagined
+  primary papers to define tagging categories or allowed values.
+- Define tagging categories and allowed values only from `full_text_evidence`.
 - If no extracted review full-text evidence is available, the pipeline should
   fail before this prompt is called. Do not invent a fallback ontology from the
   research question or discovery contract alone.
@@ -30,7 +33,9 @@ Rules:
   may refine only `topic_structure` and `tagging.categories`.
 - Keep `collection.allowed_providers` to the providers already in the contract.
 - In the JSON response, return `topic_structure.secondary_topics` as an array of
-  objects with `main_topic_id` and `terms`.
+  grouped secondary objects. Each object must include the parent `main_topic_id`
+  it can replace, plus `secondary_topic_id`, `label`, `field`, `terms`,
+  `retrieval_terms`, and `matching_terms`.
 - Rebuild or keep `topic_structure` based on the review full-text evidence:
   - `anchor_topic_id` is the mandatory core concept for title screening. A
     paper title must show this topic to enter the collection.
@@ -43,12 +48,24 @@ Rules:
   - Use at least 2 main topics; prefer 3 to 6 when the review evidence supports
     them. Each `topic_id` must be lowercase snake_case and compact enough to be
     useful as a tag value.
+  - Each main topic must include `field`, `terms`, `retrieval_terms`, and
+    `matching_terms`.
+  - Set `field` to `title`, `abstract`, or `title_or_abstract` depending on
+    where that topic should be required during provider-side retrieval.
+  - Set `retrieval_terms` to the strongest provider-search terms for that
+    topic, with at most 12 terms. Keep these compact and high-signal.
+  - Set `matching_terms` to broader local-matching terms that explain returned
+    papers, including useful synonyms, abbreviations, subtypes, and concrete
+    indicators.
   - Do not use generic main topics such as `method`, `outcome`, `population`,
     `technology`, `setting`, or `target` unless the id is made
     topic-specific.
   - `secondary_topics` are replacement terms for non-anchor main topics when
-    paper titles use adjacent wording. They should improve recall without
-    weakening topical fit, and must not be defined for the anchor.
+    paper titles use adjacent wording. They should improve recall without weakening topical fit,
+    and must not be defined for the anchor.
+  - Keep different replacement concepts in separate secondary groups. For
+    example, higher education and workplace learning are two groups, not one
+    mixed secondary-topic term list.
 - Treat any existing categories from a template or provisional draft as
   replaceable examples. Keep one only when the review evidence shows that it is
   a crucial knowledge dimension for this topic.
@@ -61,6 +78,9 @@ Rules:
   evidence.
 - Do not create a root focus selector. Tag papers directly with topic-specific
   categories and values.
+- Tag papers directly with topic-specific categories.
+- Do not create a whole-question category such as `effect_of_x`; represent
+  topic-specific knowledge dimensions directly instead.
 - Do a mental distribution check against the seed reviews and the likely primary
   papers they describe: each value in each general category should be useful
   for at least one paper. Do not include values that are merely possible but not

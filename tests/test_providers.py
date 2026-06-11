@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -11,8 +12,15 @@ from ad_lit_pipeline.providers.openalex import (
     build_openalex_url,
     candidate_from_work,
     inverted_index_to_text,
+    redact_openalex_url,
 )
 from ad_lit_pipeline.steps.collection.fetch_candidates import get_provider, run
+from ad_lit_pipeline.topics.retrieval import execution_queries_for_provider
+
+
+@pytest.fixture(autouse=True)
+def clear_openalex_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
 
 
 def openalex_plan() -> dict[str, object]:
@@ -62,6 +70,18 @@ def test_openalex_url_uses_query_and_supported_filters() -> None:
     assert "mailto=a%40test" in url
 
 
+def test_openalex_url_uses_api_key_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENALEX_API_KEY", "secret-key")
+
+    url = build_openalex_url(openalex_plan(), page=1, per_page=25, mailto=None)
+
+    assert "api_key=secret-key" in url
+    assert "api_key=REDACTED" in redact_openalex_url(url)
+    assert "secret-key" not in redact_openalex_url(url)
+
+
 def test_openalex_url_can_select_open_review_overviews() -> None:
     plan = openalex_plan()
     plan["filters"] = {
@@ -79,6 +99,58 @@ def test_openalex_url_can_select_open_review_overviews() -> None:
     assert "has_fulltext%3Atrue" in url
     assert "has_pdf_url%3Atrue" in url
     assert "has_content.pdf%3Atrue" in url
+
+
+def test_openalex_url_uses_fielded_topic_block_filters() -> None:
+    query_entry = {
+        "query": "(AI OR deep learning) AND (student achievement)",
+        "blocks": [
+            {"field": "title", "terms": ["AI", "deep learning"]},
+            {"field": "abstract", "terms": ["student achievement"]},
+            {"field": "title_or_abstract", "terms": ["K-12"]},
+        ],
+    }
+
+    url = build_openalex_url(
+        openalex_plan(),
+        page=1,
+        per_page=25,
+        mailto=None,
+        query=query_entry["query"],
+        query_entry=query_entry,
+    )
+
+    assert "search=" not in url
+    assert "title.search%3AAI%7Cdeep+learning" in url
+    assert "abstract.search%3Astudent+achievement" in url
+    assert "title_and_abstract.search%3AK-12" in url
+
+
+def test_query_execution_decomposes_when_boolean_is_not_supported() -> None:
+    query_entry = {
+        "query_id": "tier_0_all_main",
+        "query": "(AI OR machine learning) AND (school OR classroom)",
+        "blocks": [
+            {"field": "title", "terms": ["AI", "machine learning"]},
+            {"field": "title", "terms": ["school", "classroom"]},
+        ],
+    }
+
+    boolean_entries = execution_queries_for_provider(query_entry, True)
+    fallback_entries = execution_queries_for_provider(query_entry, False)
+
+    assert len(boolean_entries) == 1
+    assert boolean_entries[0]["query_id"] == "tier_0_all_main"
+    assert boolean_entries[0]["use_query_blocks"] is True
+    assert [entry["query"] for entry in fallback_entries] == [
+        "AI school",
+        "machine learning classroom",
+    ]
+    assert all(entry["use_query_blocks"] is False for entry in fallback_entries)
+    assert all(
+        entry["logical_query_id"] == "tier_0_all_main"
+        for entry in fallback_entries
+    )
 
 
 def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
@@ -151,6 +223,309 @@ def test_openalex_fetches_multiple_search_queries(
     assert len(urls) == 2
     assert "search=early+detection+Alzheimer%27s" in urls[0]
     assert "search=MCI+screening" in urls[1]
+
+
+def test_openalex_tiered_fetch_dedupes_and_continues_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls: list[str] = []
+
+    def fake_fetch_json(url: str) -> dict[str, object]:
+        urls.append(url)
+        if "page=1" in url:
+            return {
+                "results": [
+                    {
+                        "id": "https://openalex.org/W1",
+                        "doi": "https://doi.org/10.1/example",
+                        "display_name": "Deep learning in K-12 classrooms",
+                        "publication_year": 2024,
+                        "abstract_inverted_index": {
+                            "student": [0],
+                            "achievement": [1],
+                        },
+                    },
+                    {
+                        "id": "https://openalex.org/W1-duplicate",
+                        "doi": "https://doi.org/10.1/example",
+                        "display_name": "Deep learning in K-12 classrooms",
+                        "publication_year": 2024,
+                        "abstract_inverted_index": {
+                            "student": [0],
+                            "achievement": [1],
+                        },
+                    },
+                ]
+            }
+        return {
+            "results": [
+                {
+                    "id": "https://openalex.org/W2",
+                    "doi": "https://doi.org/10.1/second",
+                    "display_name": "AI in school learning outcomes",
+                    "publication_year": 2024,
+                    "abstract_inverted_index": {
+                        "student": [0],
+                        "achievement": [1],
+                    },
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "ad_lit_pipeline.providers.openalex.fetch_json",
+        fake_fetch_json,
+    )
+
+    plan = openalex_plan()
+    plan["topic_match_spec"] = {
+        "anchor_topic_id": "ai",
+        "main_topics": [
+            {
+                "topic_id": "ai",
+                "field": "title_or_abstract",
+                "terms": ["AI", "deep learning"],
+            },
+            {
+                "topic_id": "education",
+                "field": "title",
+                "terms": ["K-12", "school"],
+            },
+            {
+                "topic_id": "impact",
+                "field": "abstract",
+                "terms": ["student achievement"],
+            },
+        ],
+        "secondary_topics": [],
+    }
+    plan["retrieval_strategy"] = {"iterations_per_group": 2}
+    plan["query_groups"] = [
+        {
+            "group_id": "tier_0",
+            "tier": 0,
+            "queries": [
+                {
+                    "query_id": "tier_0_all_main",
+                    "tier": 0,
+                    "query": "(AI OR deep learning) AND (K-12 OR school)",
+                    "reason": "Tier 0.",
+                    "requires_title_screening": False,
+                    "blocks": [
+                        {
+                            "topic_id": "ai",
+                            "kind": "main",
+                            "field": "title_or_abstract",
+                            "terms": ["AI", "deep learning"],
+                        },
+                        {
+                            "topic_id": "education",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["K-12", "school"],
+                        },
+                        {
+                            "topic_id": "impact",
+                            "kind": "main",
+                            "field": "abstract",
+                            "terms": ["student achievement"],
+                        },
+                    ],
+                }
+            ],
+        }
+    ]
+
+    provider = OpenAlexProvider()
+    candidates = provider.fetch_candidates(
+        plan,
+        max_results=2,
+        per_page=25,
+        mailto=None,
+        sleep_seconds=0,
+    )
+
+    assert len(candidates) == 2
+    assert candidates[0]["dedupe_key"] == "doi:10.1/example"
+    assert candidates[0]["retrieval_tier"] == 0
+    assert candidates[0]["local_relevance_tier"] == 0
+    assert candidates[0]["in_fetch_duplicate_count"] == 2
+    assert candidates[0]["in_fetch_duplicate_provenance"]
+    assert provider.last_fetch_diagnostics["raw_provider_candidates_seen"] == 3
+    assert provider.last_fetch_diagnostics["in_fetch_duplicates_removed"] == 1
+    assert "page=1" in urls[0]
+    assert "page=2" in urls[1]
+
+
+def test_tiered_fetch_uses_fallback_execution_queries_without_boolean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls: list[str] = []
+
+    def fake_fetch_json(url: str) -> dict[str, object]:
+        urls.append(url)
+        if "machine+learning+classroom" in url:
+            work_id = "https://openalex.org/W2"
+            title = "Machine learning classroom study"
+        else:
+            work_id = "https://openalex.org/W1"
+            title = "AI school study"
+        return {
+            "results": [
+                {
+                    "id": work_id,
+                    "display_name": title,
+                    "publication_year": 2024,
+                    "abstract_inverted_index": {"student": [0]},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "ad_lit_pipeline.providers.openalex.fetch_json",
+        fake_fetch_json,
+    )
+    plan = openalex_plan()
+    plan["retrieval_strategy"] = {"iterations_per_group": 2}
+    plan["query_groups"] = [
+        {
+            "group_id": "tier_0",
+            "tier": 0,
+            "queries": [
+                {
+                    "query_id": "tier_0_all_main",
+                    "tier": 0,
+                    "query": "(AI OR machine learning) AND (school OR classroom)",
+                    "reason": "Tier 0.",
+                    "requires_title_screening": False,
+                    "blocks": [
+                        {
+                            "topic_id": "ai",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["AI", "machine learning"],
+                        },
+                        {
+                            "topic_id": "education",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["school", "classroom"],
+                        },
+                    ],
+                }
+            ],
+        }
+    ]
+
+    provider = OpenAlexProvider()
+    provider.supports_boolean_query_blocks = False
+    candidates = provider.fetch_candidates(
+        plan,
+        max_results=2,
+        per_page=25,
+        mailto=None,
+        sleep_seconds=0,
+    )
+
+    assert len(candidates) == 2
+    assert candidates[0]["retrieval_query_id"] == "tier_0_all_main_fallback_1"
+    assert candidates[0]["retrieval_logical_query_id"] == "tier_0_all_main"
+    assert candidates[1]["retrieval_query_id"] == "tier_0_all_main_fallback_2"
+    assert "search=AI+school" in urls[0]
+    assert "search=machine+learning+classroom" in urls[1]
+    assert "title.search" not in "".join(urls)
+    assert provider.last_fetch_diagnostics["provider_boolean_query_blocks"] is False
+    assert provider.last_fetch_diagnostics["logical_query_count"] == 1
+    assert provider.last_fetch_diagnostics["execution_query_count"] == 2
+
+
+def test_openalex_backfill_resumes_after_consumed_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls: list[str] = []
+
+    def fake_fetch_json(url: str) -> dict[str, object]:
+        urls.append(url)
+        page = parse_qs(urlparse(url).query).get("page", ["1"])[0]
+        if page == "1":
+            work_id = "https://openalex.org/W1"
+            title = "AI school achievement one"
+        else:
+            work_id = "https://openalex.org/W2"
+            title = "AI school achievement two"
+        return {
+            "results": [
+                {
+                    "id": work_id,
+                    "doi": f"https://doi.org/10.1/{work_id.rsplit('/', 1)[-1]}",
+                    "display_name": title,
+                    "publication_year": 2024,
+                    "abstract_inverted_index": {"student": [0]},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "ad_lit_pipeline.providers.openalex.fetch_json",
+        fake_fetch_json,
+    )
+    plan = openalex_plan()
+    plan["retrieval_strategy"] = {"iterations_per_group": 2}
+    plan["query_groups"] = [
+        {
+            "group_id": "tier_0",
+            "tier": 0,
+            "queries": [
+                {
+                    "query_id": "tier_0_all_main",
+                    "tier": 0,
+                    "query": "(AI) AND (school)",
+                    "reason": "Tier 0.",
+                    "requires_title_screening": False,
+                    "blocks": [
+                        {
+                            "topic_id": "ai",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["AI"],
+                        },
+                        {
+                            "topic_id": "education",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["school"],
+                        },
+                    ],
+                }
+            ],
+        }
+    ]
+
+    provider = OpenAlexProvider()
+    first = provider.fetch_candidates(
+        plan,
+        max_results=1,
+        per_page=1,
+        mailto=None,
+        sleep_seconds=0,
+    )
+    additional = provider.fetch_additional_candidates(
+        plan,
+        first,
+        max_results=1,
+        per_page=1,
+        mailto=None,
+        sleep_seconds=0,
+    )
+
+    assert len(first) == 1
+    assert len(additional) == 1
+    assert additional[0]["provider_id"] == "https://openalex.org/W2"
+    assert additional[0]["retrieval_backfill_round"] == 1
+    assert "page=1" in urls[0]
+    assert "page=2" in urls[1]
+    assert provider.last_fetch_diagnostics["existing_candidates"] == 1
+    assert provider.last_fetch_diagnostics["unique_candidates"] == 1
 
 
 def test_fetch_candidates_rejects_unsupported_provider(tmp_path: Path) -> None:

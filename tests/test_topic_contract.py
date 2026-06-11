@@ -323,3 +323,47 @@ def test_topic_contract_rejects_unknown_secondary_topic_key() -> None:
 
     with pytest.raises(ValueError, match="unknown main topic id"):
         validate_topic_contract(contract)
+
+
+def test_topic_contract_accepts_grouped_secondary_topics() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["secondary_topics"] = {
+        "formal_education": [
+            {
+                "secondary_topic_id": "higher_education",
+                "label": "Higher education",
+                "field": "title",
+                "terms": ["higher education", "university"],
+                "retrieval_terms": ["higher education"],
+                "matching_terms": ["college"],
+            },
+            {
+                "secondary_topic_id": "workplace_learning",
+                "label": "Workplace learning",
+                "field": "title_or_abstract",
+                "terms": ["workplace", "internship"],
+                "retrieval_terms": ["workplace"],
+                "matching_terms": ["office"],
+            },
+        ]
+    }
+
+    validate_topic_contract(contract)
+
+
+def test_topic_contract_rejects_too_many_retrieval_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["retrieval_terms"] = [
+        f"term {index}" for index in range(13)
+    ]
+
+    with pytest.raises(ValueError, match="at most 12 terms"):
+        validate_topic_contract(contract)
+
+
+def test_topic_contract_rejects_invalid_topic_field() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["field"] = "full_text"
+
+    with pytest.raises(ValueError, match="field must be one of"):
+        validate_topic_contract(contract)

@@ -60,7 +60,14 @@ def run(
     provider = get_provider(provider_name)
     provider.validate_plan(plan)
     search_query_count = 1
-    if hasattr(provider, "search_queries_from_plan"):
+    query_groups = plan.get("query_groups")
+    if isinstance(query_groups, list):
+        search_query_count = sum(
+            len(group.get("queries", []))
+            for group in query_groups
+            if isinstance(group, dict) and isinstance(group.get("queries"), list)
+        )
+    elif hasattr(provider, "search_queries_from_plan"):
         search_query_count = len(provider.search_queries_from_plan(plan))
     resolved_max_results = max_results or int(
         provider_plan.get("max_results_recommendation") or 100
@@ -72,14 +79,47 @@ def run(
         mailto=mailto,
         sleep_seconds=sleep_seconds,
     )
+    diagnostics = getattr(provider, "last_fetch_diagnostics", {})
+    if not isinstance(diagnostics, dict):
+        diagnostics = {}
+    warnings = []
+    if len(candidates) < resolved_max_results:
+        warnings.append(
+            "Fetched fewer unique candidates than requested after all available "
+            f"query groups: requested={resolved_max_results} fetched={len(candidates)}."
+        )
 
     write_jsonl(output_path, candidates)
+    row_counts = {"fetched_candidates": len(candidates)}
+    for key in [
+        "target_candidates",
+        "raw_provider_candidates_seen",
+        "in_fetch_duplicates_removed",
+        "unique_candidates",
+        "exhausted_query_count",
+        "logical_query_count",
+        "execution_query_count",
+    ]:
+        value = diagnostics.get(key)
+        if isinstance(value, int):
+            row_counts[key] = value
+    tier_counts = diagnostics.get("tier_counts")
+    if isinstance(tier_counts, dict):
+        for tier, count in tier_counts.items():
+            if isinstance(count, int):
+                row_counts[f"tier_{tier}_candidates"] = count
+
     return StepResult(
         step_name=STEP.name,
         inputs={"search_plan_json": plan_path},
         outputs={"candidates_jsonl": output_path},
-        row_counts={"fetched_candidates": len(candidates)},
-        metadata={"provider": provider_name, "search_queries": search_query_count},
+        row_counts=row_counts,
+        warnings=warnings,
+        metadata={
+            "provider": provider_name,
+            "search_queries": search_query_count,
+            "fetch_diagnostics": diagnostics,
+        },
     )
 
 

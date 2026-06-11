@@ -3,10 +3,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.topics.matching import (
+    format_secondary_group_value_map,
+    format_topic_value_map,
+)
 
 
 STEP = StepSpec(
@@ -16,6 +21,8 @@ STEP = StepSpec(
     uses_llm=False,
     description="Export included screened candidates to canonical paper CSV.",
 )
+
+MINIMUM_EXPORT_RATIO = 0.9
 
 OUTPUT_COLUMNS = [
     "paper_id",
@@ -111,6 +118,26 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
     if duplicate_count:
         notes.append(f"duplicate_count={duplicate_count}")
 
+    in_fetch_duplicate_count = candidate.get("in_fetch_duplicate_count")
+    if in_fetch_duplicate_count:
+        notes.append(f"in_fetch_duplicate_count={in_fetch_duplicate_count}")
+
+    topic_matches = candidate.get("topic_matches")
+    if isinstance(topic_matches, dict):
+        main_matches = format_topic_value_map(topic_matches.get("main_topic_values"))
+        if main_matches:
+            notes.append(f"topic_main_matches={main_matches}")
+        secondary_matches = format_topic_value_map(
+            topic_matches.get("secondary_topic_values")
+        )
+        if secondary_matches:
+            notes.append(f"topic_secondary_matches={secondary_matches}")
+        secondary_group_matches = format_secondary_group_value_map(
+            topic_matches.get("secondary_topic_group_values")
+        )
+        if secondary_group_matches:
+            notes.append(f"topic_secondary_group_matches={secondary_group_matches}")
+
     return "; ".join(str(note) for note in notes if str(note).strip())
 
 
@@ -186,6 +213,28 @@ def run(
     screening_rows = read_csv(screening_path)
     output_rows = export_included(candidates, screening_rows, max_results)
     write_csv(output_path, output_rows)
+    included_screening_rows = sum(
+        1 for row in screening_rows if row.get("screening_decision") == "include"
+    )
+    excluded_screening_rows = sum(
+        1 for row in screening_rows if row.get("screening_decision") == "exclude"
+    )
+    warnings = []
+    minimum_expected = (
+        math.ceil(max_results * MINIMUM_EXPORT_RATIO)
+        if max_results is not None
+        else None
+    )
+    if (
+        max_results is not None
+        and minimum_expected is not None
+        and len(output_rows) < minimum_expected
+    ):
+        warnings.append(
+            "Exported fewer included papers than the minimum threshold: "
+            f"requested={max_results} threshold={minimum_expected} "
+            f"exported={len(output_rows)}."
+        )
 
     return StepResult(
         step_name=STEP.name,
@@ -196,9 +245,17 @@ def run(
         outputs={"papers_csv": output_path},
         row_counts={
             "screened_rows": len(screening_rows),
+            "included_screening_rows": included_screening_rows,
+            "excluded_screening_rows": excluded_screening_rows,
             "included_rows_exported": len(output_rows),
+            "skipped_by_export_cap": max(0, included_screening_rows - len(output_rows)),
         },
-        metadata={"max_results": max_results},
+        warnings=warnings,
+        metadata={
+            "max_results": max_results,
+            "minimum_export_ratio": MINIMUM_EXPORT_RATIO,
+            "minimum_expected_rows": minimum_expected,
+        },
     )
 
 

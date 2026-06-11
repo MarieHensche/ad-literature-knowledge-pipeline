@@ -200,6 +200,7 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
 
     raw_anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
     id_map: dict[str, str] = {}
+    field_by_topic_id: dict[str, str] = {}
     main_topics = topic_structure.get("main_topics")
     if isinstance(main_topics, list):
         for topic in main_topics:
@@ -212,6 +213,9 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
             topic["topic_id"] = normalized_topic_id
             id_map[raw_topic_id] = normalized_topic_id
             id_map[normalized_topic_id] = normalized_topic_id
+            field_by_topic_id[normalized_topic_id] = str(
+                topic.get("field") or "title"
+            )
 
     anchor_topic_id = id_map.get(
         raw_anchor_topic_id,
@@ -220,18 +224,87 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
     if anchor_topic_id:
         topic_structure["anchor_topic_id"] = anchor_topic_id
 
+    def normalized_group(
+        main_topic_id: str,
+        item: dict[str, Any],
+        index: int,
+    ) -> dict[str, Any] | None:
+        raw_group_id = str(
+            item.get("secondary_topic_id")
+            or item.get("topic_id")
+            or item.get("id")
+            or f"{main_topic_id}_secondary_{index}"
+        ).strip()
+        group_id = normalize_tagging_label(raw_group_id)
+        if not group_id:
+            group_id = f"{main_topic_id}_secondary_{index}"
+        label = str(item.get("label") or raw_group_id or group_id).strip()
+        terms = item.get("terms")
+        if not isinstance(terms, list):
+            return None
+        cleaned_terms = [str(term).strip() for term in terms if str(term).strip()]
+        if not cleaned_terms:
+            return None
+        group: dict[str, Any] = {
+            "secondary_topic_id": group_id,
+            "label": label,
+            "field": str(item.get("field") or field_by_topic_id.get(main_topic_id) or "title"),
+            "terms": cleaned_terms,
+        }
+        for key in ("retrieval_terms", "matching_terms"):
+            values = item.get(key)
+            if isinstance(values, list):
+                cleaned_values = [
+                    str(value).strip() for value in values if str(value).strip()
+                ]
+                if cleaned_values:
+                    group[key] = cleaned_values
+        return group
+
     secondary_topics = topic_structure.get("secondary_topics")
     normalized: dict[str, Any] = {}
     if isinstance(secondary_topics, dict):
-        for main_topic_id, terms in secondary_topics.items():
-            normalized_main_topic_id = normalize_tagging_label(str(main_topic_id))
-            if not isinstance(terms, list):
-                normalized[normalized_main_topic_id] = terms
+        for main_topic_id, raw_groups in secondary_topics.items():
+            raw_main_topic_id = str(main_topic_id or "").strip()
+            normalized_main_topic_id = id_map.get(
+                raw_main_topic_id,
+                normalize_tagging_label(raw_main_topic_id),
+            )
+            if not normalized_main_topic_id or not isinstance(raw_groups, list):
                 continue
-            normalized[normalized_main_topic_id] = [
-                str(term).strip() for term in terms if str(term).strip()
-            ]
+            if all(not isinstance(item, dict) for item in raw_groups):
+                cleaned_terms = [
+                    str(term).strip() for term in raw_groups if str(term).strip()
+                ]
+                if cleaned_terms:
+                    normalized[normalized_main_topic_id] = [
+                        {
+                            "secondary_topic_id": (
+                                f"{normalized_main_topic_id}_secondary_1"
+                            ),
+                            "label": (
+                                "Secondary replacement for "
+                                f"{normalized_main_topic_id}"
+                            ),
+                            "field": field_by_topic_id.get(
+                                normalized_main_topic_id,
+                                "title",
+                            ),
+                            "terms": cleaned_terms,
+                        }
+                    ]
+                continue
+            groups = []
+            for index, item in enumerate(raw_groups, start=1):
+                if not isinstance(item, dict):
+                    continue
+                group = normalized_group(normalized_main_topic_id, item, index)
+                if group is not None:
+                    groups.append(group)
+            if groups:
+                normalized[normalized_main_topic_id] = groups
     elif isinstance(secondary_topics, list):
+        counters: dict[str, int] = {}
         for item in secondary_topics:
             if not isinstance(item, dict):
                 continue
@@ -240,12 +313,12 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
                 raw_main_topic_id,
                 normalize_tagging_label(raw_main_topic_id),
             )
-            terms = item.get("terms")
-            if not main_topic_id or not isinstance(terms, list):
+            if not main_topic_id:
                 continue
-            normalized[main_topic_id] = [
-                str(term).strip() for term in terms if str(term).strip()
-            ]
+            counters[main_topic_id] = counters.get(main_topic_id, 0) + 1
+            group = normalized_group(main_topic_id, item, counters[main_topic_id])
+            if group is not None:
+                normalized.setdefault(main_topic_id, []).append(group)
     else:
         return
 

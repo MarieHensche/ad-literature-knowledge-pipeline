@@ -6,6 +6,8 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
+from ad_lit_pipeline.topics.matching import topic_match_spec_from_contract
+
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -98,11 +100,17 @@ def render_screen_title_relevance_prompt(
     topic_contract: dict[str, Any],
     candidate: dict[str, Any],
 ) -> str:
+    topic_match_spec = topic_match_spec_from_contract(topic_contract)
     return render_template(
         "screen_title_relevance.md",
         {
             "research_topic_json": json_block(topic_contract["research_topic"]),
             "topic_structure_json": json_block(topic_contract["topic_structure"]),
+            "secondary_topic_groups_json": json_block(
+                topic_match_spec.get("secondary_topics", [])
+                if isinstance(topic_match_spec, dict)
+                else []
+            ),
             "candidate_json": json_block(candidate),
         },
     )

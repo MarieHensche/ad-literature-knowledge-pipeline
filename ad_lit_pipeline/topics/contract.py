@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
+from ad_lit_pipeline.topics.matching import (
+    RETRIEVAL_TERMS_LIMIT,
+    VALID_TOPIC_FIELDS,
+)
 
 
 LEGACY_TOPIC_FIT_CATEGORY_ID = "main_topic_category"
@@ -221,6 +225,12 @@ def validate_topic_structure(contract: dict[str, Any]) -> None:
             topic_map.get("label"),
             f"topic_structure.main_topics[{index}].label",
         )
+        field = topic_map.get("field")
+        if field is not None and field not in VALID_TOPIC_FIELDS:
+            raise ValueError(
+                f"topic_structure.main_topics[{index}].field must be one of "
+                f"{sorted(VALID_TOPIC_FIELDS)}."
+            )
         terms = require_list(
             topic_map.get("terms"),
             f"topic_structure.main_topics[{index}].terms",
@@ -233,37 +243,163 @@ def validate_topic_structure(contract: dict[str, Any]) -> None:
             raise ValueError(
                 f"topic_structure.main_topics[{index}].terms must contain strings."
             )
+        retrieval_terms = topic_map.get("retrieval_terms")
+        if retrieval_terms is not None:
+            retrieval_terms_list = require_list(
+                retrieval_terms,
+                f"topic_structure.main_topics[{index}].retrieval_terms",
+            )
+            if len(retrieval_terms_list) > RETRIEVAL_TERMS_LIMIT:
+                raise ValueError(
+                    "topic_structure.main_topics"
+                    f"[{index}].retrieval_terms must contain at most "
+                    f"{RETRIEVAL_TERMS_LIMIT} terms."
+                )
+            if not all(
+                isinstance(term, str) and term.strip()
+                for term in retrieval_terms_list
+            ):
+                raise ValueError(
+                    "topic_structure.main_topics"
+                    f"[{index}].retrieval_terms must contain strings."
+                )
+        matching_terms = topic_map.get("matching_terms")
+        if matching_terms is not None:
+            matching_terms_list = require_list(
+                matching_terms,
+                f"topic_structure.main_topics[{index}].matching_terms",
+            )
+            if not all(
+                isinstance(term, str) and term.strip() for term in matching_terms_list
+            ):
+                raise ValueError(
+                    "topic_structure.main_topics"
+                    f"[{index}].matching_terms must contain strings."
+                )
 
     if anchor_topic_id not in main_topic_ids:
         raise ValueError(
             "topic_structure.anchor_topic_id must match one main topic id."
         )
 
-    secondary_topics = require_mapping(
-        topic_structure.get("secondary_topics"), "topic_structure.secondary_topics"
+    validate_secondary_topics(
+        topic_structure.get("secondary_topics"),
+        main_topic_ids,
+        anchor_topic_id,
     )
-    for topic_id, terms_value in secondary_topics.items():
-        if topic_id not in main_topic_ids:
-            raise ValueError(
-                "topic_structure.secondary_topics contains unknown main topic id: "
-                f"{topic_id}"
-            )
-        terms = require_list(
-            terms_value, f"topic_structure.secondary_topics.{topic_id}"
+
+
+def validate_secondary_group(group: object, path: str) -> None:
+    group_map = require_mapping(group, path)
+    require_non_empty_string(
+        group_map.get("secondary_topic_id"),
+        f"{path}.secondary_topic_id",
+    )
+    require_non_empty_string(group_map.get("label"), f"{path}.label")
+    field = group_map.get("field")
+    if field is not None and field not in VALID_TOPIC_FIELDS:
+        raise ValueError(f"{path}.field must be one of {sorted(VALID_TOPIC_FIELDS)}.")
+
+    terms = require_list(group_map.get("terms"), f"{path}.terms")
+    if not terms:
+        raise ValueError(f"{path}.terms must not be empty.")
+    if not all(isinstance(term, str) and term.strip() for term in terms):
+        raise ValueError(f"{path}.terms must contain strings.")
+
+    retrieval_terms = group_map.get("retrieval_terms")
+    if retrieval_terms is not None:
+        retrieval_terms_list = require_list(
+            retrieval_terms,
+            f"{path}.retrieval_terms",
         )
-        if topic_id == anchor_topic_id and terms:
+        if len(retrieval_terms_list) > RETRIEVAL_TERMS_LIMIT:
             raise ValueError(
-                "topic_structure.secondary_topics must not define replacements "
-                "for the anchor topic."
+                f"{path}.retrieval_terms must contain at most "
+                f"{RETRIEVAL_TERMS_LIMIT} terms."
             )
-        if not terms:
-            raise ValueError(
-                f"topic_structure.secondary_topics.{topic_id} must not be empty."
+        if not all(
+            isinstance(term, str) and term.strip() for term in retrieval_terms_list
+        ):
+            raise ValueError(f"{path}.retrieval_terms must contain strings.")
+
+    matching_terms = group_map.get("matching_terms")
+    if matching_terms is not None:
+        matching_terms_list = require_list(
+            matching_terms,
+            f"{path}.matching_terms",
+        )
+        if not all(
+            isinstance(term, str) and term.strip() for term in matching_terms_list
+        ):
+            raise ValueError(f"{path}.matching_terms must contain strings.")
+
+
+def validate_secondary_topics(
+    secondary_topics: object,
+    main_topic_ids: set[str],
+    anchor_topic_id: str,
+) -> None:
+    if isinstance(secondary_topics, dict):
+        for topic_id, groups_value in secondary_topics.items():
+            if topic_id not in main_topic_ids:
+                raise ValueError(
+                    "topic_structure.secondary_topics contains unknown main topic id: "
+                    f"{topic_id}"
+                )
+            if topic_id == anchor_topic_id and groups_value:
+                raise ValueError(
+                    "topic_structure.secondary_topics must not define replacements "
+                    "for the anchor topic."
+                )
+            groups = require_list(
+                groups_value,
+                f"topic_structure.secondary_topics.{topic_id}",
             )
-        if not all(isinstance(term, str) and term.strip() for term in terms):
-            raise ValueError(
-                f"topic_structure.secondary_topics.{topic_id} must contain strings."
+            if not groups:
+                raise ValueError(
+                    f"topic_structure.secondary_topics.{topic_id} must not be empty."
+                )
+            if all(not isinstance(group, dict) for group in groups):
+                if not all(isinstance(term, str) and term.strip() for term in groups):
+                    raise ValueError(
+                        f"topic_structure.secondary_topics.{topic_id} "
+                        "must contain strings."
+                    )
+                continue
+            for index, group in enumerate(groups, start=1):
+                validate_secondary_group(
+                    group,
+                    f"topic_structure.secondary_topics.{topic_id}[{index}]",
+                )
+        return
+
+    if isinstance(secondary_topics, list):
+        for index, group in enumerate(secondary_topics, start=1):
+            group_map = require_mapping(
+                group,
+                f"topic_structure.secondary_topics[{index}]",
             )
+            topic_id = require_non_empty_string(
+                group_map.get("main_topic_id"),
+                f"topic_structure.secondary_topics[{index}].main_topic_id",
+            )
+            if topic_id not in main_topic_ids:
+                raise ValueError(
+                    "topic_structure.secondary_topics contains unknown main topic id: "
+                    f"{topic_id}"
+                )
+            if topic_id == anchor_topic_id:
+                raise ValueError(
+                    "topic_structure.secondary_topics must not define replacements "
+                    "for the anchor topic."
+                )
+            validate_secondary_group(
+                group_map,
+                f"topic_structure.secondary_topics[{index}]",
+            )
+        return
+
+    raise ValueError("topic_structure.secondary_topics must be a mapping or list.")
 
 
 def validate_topic_contract(contract: dict[str, Any]) -> None:
@@ -743,12 +879,36 @@ def expanded_include_terms(contract: dict[str, Any]) -> list[str]:
         terms = require_list(topic_map.get("terms"), "topic_structure main terms")
         include_terms.extend(str(term).strip() for term in terms if str(term).strip())
 
-    secondary_topics = require_mapping(
-        topic_structure.get("secondary_topics"), "topic_structure.secondary_topics"
-    )
-    for terms_value in secondary_topics.values():
-        terms = require_list(terms_value, "topic_structure secondary terms")
-        include_terms.extend(str(term).strip() for term in terms if str(term).strip())
+    secondary_topics = topic_structure.get("secondary_topics")
+    if isinstance(secondary_topics, dict):
+        for groups_value in secondary_topics.values():
+            groups = require_list(groups_value, "topic_structure secondary terms")
+            if all(not isinstance(group, dict) for group in groups):
+                include_terms.extend(
+                    str(term).strip() for term in groups if str(term).strip()
+                )
+                continue
+            for group in groups:
+                group_map = require_mapping(group, "topic_structure secondary group")
+                for key in ("terms", "retrieval_terms", "matching_terms"):
+                    terms = group_map.get(key)
+                    if isinstance(terms, list):
+                        include_terms.extend(
+                            str(term).strip()
+                            for term in terms
+                            if str(term).strip()
+                        )
+    elif isinstance(secondary_topics, list):
+        for group in secondary_topics:
+            group_map = require_mapping(group, "topic_structure secondary group")
+            for key in ("terms", "retrieval_terms", "matching_terms"):
+                terms = group_map.get(key)
+                if isinstance(terms, list):
+                    include_terms.extend(
+                        str(term).strip()
+                        for term in terms
+                        if str(term).strip()
+                    )
 
     deduped = []
     seen = set()

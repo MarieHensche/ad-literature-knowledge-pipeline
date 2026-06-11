@@ -21,6 +21,11 @@ from ad_lit_pipeline.steps.full_text.prepare import FullTextResult
 from ad_lit_pipeline.steps.full_text.evidence import build_knowledge_evidence
 from ad_lit_pipeline.steps.full_text.prepare import run as run_prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
+from ad_lit_pipeline.topics.matching import (
+    annotate_candidate_topic_matches,
+    topic_match_spec_from_contract,
+)
+from ad_lit_pipeline.topics.retrieval import build_query_groups_from_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -695,6 +700,15 @@ def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None
             "year": 2024,
             "abstract": "",
             "rank": 1,
+            "topic_matches": {
+                "anchor_topic_id": "early_detection",
+                "main_topic_values": {
+                    "early_detection": [
+                        {"value": "early detection", "field": "title"}
+                    ]
+                },
+                "secondary_topic_values": {"early_detection": []},
+            },
         },
         {
             "provider": "openalex",
@@ -704,6 +718,15 @@ def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None
             "year": 2024,
             "abstract": "Useful abstract.",
             "rank": 2,
+            "topic_matches": {
+                "anchor_topic_id": "early_detection",
+                "main_topic_values": {
+                    "early_detection": [
+                        {"value": "screening", "field": "abstract"}
+                    ]
+                },
+                "secondary_topic_values": {"early_detection": []},
+            },
         },
     ]
     input_path.write_text(
@@ -727,6 +750,154 @@ def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None
     assert output_rows[0]["provider_id"] == "W2"
     assert output_rows[0]["dedupe_key"] == "doi:10.123/example"
     assert output_rows[0]["duplicate_count"] == 2
+    assert output_rows[0]["topic_matches"]["main_topic_values"][
+        "early_detection"
+    ] == [
+        {"value": "screening", "field": "abstract"},
+        {"value": "early detection", "field": "title"},
+    ]
+
+
+def test_candidate_topic_matches_record_values_and_fields() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    for topic in contract["topic_structure"]["main_topics"]:
+        topic["field"] = "title_or_abstract"
+        if topic["topic_id"] == "ai":
+            topic["retrieval_terms"] = ["deep learning"]
+
+    candidate = {
+        "title": "Deep learning in K-12 classroom instruction",
+        "abstract": (
+            "This university study reports student achievement and well-being "
+            "after classroom AI use."
+        ),
+    }
+
+    annotated = annotate_candidate_topic_matches(
+        candidate,
+        topic_match_spec_from_contract(contract),
+    )
+    matches = annotated["topic_matches"]
+
+    assert {"value": "deep learning", "field": "title"} in matches[
+        "main_topic_values"
+    ]["ai"]
+    assert {"value": "K-12", "field": "title"} in matches["main_topic_values"][
+        "formal_education"
+    ]
+    assert {"value": "student achievement", "field": "abstract"} in matches[
+        "main_topic_values"
+    ]["learning_impact"]
+    assert {"value": "university", "field": "abstract"} in matches[
+        "secondary_topic_values"
+    ]["formal_education"]
+    assert {"value": "well-being", "field": "abstract"} in matches[
+        "secondary_topic_values"
+    ]["learning_impact"]
+    assert matches["matched_main_topics"] == [
+        "ai",
+        "formal_education",
+        "learning_impact",
+    ]
+    assert matches["anchor_present"] is True
+
+
+def test_query_groups_keep_secondary_replacement_groups_separate() -> None:
+    contract = {
+        "topic_structure": {
+            "anchor_topic_id": "ai",
+            "main_topics": [
+                {
+                    "topic_id": "ai",
+                    "label": "AI",
+                    "field": "title",
+                    "terms": ["artificial intelligence", "machine learning"],
+                    "retrieval_terms": ["artificial intelligence", "machine learning"],
+                },
+                {
+                    "topic_id": "school_setting",
+                    "label": "School setting",
+                    "field": "title",
+                    "terms": ["school", "classroom"],
+                    "retrieval_terms": ["school", "classroom"],
+                },
+                {
+                    "topic_id": "student_performance",
+                    "label": "Student performance",
+                    "field": "title_or_abstract",
+                    "terms": ["student performance", "learning outcomes"],
+                    "retrieval_terms": ["student performance", "learning outcomes"],
+                },
+            ],
+            "secondary_topics": {
+                "school_setting": [
+                    {
+                        "secondary_topic_id": "higher_education",
+                        "label": "Higher education",
+                        "field": "title",
+                        "terms": ["higher education", "university", "college"],
+                        "retrieval_terms": ["higher education", "university"],
+                    },
+                    {
+                        "secondary_topic_id": "workplace_learning",
+                        "label": "Workplace learning",
+                        "field": "title",
+                        "terms": ["workplace", "internship", "office"],
+                        "retrieval_terms": ["workplace", "internship"],
+                    },
+                ]
+            },
+        }
+    }
+
+    strategy = build_query_groups_from_contract(contract, max_results=20)
+    strict_tier_0 = strategy["query_groups"][0]
+    relaxed_tier_0 = strategy["query_groups"][1]
+    tier_1 = strategy["query_groups"][2]
+
+    assert strict_tier_0["group_id"] == "tier_0_title"
+    assert strict_tier_0["queries"][0]["query_id"] == "tier_0_all_main_title"
+    assert strict_tier_0["queries"][0]["requires_title_screening"] is False
+    assert {
+        block["topic_id"]: block["field"]
+        for block in strict_tier_0["queries"][0]["blocks"]
+    } == {
+        "ai": "title",
+        "school_setting": "title",
+        "student_performance": "title",
+    }
+    assert relaxed_tier_0["group_id"] == "tier_0"
+    assert relaxed_tier_0["queries"][0]["query_id"] == "tier_0_all_main"
+    assert relaxed_tier_0["queries"][0]["requires_title_screening"] is True
+    assert {
+        block["topic_id"]: block["field"]
+        for block in relaxed_tier_0["queries"][0]["blocks"]
+    }["student_performance"] == "title_or_abstract"
+    assert len(tier_1["queries"]) == 2
+    tier_1_queries = {query["query_id"]: query for query in tier_1["queries"]}
+    assert (
+        "tier_1_replace_school_setting_with_higher_education" in tier_1_queries
+    )
+    assert (
+        "tier_1_replace_school_setting_with_workplace_learning" in tier_1_queries
+    )
+    higher_query = tier_1_queries[
+        "tier_1_replace_school_setting_with_higher_education"
+    ]
+    workplace_query = tier_1_queries[
+        "tier_1_replace_school_setting_with_workplace_learning"
+    ]
+    assert "university" in higher_query["query"]
+    assert "workplace" not in higher_query["query"]
+    assert "workplace" in workplace_query["query"]
+    assert "university" not in workplace_query["query"]
+    assert higher_query["replacement_secondary_groups"] == [
+        {
+            "main_topic_id": "school_setting",
+            "secondary_topic_id": "higher_education",
+            "label": "Higher education",
+        }
+    ]
 
 
 def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
@@ -748,6 +919,15 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
         "retrieval_date": "2026-05-25",
         "dedupe_key": "doi:10.123/example",
         "duplicate_count": 1,
+        "topic_matches": {
+            "main_topic_values": {
+                "early_detection": [{"value": "early detection", "field": "title"}],
+                "disease_state": [{"value": "Alzheimer", "field": "abstract"}],
+            },
+            "secondary_topic_values": {
+                "evidence_signal": [{"value": "biomarker", "field": "abstract"}],
+            },
+        },
     }
     candidates_path.write_text(json.dumps(candidate) + "\n", encoding="utf-8")
     write_csv(
@@ -820,7 +1000,10 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
                 "title_relevance_tier=0; "
                 "title_matched_main_topics=early_detection; disease_state; "
                 "dedupe_key=doi:10.123/example; "
-                "duplicate_count=1"
+                "duplicate_count=1; "
+                "topic_main_matches=disease_state=Alzheimer@abstract, "
+                "early_detection=early detection@title; "
+                "topic_secondary_matches=evidence_signal=biomarker@abstract"
             ),
         }
     ]

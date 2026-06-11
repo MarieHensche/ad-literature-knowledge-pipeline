@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.steps.collection.candidate_identity import (
+    dedupe_key,
+    normalize_doi,
+    normalize_title,
+)
+from ad_lit_pipeline.topics.matching import merge_topic_matches
 
 
 STEP = StepSpec(
@@ -41,39 +46,6 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-
-def normalize_doi(value: Any) -> str:
-    doi = str(value or "").strip().lower()
-    doi = doi.replace("https://doi.org/", "")
-    doi = doi.replace("http://doi.org/", "")
-    doi = doi.replace("doi:", "")
-    return doi.strip()
-
-
-def normalize_title(value: Any) -> str:
-    title = str(value or "").lower()
-    title = re.sub(r"[^a-z0-9]+", " ", title)
-    return re.sub(r"\s+", " ", title).strip()
-
-
-def dedupe_key(row: dict[str, Any]) -> str:
-    doi = normalize_doi(row.get("doi"))
-    if doi:
-        return f"doi:{doi}"
-
-    title = normalize_title(row.get("title"))
-    year = str(row.get("year") or "").strip()
-
-    if title and year:
-        return f"title_year:{title}:{year}"
-
-    if title:
-        return f"title:{title}"
-
-    provider = row.get("provider") or "unknown"
-    provider_id = row.get("provider_id") or ""
-    return f"provider_id:{provider}:{provider_id}"
 
 
 def duplicate_summary(row: dict[str, Any]) -> dict[str, Any]:
@@ -116,6 +88,11 @@ def deduplicate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         representative["duplicate_provenance"] = [
             duplicate_summary(row) for row in sorted_group
         ]
+        merged_matches = merge_topic_matches(
+            [row.get("topic_matches") for row in sorted_group]
+        )
+        if merged_matches:
+            representative["topic_matches"] = merged_matches
 
         deduped.append(representative)
 

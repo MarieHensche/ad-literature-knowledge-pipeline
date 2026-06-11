@@ -9,13 +9,14 @@ import pytest
 
 from ad_lit_pipeline.llm.client import StaticJSONClient
 from ad_lit_pipeline.llm.schemas import paper_tags_schema
-from ad_lit_pipeline.io.jsonl_io import write_jsonl
+from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
 from ad_lit_pipeline.io.yaml_io import write_yaml_object
 from ad_lit_pipeline.steps.collection.plan_search import (
     enforce_topic_plan_constraints,
     ensure_search_queries,
     run as run_plan_search,
 )
+from ad_lit_pipeline.steps.collection import fetch_candidates as fetch_candidates_step
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     contract_from_model_payload,
     run as run_generate_topic_contract,
@@ -24,8 +25,14 @@ from ad_lit_pipeline.steps.collection.refine_topic_contract import (
     run as run_refine_topic_contract,
     select_review_overviews_with_full_text,
 )
+from ad_lit_pipeline.steps.collection.backfill_candidates import (
+    run as run_backfill_candidates,
+)
 from ad_lit_pipeline.steps.screening.llm_candidate_screening import run as run_screening
-from ad_lit_pipeline.steps.screening.title_relevance import run as run_title_relevance
+from ad_lit_pipeline.steps.screening.title_relevance import (
+    OUTPUT_COLUMNS as TITLE_RELEVANCE_COLUMNS,
+    run as run_title_relevance,
+)
 from ad_lit_pipeline.steps.tagging.calibrate_topic_contract import (
     run as run_calibrate_topic_contract,
 )
@@ -356,6 +363,11 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
     assert payload["recommended_provider"] == "openalex"
     assert payload["filters"]["has_abstract"] is None
     assert payload["filters"]["exclude_reviews"] is True
+    assert payload["topic_match_spec"]["anchor_topic_id"] == "early_detection"
+    assert payload["topic_match_spec"]["main_topics"][0]["field"] == "title"
+    assert payload["retrieval_strategy"]["mode"] == "tiered_topic_blocks"
+    assert payload["query_groups"][0]["tier"] == 0
+    assert payload["query_groups"][0]["queries"][0]["requires_title_screening"] is False
     assert payload["search_queries"] == [
         {
             "query": "early detection Alzheimer's",
@@ -377,6 +389,7 @@ def test_plan_search_uses_enabled_providers_and_trace(tmp_path: Path) -> None:
         "Added alternate_search_strings to search_queries.",
         "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works.",
         "Added provider_specific_plan type:!review filter for review exclusion policy.",
+        "Added tiered topic-block query groups from topic contract.",
     ]
     assert client.requests[0]["schema"]["properties"]["recommended_provider"]["enum"] == [
         "openalex"
@@ -702,6 +715,20 @@ def test_generate_topic_contract_accepts_weak_provisional_tagging(
     assert client.requests[0]["schema"]["properties"]["tagging"]["properties"][
         "categories"
     ]["minItems"] == 1
+    main_topic_schema = client.requests[0]["schema"]["properties"][
+        "topic_structure"
+    ]["properties"]["main_topics"]["items"]
+    assert "field" in main_topic_schema["required"]
+    assert "retrieval_terms" in main_topic_schema["required"]
+    assert "matching_terms" in main_topic_schema["required"]
+    assert main_topic_schema["properties"]["retrieval_terms"]["maxItems"] == 12
+    secondary_topic_schema = client.requests[0]["schema"]["properties"][
+        "topic_structure"
+    ]["properties"]["secondary_topics"]["items"]
+    assert "secondary_topic_id" in secondary_topic_schema["required"]
+    assert "retrieval_terms" in secondary_topic_schema["required"]
+    assert "matching_terms" in secondary_topic_schema["required"]
+    assert secondary_topic_schema["properties"]["retrieval_terms"]["maxItems"] == 12
     assert "target_population" in categories
     assert "study_design" in categories
     assert result.row_counts["tagging_categories"] == 9
@@ -974,13 +1001,23 @@ def test_refine_topic_contract_repairs_boilerplate_category(
     assert "study_design" not in categories
     assert "detection_validation_setting" in categories
     assert refined["research_topic"] == contract["research_topic"]
-    assert refined["topic_structure"] == contract["topic_structure"]
+    assert refined["topic_structure"]["anchor_topic_id"] == contract["topic_structure"][
+        "anchor_topic_id"
+    ]
+    assert refined["topic_structure"]["main_topics"] == contract["topic_structure"][
+        "main_topics"
+    ]
+    assert set(refined["topic_structure"]["secondary_topics"]) == set(
+        contract["topic_structure"]["secondary_topics"]
+    )
+    for groups in refined["topic_structure"]["secondary_topics"].values():
+        assert all("secondary_topic_id" in group for group in groups)
     assert refined["scope"] == contract["scope"]
     assert refined["collection"] == contract["collection"]
     assert any("repair" in path.name for path in result.trace_paths)
 
 
-def test_refine_topic_contract_repair_removes_retired_knowledge_goal(
+def test_refine_topic_contract_filters_retired_knowledge_goal(
     tmp_path: Path,
 ) -> None:
     contract = load_topic_contract(TOPIC_CONTRACT)
@@ -994,12 +1031,7 @@ def test_refine_topic_contract_repair_removes_retired_knowledge_goal(
         "selection": "single",
         "values": ["early_detection", "disease_state"],
     }
-    repair_patch = {
-        "remove_category_ids": ["knowledge_goal"],
-        "upsert_categories": [],
-        "repair_notes": ["Removed retired root category."],
-    }
-    client = StaticJSONClient([weak_payload, repair_patch])
+    client = StaticJSONClient([weak_payload])
 
     run_refine_topic_contract(
         "How can Alzheimer's disease be detected early?",
@@ -1017,7 +1049,6 @@ def test_refine_topic_contract_repair_removes_retired_knowledge_goal(
     assert "evidence_signal" in refined["tagging"]["categories"]
     assert [request["call_id"] for request in client.requests] == [
         "contract_refinement",
-        "contract_refinement_repair",
     ]
 
 
@@ -1234,7 +1265,11 @@ def test_title_relevance_screening_applies_anchor_and_tiers(
                 "anchor_present": True,
                 "matched_main_topics": ["ai", "learning_impact"],
                 "matched_secondary_topics": [
-                    {"main_topic_id": "formal_education", "terms": ["university"]}
+                    {
+                        "main_topic_id": "formal_education",
+                        "secondary_topic_id": "formal_education_secondary_1",
+                        "terms": ["university"],
+                    }
                 ],
                 "missing_main_topics": ["formal_education"],
                 "relevance_tier": 1,
@@ -1256,7 +1291,11 @@ def test_title_relevance_screening_applies_anchor_and_tiers(
                 "anchor_present": True,
                 "matched_main_topics": ["ai"],
                 "matched_secondary_topics": [
-                    {"main_topic_id": "learning_impact", "terms": ["well-being"]}
+                    {
+                        "main_topic_id": "learning_impact",
+                        "secondary_topic_id": "learning_impact_secondary_1",
+                        "terms": ["well-being"],
+                    }
                 ],
                 "missing_main_topics": ["formal_education", "learning_impact"],
                 "relevance_tier": 2,
@@ -1287,7 +1326,623 @@ def test_title_relevance_screening_applies_anchor_and_tiers(
     assert rows[3]["screening_decision"] == "exclude"
     assert "formal_education" in rows[3]["screening_reason"]
     assert "Topic structure" in client.requests[0]["prompt"]
+    assert "Configured secondary replacement groups" in client.requests[0]["prompt"]
     assert client.requests[0]["schema_name"] == "title_relevance_screening"
+    secondary_schema = client.requests[0]["schema"]["properties"][
+        "matched_secondary_topics"
+    ]["items"]
+    assert "secondary_topic_id" in secondary_schema["required"]
+
+
+def test_title_relevance_ignores_unconfigured_secondary_replacements(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/flipped",
+                "title": "ChatGPT in flipped classroom improves well-being",
+                "year": 2024,
+                "rank": 1,
+                "query": "AI flipped classroom",
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W2",
+                "doi": "10.1/invalid-term",
+                "title": "ChatGPT in flipped classroom improves well-being",
+                "year": 2024,
+                "rank": 2,
+                "query": "AI flipped classroom",
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W3",
+                "doi": "10.1/missing-visible-secondary",
+                "title": "ChatGPT in university courses",
+                "year": 2024,
+                "rank": 3,
+                "query": "AI university",
+            },
+        ],
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": ["ai", "learning_impact"],
+                "matched_secondary_topics": [
+                    {
+                        "main_topic_id": "formal_education",
+                        "secondary_topic_id": "flipped_classroom",
+                        "terms": ["flipped classroom"],
+                    }
+                ],
+                "missing_main_topics": ["formal_education"],
+                "relevance_tier": 1,
+                "decision": "include",
+                "confidence": "medium",
+                "reason": "The title uses a flipped classroom setting.",
+            },
+            {
+                "anchor_present": True,
+                "matched_main_topics": ["ai", "learning_impact"],
+                "matched_secondary_topics": [
+                    {
+                        "main_topic_id": "formal_education",
+                        "secondary_topic_id": "formal_education_secondary_1",
+                        "terms": ["flipped classroom"],
+                    }
+                ],
+                "missing_main_topics": ["formal_education"],
+                "relevance_tier": 1,
+                "decision": "include",
+                "confidence": "medium",
+                "reason": "The title uses an invalid term for the configured group.",
+            },
+            {
+                "anchor_present": True,
+                "matched_main_topics": ["ai", "formal_education"],
+                "matched_secondary_topics": [
+                    {
+                        "main_topic_id": "learning_impact",
+                        "secondary_topic_id": "learning_impact_secondary_1",
+                        "terms": ["well-being"],
+                    }
+                ],
+                "missing_main_topics": ["learning_impact"],
+                "relevance_tier": 1,
+                "decision": "include",
+                "confidence": "medium",
+                "reason": "The configured secondary term is not in the title.",
+            },
+        ]
+    )
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert result.row_counts["included"] == 0
+    assert rows[0]["screening_decision"] == "exclude"
+    assert rows[0]["title_matched_secondary_topics"] == ""
+    assert "formal_education" in rows[0]["screening_reason"]
+    assert rows[1]["screening_decision"] == "exclude"
+    assert rows[1]["title_matched_secondary_topics"] == ""
+    assert rows[2]["screening_decision"] == "exclude"
+    assert rows[2]["title_matched_secondary_topics"] == ""
+
+
+def test_title_relevance_auto_includes_deterministic_tier_zero(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/tier0",
+                "title": "Deep learning in K-12 classrooms improves grades",
+                "year": 2024,
+                "rank": 1,
+                "query": "tier zero",
+                "retrieval_tier": 0,
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": True,
+                    "matched_main_topics": [
+                        "ai",
+                        "formal_education",
+                        "learning_impact",
+                    ],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": [],
+                    "main_topic_values": {
+                        "ai": [{"value": "deep learning", "field": "title"}],
+                        "formal_education": [
+                            {"value": "K-12", "field": "title"}
+                        ],
+                        "learning_impact": [
+                            {"value": "grades", "field": "title"}
+                        ],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = StaticJSONClient([])
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "include"
+    assert rows[0]["title_relevance_tier"] == "0"
+    assert result.row_counts["deterministic_tier0_included"] == 1
+    assert result.row_counts["llm_screened"] == 0
+    assert client.requests == []
+
+
+def test_title_relevance_screens_tier_zero_when_main_topic_only_in_abstract(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/abstract-only",
+                "title": "Deep learning in K-12 classrooms",
+                "abstract": "The study reports improved grades.",
+                "year": 2024,
+                "rank": 1,
+                "query": "relaxed tier zero",
+                "retrieval_tier": 0,
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": True,
+                    "matched_main_topics": [
+                        "ai",
+                        "formal_education",
+                        "learning_impact",
+                    ],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": [],
+                    "main_topic_values": {
+                        "ai": [{"value": "deep learning", "field": "title"}],
+                        "formal_education": [
+                            {"value": "K-12", "field": "title"}
+                        ],
+                        "learning_impact": [
+                            {"value": "grades", "field": "abstract"}
+                        ],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "Allowed fields contain all main topics.",
+            }
+        ]
+    )
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "include"
+    assert result.row_counts["deterministic_tier0_included"] == 0
+    assert result.row_counts["llm_screened"] == 1
+    assert len(client.requests) == 1
+    assert '"abstract": "The study reports improved grades."' in client.requests[0][
+        "prompt"
+    ]
+
+
+def test_backfill_fetches_and_screens_when_title_screening_drops_too_many(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    candidates_path = tmp_path / "candidates.jsonl"
+    deduped_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "recommended_provider": "openalex",
+                "provider_specific_plan": {
+                    "provider": "openalex",
+                    "query": "AI school performance",
+                    "filters": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    existing_candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": "W1",
+            "doi": "10.1/included",
+            "title": "ChatGPT in school improves grades",
+            "year": 2024,
+            "rank": 1,
+            "query": "AI school performance",
+        },
+        {
+            "provider": "openalex",
+            "provider_id": "W2",
+            "doi": "10.1/excluded",
+            "title": "ChatGPT goes to law school",
+            "year": 2024,
+            "rank": 2,
+            "query": "AI school performance",
+        },
+    ]
+    write_jsonl(candidates_path, existing_candidates)
+    write_jsonl(deduped_path, existing_candidates)
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "10_1_included",
+                "title": "ChatGPT in school improves grades",
+                "year": "2024",
+                "doi": "10.1/included",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "source_rank": "1",
+                "source_query": "AI school performance",
+                "source_query_reason": "",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "0",
+                "title_matched_main_topics": "ai; formal_education; learning_impact",
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "",
+            },
+            {
+                "paper_id": "10_1_excluded",
+                "title": "ChatGPT goes to law school",
+                "year": "2024",
+                "doi": "10.1/excluded",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "source_rank": "2",
+                "source_query": "AI school performance",
+                "source_query_reason": "",
+                "screening_decision": "exclude",
+                "screening_confidence": "high",
+                "screening_reason": "Missing impact.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "999",
+                "title_matched_main_topics": "ai",
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "formal_education; learning_impact",
+            },
+        ],
+        TITLE_RELEVANCE_COLUMNS,
+    )
+
+    class FakeProvider:
+        name = "openalex"
+        last_fetch_diagnostics = {
+            "mode": "fake_backfill",
+            "target_candidates": 1,
+            "unique_candidates": 1,
+        }
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            pass
+
+        def fetch_additional_candidates(
+            self,
+            plan: dict[str, object],
+            existing_candidates: list[dict[str, object]],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+            backfill_round: int = 1,
+        ) -> list[dict[str, object]]:
+            assert len(existing_candidates) == 2
+            assert max_results == 1
+            return [
+                {
+                    "provider": "openalex",
+                    "provider_id": "W3",
+                    "doi": "10.1/backfill",
+                    "title": "AI in classroom learning outcomes",
+                    "year": 2024,
+                    "rank": 3,
+                    "query": "AI school performance",
+                }
+            ]
+
+    monkeypatch.setitem(fetch_candidates_step.PROVIDERS, "openalex", FakeProvider())
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "The title contains all components.",
+            }
+        ]
+    )
+
+    result = run_backfill_candidates(
+        plan_path,
+        candidates_path,
+        deduped_path,
+        screening_path,
+        ROOT / "configs/topics/ai_in_education.yaml",
+        "test-model",
+        max_results=2,
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    rows = list(csv.DictReader(screening_path.open(newline="", encoding="utf-8")))
+    assert result.row_counts["backfill_triggered"] == 1
+    assert result.row_counts["backfill_candidates_fetched"] == 1
+    assert result.row_counts["final_included_rows"] == 2
+    assert len(rows) == 3
+    assert rows[-1]["screening_decision"] == "include"
+    assert len(read_jsonl_objects(deduped_path)) == 3
+    assert len(client.requests) == 1
+
+
+def test_backfill_repeats_until_threshold_is_reached(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    candidates_path = tmp_path / "candidates.jsonl"
+    deduped_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "recommended_provider": "openalex",
+                "provider_specific_plan": {
+                    "provider": "openalex",
+                    "query": "AI school performance",
+                    "filters": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    existing_candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": f"W{i}",
+            "doi": f"10.1/existing-{i}",
+            "title": f"Existing candidate {i}",
+            "year": 2024,
+            "rank": i,
+            "query": "AI school performance",
+        }
+        for i in range(1, 11)
+    ]
+    write_jsonl(candidates_path, existing_candidates)
+    write_jsonl(deduped_path, existing_candidates)
+    screening_rows = []
+    for i, candidate in enumerate(existing_candidates, start=1):
+        include = i <= 7
+        screening_rows.append(
+            {
+                "paper_id": f"existing_{i}",
+                "title": str(candidate["title"]),
+                "year": "2024",
+                "doi": str(candidate["doi"]),
+                "provider": "openalex",
+                "provider_id": str(candidate["provider_id"]),
+                "source_rank": str(i),
+                "source_query": "AI school performance",
+                "source_query_reason": "",
+                "screening_decision": "include" if include else "exclude",
+                "screening_confidence": "high",
+                "screening_reason": "Initial screening.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "0" if include else "999",
+                "title_matched_main_topics": (
+                    "ai; formal_education; learning_impact" if include else "ai"
+                ),
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "" if include else "learning_impact",
+            }
+        )
+    write_csv(screening_path, screening_rows, TITLE_RELEVANCE_COLUMNS)
+
+    class FakeProvider:
+        name = "openalex"
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+            self.last_fetch_diagnostics: dict[str, object] = {}
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            pass
+
+        def fetch_additional_candidates(
+            self,
+            plan: dict[str, object],
+            existing_candidates: list[dict[str, object]],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+            backfill_round: int = 1,
+        ) -> list[dict[str, object]]:
+            self.calls.append((backfill_round, len(existing_candidates), max_results))
+            self.last_fetch_diagnostics = {
+                "mode": "fake_iterative_backfill",
+                "backfill_round": backfill_round,
+                "target_candidates": max_results,
+            }
+            if backfill_round == 1:
+                return [
+                    {
+                        "provider": "openalex",
+                        "provider_id": "W11",
+                        "doi": "10.1/backfill-include",
+                        "title": "AI in classroom learning outcomes",
+                        "year": 2024,
+                        "rank": 11,
+                        "query": "AI school performance",
+                    },
+                    {
+                        "provider": "openalex",
+                        "provider_id": "W12",
+                        "doi": "10.1/backfill-exclude",
+                        "title": "ChatGPT unrelated title",
+                        "year": 2024,
+                        "rank": 12,
+                        "query": "AI school performance",
+                    },
+                ]
+            return [
+                {
+                    "provider": "openalex",
+                    "provider_id": "W13",
+                    "doi": "10.1/backfill-second-include",
+                    "title": "Machine learning school academic achievement",
+                    "year": 2024,
+                    "rank": 13,
+                    "query": "AI school performance",
+                }
+            ]
+
+    fake_provider = FakeProvider()
+    monkeypatch.setitem(fetch_candidates_step.PROVIDERS, "openalex", fake_provider)
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "The title contains all components.",
+            },
+            {
+                "anchor_present": True,
+                "matched_main_topics": ["ai"],
+                "matched_secondary_topics": [],
+                "missing_main_topics": ["formal_education", "learning_impact"],
+                "relevance_tier": 999,
+                "decision": "exclude",
+                "confidence": "high",
+                "reason": "The title misses required components.",
+            },
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "The title contains all components.",
+            },
+        ]
+    )
+
+    result = run_backfill_candidates(
+        plan_path,
+        candidates_path,
+        deduped_path,
+        screening_path,
+        ROOT / "configs/topics/ai_in_education.yaml",
+        "test-model",
+        max_results=10,
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    assert result.row_counts["backfill_triggered"] == 1
+    assert result.row_counts["backfill_rounds"] == 2
+    assert result.row_counts["backfill_candidates_fetched"] == 3
+    assert result.row_counts["backfill_included_rows"] == 2
+    assert result.row_counts["final_included_rows"] == 9
+    assert fake_provider.calls == [(1, 10, 2), (2, 12, 1)]
+    assert len(read_jsonl_objects(deduped_path)) == 13
+    assert len(client.requests) == 3
+    assert not result.warnings
 
 
 def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
@@ -1454,9 +2109,10 @@ def test_calibrate_topic_contract_uses_primary_paper_full_text(
         },
     ]
     invalid_payload = deepcopy(calibrated_payload)
-    invalid_payload["tagging"]["categories"] = invalid_payload["tagging"][
-        "categories"
-    ][:3]
+    invalid_payload["tagging"]["categories"][0]["values"] = [
+        "unclear",
+        "not_reported",
+    ]
     client = StaticJSONClient(
         [
             invalid_payload,

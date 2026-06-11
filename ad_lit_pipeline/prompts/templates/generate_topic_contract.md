@@ -29,10 +29,28 @@ Rules:
     topic-specific tagging. When the question has distinct
     intervention/tool/exposure, population/context, outcome/target, mechanism,
     setting, or measurement components, split those into separate main topics.
-    Each must have `topic_id`, `label`, and broad `terms`.
-  - `secondary_topics`: an array of objects with `main_topic_id` and `terms`.
-    Use non-anchor main topic ids and related replacement terms. Do not define
-    secondary replacements for the anchor.
+    Each must have `topic_id`, `label`, `field`, broad `terms`,
+    `retrieval_terms`, and `matching_terms`.
+  - For each main topic, set `field` to one of:
+    - `title` when the topic must be visible in the title for high-precision
+      retrieval.
+    - `abstract` when the topic is important but often appears only in the
+      abstract.
+    - `title_or_abstract` when either field is acceptable.
+    Use only `title`, `abstract`, or `title_or_abstract`.
+  - For each main topic, set `retrieval_terms` to the strongest provider-search
+    terms for that topic. Use at most 12 terms. These should be precise enough
+    for retrieval and may be shorter than the full synonym list.
+  - For each main topic, set `matching_terms` to the broader local-matching
+    terms used to explain why a returned paper matched. Include useful
+    synonyms, abbreviations, subtypes, and concrete indicators. This list may
+    be broader than `retrieval_terms`.
+  - `secondary_topics`: an array of secondary group objects. Each object must
+    name the parent `main_topic_id` it can replace, plus its own
+    `secondary_topic_id`, `label`, `field`, `terms`, `retrieval_terms`, and
+    `matching_terms`.
+    Use non-anchor main topic ids only. Do not define secondary replacements for
+    the anchor.
 - Choose the anchor topic as the mandatory core concept for title screening: a
   title must show this concept to enter the collection. Make it broad enough to
   catch synonyms and abbreviations, but not so broad that unrelated papers enter.
@@ -45,19 +63,29 @@ Rules:
   that screening and tagging categories become inconsistent.
 - The main topic ids should be stable lowercase snake_case ids because later
   categories may use those ids directly.
+- later categories may use those ids directly.
 - Use secondary topics only as replacement wording for non-anchor main topics
   when titles use adjacent language. Secondary topics should improve recall
   without weakening topical fit.
+- Keep secondary replacements as separate semantic groups. Do not mix different
+  fallback concepts into one group. For example, for a `school_setting` main
+  topic, use one secondary group for higher education terms and another
+  secondary group for workplace-learning terms.
 - Make main topics broad enough for title screening. Prefer general component
   labels such as intervention family, tool family, population/context, outcome
   family, exposure, or domain over narrow phrases from the user's exact wording.
   For example, use a broad app/digital-intervention component rather than a
   single exact product or phrase when the literature may use many labels.
-- Make main-topic `terms` broad enough for title-only matching: include true
-  synonyms, common abbreviations, subtypes, concrete platforms/tools, and
-  narrower indicators that still represent the same topic component. Each main
-  topic should usually have at least 6 terms when the domain vocabulary supports
-  that many. Include singular/plural variants only when they help retrieval.
+- Make main-topic `terms` and `matching_terms` broad enough for local matching:
+  include true synonyms, common abbreviations, subtypes, concrete
+  platforms/tools, and narrower indicators that still represent the same topic
+  component. Each main topic should usually have at least 6 matching terms when
+  the domain vocabulary supports that many. Include singular/plural variants
+  only when they help retrieval.
+- Each main topic should usually have at least 6 terms across `terms` and
+  `matching_terms` when the domain vocabulary supports that many.
+- Make `retrieval_terms` compact and high-signal. Never include more than 12
+  retrieval terms for one topic.
 - Avoid making abstract outcome words mandatory title components when papers
   are likely to express that component through concrete outcome names. Put the
   concrete names in the component's terms or in secondary-topic replacements.

@@ -29,6 +29,7 @@ COLLECTION_PIPELINE = [
     "fetch_candidates",
     "deduplicate_candidates",
     "screen_title_relevance",
+    "backfill_candidates",
     "select_calibration_papers",
     "prepare_calibration_full_text",
     "calibrate_topic_contract",

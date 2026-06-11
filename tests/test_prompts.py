@@ -67,6 +67,11 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "common abbreviations or acronyms" in prompt
     assert "Make main topics broad enough for title screening" in prompt
     assert "at least 6 terms" in prompt
+    assert "`retrieval_terms`" in prompt
+    assert "`matching_terms`" in prompt
+    assert "`secondary_topic_id`" in prompt
+    assert "Keep secondary replacements as separate semantic groups" in prompt
+    assert "`title`, `abstract`, or `title_or_abstract`" in prompt
     assert "mandatory core concept for title screening" in prompt
     assert "later categories may use those ids directly" in prompt
     assert "climate change affect human health" in prompt

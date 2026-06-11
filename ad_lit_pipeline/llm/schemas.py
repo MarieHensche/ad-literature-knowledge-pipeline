@@ -173,26 +173,73 @@ def topic_contract_schema(
         "properties": {
             "topic_id": {"type": "string"},
             "label": {"type": "string"},
+            "field": {
+                "type": "string",
+                "enum": ["title", "abstract", "title_or_abstract"],
+            },
             "terms": {
                 "type": "array",
                 "minItems": 2,
                 "items": {"type": "string"},
             },
+            "retrieval_terms": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {"type": "string"},
+            },
+            "matching_terms": {
+                "type": "array",
+                "minItems": 2,
+                "items": {"type": "string"},
+            },
         },
-        "required": ["topic_id", "label", "terms"],
+        "required": [
+            "topic_id",
+            "label",
+            "field",
+            "terms",
+            "retrieval_terms",
+            "matching_terms",
+        ],
         "additionalProperties": False,
     }
     secondary_topic_schema = {
         "type": "object",
         "properties": {
             "main_topic_id": {"type": "string"},
+            "secondary_topic_id": {"type": "string"},
+            "label": {"type": "string"},
+            "field": {
+                "type": "string",
+                "enum": ["title", "abstract", "title_or_abstract"],
+            },
             "terms": {
                 "type": "array",
                 "minItems": 1,
                 "items": {"type": "string"},
             },
+            "retrieval_terms": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {"type": "string"},
+            },
+            "matching_terms": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string"},
+            },
         },
-        "required": ["main_topic_id", "terms"],
+        "required": [
+            "main_topic_id",
+            "secondary_topic_id",
+            "label",
+            "field",
+            "terms",
+            "retrieval_terms",
+            "matching_terms",
+        ],
         "additionalProperties": False,
     }
 
@@ -475,11 +522,17 @@ def tagging_category_value_completion_schema(category_ids: list[str]) -> dict[st
     }
 
 
-def title_relevance_schema(main_topic_ids: list[str]) -> dict[str, Any]:
+def title_relevance_schema(
+    main_topic_ids: list[str],
+    secondary_topic_ids: list[str] | None = None,
+) -> dict[str, Any]:
     """Build the candidate title relevance response schema."""
     topic_id_schema: dict[str, Any] = {"type": "string"}
     if main_topic_ids:
         topic_id_schema["enum"] = main_topic_ids
+    secondary_topic_id_schema: dict[str, Any] = {"type": "string"}
+    if secondary_topic_ids:
+        secondary_topic_id_schema["enum"] = secondary_topic_ids
 
     return {
         "type": "object",
@@ -495,12 +548,13 @@ def title_relevance_schema(main_topic_ids: list[str]) -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "main_topic_id": topic_id_schema,
+                        "secondary_topic_id": secondary_topic_id_schema,
                         "terms": {
                             "type": "array",
                             "items": {"type": "string"},
                         },
                     },
-                    "required": ["main_topic_id", "terms"],
+                    "required": ["main_topic_id", "secondary_topic_id", "terms"],
                     "additionalProperties": False,
                 },
             },

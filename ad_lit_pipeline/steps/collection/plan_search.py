@@ -15,6 +15,8 @@ from ad_lit_pipeline.topics.contract import (
     collection_from_contract,
     load_topic_contract,
 )
+from ad_lit_pipeline.topics.matching import topic_match_spec_from_contract
+from ad_lit_pipeline.topics.retrieval import build_query_groups_from_contract
 
 
 STEP = StepSpec(
@@ -284,7 +286,8 @@ def enforce_topic_plan_constraints(
         if filters.get("exclude_reviews") is not True:
             filters["exclude_reviews"] = True
             warnings.append(
-                "Set filters.exclude_reviews=true because topic contract excludes OpenAlex review works."
+                "Set filters.exclude_reviews=true because topic contract "
+                "excludes OpenAlex review works."
             )
 
         has_type_exclusion = any(
@@ -366,8 +369,24 @@ def run(
     warnings = []
     warnings.extend(ensure_search_queries(plan, topic_contract))
     warnings.extend(enforce_topic_plan_constraints(plan, topic_contract))
+    plan["topic_match_spec"] = topic_match_spec_from_contract(topic_contract)
+    retrieval_strategy = build_query_groups_from_contract(topic_contract, max_results)
+    if retrieval_strategy:
+        plan["retrieval_strategy"] = retrieval_strategy
+        plan["query_groups"] = retrieval_strategy["query_groups"]
+        warnings.append("Added tiered topic-block query groups from topic contract.")
     validate_plan(plan, provider_names(providers))
     write_json(output_path, plan)
+    query_group_count = 0
+    query_group_query_count = 0
+    query_groups = plan.get("query_groups")
+    if isinstance(query_groups, list):
+        query_group_count = len(query_groups)
+        query_group_query_count = sum(
+            len(group.get("queries", []))
+            for group in query_groups
+            if isinstance(group, dict) and isinstance(group.get("queries"), list)
+        )
     return StepResult(
         step_name=STEP.name,
         inputs={"topic_contract_yaml": topic_contract_path},
@@ -378,6 +397,8 @@ def run(
             "recommended_provider": plan["recommended_provider"],
             "main_search_string": plan["main_search_string"],
             "search_queries": len(plan["search_queries"]),
+            "query_groups": query_group_count,
+            "query_group_queries": query_group_query_count,
         },
     )
 
