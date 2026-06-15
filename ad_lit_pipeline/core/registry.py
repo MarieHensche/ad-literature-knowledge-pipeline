@@ -29,11 +29,15 @@ COLLECTION_PIPELINE = [
     "fetch_candidates",
     "deduplicate_candidates",
     "screen_title_relevance",
+    "verify_full_text_availability",
     "backfill_candidates",
+    "export_included_candidates",
+]
+
+COLLECTION_CALIBRATION_PIPELINE = [
     "select_calibration_papers",
     "prepare_calibration_full_text",
     "calibrate_topic_contract",
-    "export_included_candidates",
 ]
 
 CONTRACT_BOOTSTRAP_PIPELINE = [

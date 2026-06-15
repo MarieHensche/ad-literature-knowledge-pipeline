@@ -71,6 +71,24 @@ def candidate_sort_key(row: dict[str, Any]) -> tuple[int, int]:
     return (has_abstract, rank)
 
 
+def merge_full_text_locations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged = []
+    seen = set()
+    for row in rows:
+        locations = row.get("full_text_locations")
+        if not isinstance(locations, list):
+            continue
+        for location in locations:
+            if not isinstance(location, dict):
+                continue
+            url = str(location.get("url") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            merged.append(dict(location))
+    return merged
+
+
 def deduplicate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     groups: dict[str, list[dict[str, Any]]] = {}
 
@@ -93,6 +111,10 @@ def deduplicate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
         if merged_matches:
             representative["topic_matches"] = merged_matches
+
+        merged_full_text_locations = merge_full_text_locations(sorted_group)
+        if merged_full_text_locations:
+            representative["full_text_locations"] = merged_full_text_locations
 
         deduped.append(representative)
 

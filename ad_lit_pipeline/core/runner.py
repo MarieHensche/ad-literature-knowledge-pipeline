@@ -55,6 +55,11 @@ def run_selected_steps(
             result.elapsed_seconds = time.monotonic() - started
             result.metadata["started_at"] = started_at
             result.metadata["ended_at"] = utc_now()
+            if result.error is not None:
+                manifest.record_step(result, status="failed")
+                manifest.finish(status="failed")
+                print(f"Failed: {step_name} ({result.elapsed_seconds:.1f}s)")
+                raise RuntimeError(result.error)
             manifest.record_step(result)
             print(f"Completed: {step_name} ({result.elapsed_seconds:.1f}s)")
         except PipelinePause as pause:

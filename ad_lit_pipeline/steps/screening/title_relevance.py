@@ -48,6 +48,12 @@ OUTPUT_COLUMNS = [
     "source_rank",
     "source_query",
     "source_query_reason",
+    "retrieval_query_id",
+    "retrieval_logical_query_id",
+    "retrieval_phase",
+    "retrieval_tier",
+    "requires_title_screening",
+    "local_relevance_tier",
     "screening_decision",
     "screening_confidence",
     "screening_reason",
@@ -65,6 +71,7 @@ OUTPUT_COLUMNS = [
 EXCLUDED_TIER = 999
 SCREENING_STATUS_DETERMINISTIC_INCLUDE = "deterministic_include"
 SCREENING_STATUS_DETERMINISTIC_EXCLUDE = "deterministic_exclude"
+SCREENING_STATUS_PENDING_LLM_FULL_TEXT = "pending_llm_full_text"
 SCREENING_STATUS_LLM_SCREENED = "llm_screened"
 SCREENING_STATUS_LLM_ERROR = "llm_error"
 SCREENING_STATUS_LLM_ERROR_AUTO_EXCLUDED = "llm_error_auto_excluded_anchor_missing"
@@ -258,7 +265,21 @@ def is_strict_title_retrieval_candidate(candidate: dict[str, Any]) -> bool:
     return retrieval_tier == 0 and candidate.get("requires_title_screening") is False
 
 
+def metadata_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
 def row_base(candidate: dict[str, Any], index: int) -> dict[str, str]:
+    requires_title_screening = candidate.get("requires_title_screening")
+    if isinstance(requires_title_screening, bool):
+        requires_title_screening_value = (
+            "true" if requires_title_screening else "false"
+        )
+    else:
+        requires_title_screening_value = str(requires_title_screening or "")
+
     return {
         "paper_id": make_paper_id(candidate, index),
         "title": str(candidate.get("title") or ""),
@@ -269,6 +290,16 @@ def row_base(candidate: dict[str, Any], index: int) -> dict[str, str]:
         "source_rank": str(candidate.get("rank") or ""),
         "source_query": str(candidate.get("query") or ""),
         "source_query_reason": str(candidate.get("query_reason") or ""),
+        "retrieval_query_id": str(candidate.get("retrieval_query_id") or ""),
+        "retrieval_logical_query_id": str(
+            candidate.get("retrieval_logical_query_id") or ""
+        ),
+        "retrieval_phase": str(candidate.get("retrieval_phase") or ""),
+        "retrieval_tier": metadata_value(candidate.get("retrieval_tier")),
+        "requires_title_screening": requires_title_screening_value,
+        "local_relevance_tier": metadata_value(
+            candidate.get("local_relevance_tier")
+        ),
     }
 
 
@@ -377,6 +408,65 @@ def deterministic_tier0_screening(
             topic_matches.get("secondary_topic_values")
         ),
         "title_missing_main_topics": "",
+        "screening_status": SCREENING_STATUS_DETERMINISTIC_INCLUDE,
+        "needs_manual_review": "no",
+        "llm_error_type": "",
+        "llm_error_message": "",
+    }
+
+
+def deterministic_local_include_screening(
+    topic_contract: dict[str, Any],
+    candidate: dict[str, Any],
+    index: int,
+) -> dict[str, str] | None:
+    """Include candidates whose local topic evidence already satisfies the contract."""
+    if not is_strict_title_retrieval_candidate(candidate):
+        return None
+
+    topic_matches = candidate.get("topic_matches")
+    local_tier = local_topic_match_tier(topic_matches)
+    if local_tier == EXCLUDED_TIER or not isinstance(topic_matches, dict):
+        return None
+
+    ids = main_topic_ids(topic_contract)
+    matched_main = local_matched_main_topics(topic_contract, candidate)
+    missing = [topic_id for topic_id in ids if topic_id not in set(matched_main)]
+    secondary_values = topic_matches.get("secondary_topic_values")
+    if not isinstance(secondary_values, dict):
+        secondary_values = {}
+
+    missing_without_secondary = [
+        topic_id
+        for topic_id in missing
+        if not secondary_values.get(topic_id)
+    ]
+    if missing_without_secondary:
+        return None
+
+    confidence = "high" if local_tier == 0 else "medium"
+    reason = (
+        "Deterministic local title match: anchor topic is present and all main "
+        "topics are matched directly or by configured secondary replacements."
+    )
+    if local_tier == 0:
+        reason = (
+            "Deterministic local title match: anchor and all main topics matched "
+            "in the required title fields."
+        )
+
+    return {
+        **row_base(candidate, index),
+        "screening_decision": "include",
+        "screening_confidence": confidence,
+        "screening_reason": reason,
+        "title_anchor_present": "yes",
+        "title_relevance_tier": str(local_tier),
+        "title_matched_main_topics": "; ".join(matched_main),
+        "title_matched_secondary_topics": format_secondary_topic_values(
+            topic_matches.get("secondary_topic_values")
+        ),
+        "title_missing_main_topics": "; ".join(missing),
         "screening_status": SCREENING_STATUS_DETERMINISTIC_INCLUDE,
         "needs_manual_review": "no",
         "llm_error_type": "",
@@ -555,6 +645,26 @@ def screen_candidate(
     )
 
 
+def pending_llm_screening_row(candidate: dict[str, Any], index: int) -> dict[str, str]:
+    return {
+        **row_base(candidate, index),
+        "screening_decision": "review",
+        "screening_confidence": "n/a",
+        "screening_reason": (
+            "Pending LLM relevance screening after full-text availability check."
+        ),
+        "title_anchor_present": "",
+        "title_relevance_tier": str(EXCLUDED_TIER),
+        "title_matched_main_topics": "",
+        "title_matched_secondary_topics": "",
+        "title_missing_main_topics": "",
+        "screening_status": SCREENING_STATUS_PENDING_LLM_FULL_TEXT,
+        "needs_manual_review": "no",
+        "llm_error_type": "",
+        "llm_error_message": "",
+    }
+
+
 def write_llm_error_trace(
     topic_contract: dict[str, Any],
     candidate: dict[str, Any],
@@ -667,6 +777,174 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def screening_key(row: dict[str, str]) -> tuple[str, str]:
+    return (
+        str(row.get("doi") or "").strip().lower(),
+        str(row.get("provider_id") or "").strip(),
+    )
+
+
+def candidate_key(candidate: dict[str, Any]) -> tuple[str, str]:
+    return (
+        str(candidate.get("doi") or "").strip().lower(),
+        str(candidate.get("provider_id") or "").strip(),
+    )
+
+
+def availability_key(row: dict[str, str]) -> tuple[str, str]:
+    return (
+        str(row.get("doi") or "").strip().lower(),
+        str(row.get("provider_id") or "").strip(),
+    )
+
+
+def verified_availability_keys(
+    availability_rows: list[dict[str, str]],
+) -> set[tuple[str, str]]:
+    return {
+        availability_key(row)
+        for row in availability_rows
+        if row.get("full_text_availability_status") == "verified"
+    }
+
+
+def finalize_pending_llm_rows(
+    candidates: list[dict[str, Any]],
+    screening_rows: list[dict[str, str]],
+    availability_rows: list[dict[str, str]],
+    topic_contract_path: Path,
+    model: str,
+    client: JSONLLMClient | None = None,
+    trace_dir: Path | None = None,
+) -> tuple[list[dict[str, str]], list[Path], list[str], dict[str, int]]:
+    topic_contract = load_topic_contract(topic_contract_path)
+    candidates_by_key = {candidate_key(candidate): candidate for candidate in candidates}
+    verified_keys = verified_availability_keys(availability_rows)
+    llm_client = client or OpenAIResponsesClient()
+    trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
+    rows = [dict(row) for row in screening_rows]
+    all_trace_paths: list[Path] = []
+    warnings: list[str] = []
+    llm_screened = 0
+    llm_error_rows = 0
+    llm_error_auto_excluded = 0
+    skipped_without_full_text = 0
+
+    for index, row in enumerate(rows, start=1):
+        if row.get("screening_status") != SCREENING_STATUS_PENDING_LLM_FULL_TEXT:
+            continue
+
+        key = screening_key(row)
+        if key not in verified_keys:
+            skipped_without_full_text += 1
+            continue
+
+        candidate = candidates_by_key.get(key)
+        if candidate is None:
+            skipped_without_full_text += 1
+            continue
+
+        llm_screened += 1
+        started_at = time.monotonic()
+        print(
+            f"Screening verified-full-text title {index}/{len(rows)}: "
+            f"{candidate.get('title')}",
+            flush=True,
+        )
+        try:
+            screened_row, trace_paths = screen_candidate(
+                topic_contract,
+                candidate,
+                index,
+                model,
+                llm_client,
+                trace_writer,
+            )
+            rows[index - 1] = screened_row
+            all_trace_paths.extend(trace_paths)
+            elapsed = time.monotonic() - started_at
+            print(
+                f"  Completed title {index}/{len(rows)} in {elapsed:.1f}s",
+                flush=True,
+            )
+        except ValueError as error:
+            elapsed = time.monotonic() - started_at
+            paper_id = row.get("paper_id") or make_paper_id(candidate, index)
+            error_row = llm_error_screening_row(
+                topic_contract,
+                candidate,
+                index,
+                error,
+            )
+            rows[index - 1] = error_row
+            error_trace_paths = write_llm_error_trace(
+                topic_contract,
+                candidate,
+                model,
+                trace_writer,
+                paper_id,
+                error,
+            )
+            all_trace_paths.extend(error_trace_paths)
+            llm_error_rows += 1
+            if error_row["screening_decision"] == "exclude":
+                llm_error_auto_excluded += 1
+                action = "auto-excluded after local anchor miss"
+            else:
+                action = "marked for manual review"
+            warning = (
+                f"Failed to screen title '{paper_id}' after retry "
+                f"after {elapsed:.1f}s ({action}): {error}"
+            )
+            warnings.append(warning)
+            print(f"  Warning: {warning}", flush=True)
+
+    counts = {
+        "llm_screened": llm_screened,
+        "llm_error_rows": llm_error_rows,
+        "llm_error_auto_excluded": llm_error_auto_excluded,
+        "pending_llm_without_verified_full_text": skipped_without_full_text,
+    }
+    return rows, all_trace_paths, warnings, counts
+
+
+def grouped_screening_counts(
+    rows: list[dict[str, str]],
+    field: str,
+) -> dict[str, dict[str, int]]:
+    groups: dict[str, dict[str, int]] = {}
+    for row in rows:
+        value = str(row.get(field) or "unknown")
+        counts = groups.setdefault(
+            value,
+            {
+                "total": 0,
+                "included": 0,
+                "excluded": 0,
+                "review": 0,
+                SCREENING_STATUS_DETERMINISTIC_INCLUDE: 0,
+                SCREENING_STATUS_DETERMINISTIC_EXCLUDE: 0,
+                SCREENING_STATUS_PENDING_LLM_FULL_TEXT: 0,
+                SCREENING_STATUS_LLM_SCREENED: 0,
+                SCREENING_STATUS_LLM_ERROR: 0,
+                SCREENING_STATUS_LLM_ERROR_AUTO_EXCLUDED: 0,
+            },
+        )
+        counts["total"] += 1
+        decision = row.get("screening_decision", "")
+        if decision == "include":
+            counts["included"] += 1
+        elif decision == "exclude":
+            counts["excluded"] += 1
+        elif decision == "review":
+            counts["review"] += 1
+
+        status = row.get("screening_status", "")
+        if status in counts:
+            counts[status] += 1
+    return groups
+
+
 def run(
     input_path: Path,
     output_path: Path,
@@ -675,6 +953,7 @@ def run(
     limit: int | None = None,
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
+    defer_llm_until_full_text: bool = False,
 ) -> StepResult:
     topic_contract = load_topic_contract(topic_contract_path)
     candidates = read_jsonl(input_path)
@@ -688,6 +967,7 @@ def run(
     warnings = []
     deterministic_tier0_included = 0
     deterministic_local_excluded = 0
+    pending_llm_full_text = 0
     llm_screened = 0
     llm_error_rows = 0
     llm_error_auto_excluded = 0
@@ -708,6 +988,21 @@ def run(
             )
             continue
 
+        deterministic_row = deterministic_local_include_screening(
+            topic_contract,
+            candidate,
+            index,
+        )
+        if deterministic_row is not None:
+            rows.append(deterministic_row)
+            deterministic_tier0_included += 1
+            print(
+                "Auto-included deterministic local title match "
+                f"{index}/{len(candidates)}: {candidate.get('title')}",
+                flush=True,
+            )
+            continue
+
         deterministic_row = deterministic_local_reject_screening(
             topic_contract,
             candidate,
@@ -718,6 +1013,16 @@ def run(
             deterministic_local_excluded += 1
             print(
                 "Auto-excluded deterministic local anchor miss "
+                f"{index}/{len(candidates)}: {candidate.get('title')}",
+                flush=True,
+            )
+            continue
+
+        if defer_llm_until_full_text:
+            rows.append(pending_llm_screening_row(candidate, index))
+            pending_llm_full_text += 1
+            print(
+                "Deferred LLM title screening until full-text check "
                 f"{index}/{len(candidates)}: {candidate.get('title')}",
                 flush=True,
             )
@@ -802,6 +1107,7 @@ def run(
             "excluded": excluded,
             "deterministic_tier0_included": deterministic_tier0_included,
             "deterministic_local_excluded": deterministic_local_excluded,
+            "pending_llm_full_text_rows": pending_llm_full_text,
             "llm_screened": llm_screened,
             "llm_error_rows": llm_error_rows,
             "llm_error_auto_excluded": llm_error_auto_excluded,
@@ -812,6 +1118,22 @@ def run(
         metadata={
             "tier_counts": tier_counts,
             "screening_status_counts": screening_status_counts,
+            "retrieval_phase_counts": grouped_screening_counts(
+                rows,
+                "retrieval_phase",
+            ),
+            "retrieval_query_counts": grouped_screening_counts(
+                rows,
+                "retrieval_query_id",
+            ),
+            "local_relevance_tier_counts": grouped_screening_counts(
+                rows,
+                "local_relevance_tier",
+            ),
+            "requires_title_screening_counts": grouped_screening_counts(
+                rows,
+                "requires_title_screening",
+            ),
         },
     )
 

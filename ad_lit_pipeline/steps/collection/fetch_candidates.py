@@ -26,6 +26,24 @@ PROVIDERS: dict[str, CandidateProvider] = {
 }
 
 
+def provider_max_per_page(provider: CandidateProvider) -> int:
+    try:
+        value = int(getattr(provider, "max_per_page"))
+    except (AttributeError, TypeError, ValueError):
+        value = 100
+    return max(1, value)
+
+
+def resolve_per_page(
+    provider: CandidateProvider,
+    requested_per_page: int | None = None,
+) -> int:
+    max_per_page = provider_max_per_page(provider)
+    if requested_per_page is None:
+        return max_per_page
+    return max(1, min(int(requested_per_page), max_per_page))
+
+
 def provider_name_from_plan(plan: dict[str, Any]) -> str:
     provider = str(plan.get("recommended_provider") or "")
     provider_plan = plan.get("provider_specific_plan")
@@ -47,7 +65,7 @@ def run(
     plan_path: Path,
     output_path: Path,
     max_results: int | None = None,
-    per_page: int = 25,
+    per_page: int | None = None,
     mailto: str | None = None,
     sleep_seconds: float = 0.2,
 ) -> StepResult:
@@ -59,6 +77,7 @@ def run(
     provider_name = provider_name_from_plan(plan)
     provider = get_provider(provider_name)
     provider.validate_plan(plan)
+    resolved_per_page = resolve_per_page(provider, per_page)
     search_query_count = 1
     query_groups = plan.get("query_groups")
     if isinstance(query_groups, list):
@@ -75,7 +94,7 @@ def run(
     candidates = provider.fetch_candidates(
         plan=plan,
         max_results=resolved_max_results,
-        per_page=per_page,
+        per_page=resolved_per_page,
         mailto=mailto,
         sleep_seconds=sleep_seconds,
     )
@@ -117,6 +136,8 @@ def run(
         warnings=warnings,
         metadata={
             "provider": provider_name,
+            "per_page": resolved_per_page,
+            "provider_max_per_page": provider_max_per_page(provider),
             "search_queries": search_query_count,
             "fetch_diagnostics": diagnostics,
         },
@@ -128,7 +149,12 @@ def main() -> None:
     parser.add_argument("--plan", required=True, help="Input search plan JSON.")
     parser.add_argument("--output", required=True, help="Output candidates JSONL.")
     parser.add_argument("--max-results", type=int, default=None, help="Override max result count.")
-    parser.add_argument("--per-page", type=int, default=25, help="Provider page size.")
+    parser.add_argument(
+        "--per-page",
+        type=int,
+        default=None,
+        help="Provider page size. Defaults to the provider maximum.",
+    )
     parser.add_argument("--mailto", default=None, help="Optional email for provider polite pool.")
     parser.add_argument("--sleep", type=float, default=0.2, help="Delay between API pages.")
     args = parser.parse_args()

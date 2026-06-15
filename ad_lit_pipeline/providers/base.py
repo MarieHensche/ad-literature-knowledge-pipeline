@@ -7,6 +7,7 @@ class CandidateProvider(Protocol):
     """Interface for external candidate-paper providers."""
 
     name: str
+    max_per_page: int
 
     def validate_plan(self, plan: dict[str, Any]) -> None:
         """Validate that a search plan can be executed by this provider."""
@@ -20,4 +21,3 @@ class CandidateProvider(Protocol):
         sleep_seconds: float,
     ) -> list[dict[str, Any]]:
         """Fetch candidates for a validated provider-specific plan."""
-

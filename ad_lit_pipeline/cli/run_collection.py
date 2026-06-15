@@ -110,6 +110,16 @@ def build_step_functions(
 ) -> dict[str, object]:
     artifacts = collection_artifacts(args.collection)
 
+    def full_text_availability_required() -> bool:
+        from ad_lit_pipeline.steps.collection import verify_full_text_availability
+
+        return (
+            args.require_full_text_availability
+            or verify_full_text_availability.full_text_required_from_contract(
+                topic_contract_path
+            )
+        )
+
     def run_generate_topic_contract() -> object:
         from ad_lit_pipeline.steps.collection import generate_topic_contract
 
@@ -171,6 +181,7 @@ def build_step_functions(
             args.model,
             topic_contract_path,
             trace_dir=trace_dir,
+            require_full_text_availability=full_text_availability_required(),
         )
 
     def run_fetch_candidates() -> object:
@@ -201,6 +212,22 @@ def build_step_functions(
             topic_contract_path,
             limit=args.max_results,
             trace_dir=trace_dir,
+            defer_llm_until_full_text=full_text_availability_required(),
+        )
+
+    def run_verify_full_text_availability() -> object:
+        from ad_lit_pipeline.steps.collection import verify_full_text_availability
+
+        return verify_full_text_availability.run(
+            artifacts.deduped_candidates_jsonl,
+            artifacts.candidate_screening_csv,
+            artifacts.full_text_availability_csv,
+            topic_contract_path,
+            require_full_text_availability=full_text_availability_required(),
+            timeout_seconds=args.full_text_availability_timeout,
+            workers=args.full_text_availability_workers,
+            unpaywall_email=args.full_text_email,
+            core_api_key=args.core_api_key,
         )
 
     def run_backfill_candidates() -> object:
@@ -216,6 +243,12 @@ def build_step_functions(
             args.max_results,
             mailto=args.mailto,
             trace_dir=trace_dir,
+            availability_path=artifacts.full_text_availability_csv,
+            require_full_text_availability=full_text_availability_required(),
+            full_text_availability_timeout=args.full_text_availability_timeout,
+            full_text_availability_workers=args.full_text_availability_workers,
+            unpaywall_email=args.full_text_email,
+            core_api_key=args.core_api_key,
         )
 
     def run_select_calibration_papers() -> object:
@@ -308,11 +341,17 @@ def build_step_functions(
     def run_export_included_candidates() -> object:
         from ad_lit_pipeline.steps.collection import export_included
 
+        require_full_text = full_text_availability_required()
         return export_included.run(
             artifacts.deduped_candidates_jsonl,
             artifacts.candidate_screening_csv,
             artifacts.papers_csv,
             args.max_results,
+            availability_path=(
+                artifacts.full_text_availability_csv if require_full_text else None
+            ),
+            require_full_text_availability=require_full_text,
+            fail_below_export_ratio=args.fail_below_export_ratio,
         )
 
     return {
@@ -324,6 +363,7 @@ def build_step_functions(
         "fetch_candidates": run_fetch_candidates,
         "deduplicate_candidates": run_deduplicate_candidates,
         "screen_title_relevance": run_screen_title_relevance,
+        "verify_full_text_availability": run_verify_full_text_availability,
         "backfill_candidates": run_backfill_candidates,
         "select_calibration_papers": run_select_calibration_papers,
         "prepare_calibration_full_text": run_prepare_calibration_full_text,
@@ -454,6 +494,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional CORE API key for additional review full-text lookup.",
     )
     run_parser.add_argument(
+        "--require-full-text-availability",
+        action="store_true",
+        help=(
+            "Require included collection results to have a verified reachable "
+            "full-text URL before they count toward --max-results."
+        ),
+    )
+    run_parser.add_argument(
+        "--full-text-availability-timeout",
+        type=float,
+        default=5.0,
+        help="Per-URL timeout in seconds for lightweight full-text URL checks.",
+    )
+    run_parser.add_argument(
+        "--full-text-availability-workers",
+        type=int,
+        default=8,
+        help="Parallel workers for collection-time full-text URL checks.",
+    )
+    run_parser.add_argument(
         "--model",
         default="gpt-4o-mini",
         help="OpenAI model for planning and screening.",
@@ -502,6 +562,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional directory where LLM prompt/response traces are written.",
     )
+    run_parser.add_argument(
+        "--fail-below-export-ratio",
+        type=float,
+        default=None,
+        help=(
+            "Fail the collection if exported papers divided by --max-results "
+            "is below this ratio. Omit to warn only."
+        ),
+    )
 
     explain_parser = subparsers.add_parser("explain", help="Explain collection steps.")
     explain_parser.add_argument("--collection", default="example", help="Collection name.")
@@ -509,6 +578,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    load_dotenv()
     parser = build_parser()
     args = parser.parse_args()
 

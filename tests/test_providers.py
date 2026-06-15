@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import json
+from email.message import Message
+from io import BytesIO
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from ad_lit_pipeline.core.errors import UnsupportedProviderError
+from ad_lit_pipeline.providers import openalex
 from ad_lit_pipeline.providers.openalex import (
     OpenAlexProvider,
     build_openalex_url,
     candidate_from_work,
+    fetch_json,
     inverted_index_to_text,
+    query_resume_state,
     redact_openalex_url,
 )
 from ad_lit_pipeline.steps.collection.fetch_candidates import get_provider, run
@@ -80,6 +86,74 @@ def test_openalex_url_uses_api_key_from_environment(
     assert "api_key=secret-key" in url
     assert "api_key=REDACTED" in redact_openalex_url(url)
     assert "secret-key" not in redact_openalex_url(url)
+
+
+def test_openalex_fetch_json_retries_transient_url_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"results": []}'
+
+    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise URLError("temporary DNS failure")
+        return FakeResponse()
+
+    monkeypatch.setattr(openalex, "urlopen", fake_urlopen)
+    monkeypatch.setattr(openalex.time, "sleep", lambda seconds: None)
+
+    assert fetch_json("https://api.openalex.org/works", retry_sleep_seconds=0) == {
+        "results": []
+    }
+    assert calls == 3
+
+
+def test_openalex_fetch_json_retries_transient_http_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"results": []}'
+
+    def fake_urlopen(request: object, timeout: int) -> FakeResponse:
+        nonlocal calls
+        calls += 1
+        if calls < 4:
+            raise HTTPError(
+                "https://api.openalex.org/works",
+                503,
+                "Service Unavailable",
+                Message(),
+                BytesIO(),
+            )
+        return FakeResponse()
+
+    monkeypatch.setattr(openalex, "urlopen", fake_urlopen)
+    monkeypatch.setattr(openalex.time, "sleep", lambda seconds: None)
+
+    assert fetch_json("https://api.openalex.org/works", retry_sleep_seconds=0) == {
+        "results": []
+    }
+    assert calls == 4
 
 
 def test_openalex_url_can_select_open_review_overviews() -> None:
@@ -351,6 +425,7 @@ def test_openalex_tiered_fetch_dedupes_and_continues_pages(
     assert candidates[0]["local_relevance_tier"] == 0
     assert candidates[0]["in_fetch_duplicate_count"] == 2
     assert candidates[0]["in_fetch_duplicate_provenance"]
+    assert candidates[0]["in_fetch_duplicate_provenance"][0]["query_rank"] == 2
     assert provider.last_fetch_diagnostics["raw_provider_candidates_seen"] == 3
     assert provider.last_fetch_diagnostics["in_fetch_duplicates_removed"] == 1
     assert "page=1" in urls[0]
@@ -526,6 +601,130 @@ def test_openalex_backfill_resumes_after_consumed_page(
     assert "page=2" in urls[1]
     assert provider.last_fetch_diagnostics["existing_candidates"] == 1
     assert provider.last_fetch_diagnostics["unique_candidates"] == 1
+
+
+def test_openalex_resume_state_continues_after_consumed_pages() -> None:
+    existing_candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": f"W{i}",
+            "retrieval_query_id": "tier_0_all_main",
+            "query_rank": i,
+        }
+        for i in range(1, 51)
+    ]
+
+    page_by_query_id, rank_by_query_id, offset_by_query_id = query_resume_state(
+        existing_candidates,
+        per_page=25,
+    )
+
+    assert page_by_query_id["tier_0_all_main"] == 3
+    assert rank_by_query_id["tier_0_all_main"] == 50
+    assert offset_by_query_id["tier_0_all_main"] == 0
+
+
+def test_openalex_resume_state_counts_consumed_duplicate_ranks() -> None:
+    existing_candidates = [
+        {
+            "provider": "openalex",
+            "provider_id": "W1",
+            "retrieval_query_id": "tier_0_all_main",
+            "query_rank": 1,
+            "in_fetch_duplicate_provenance": [
+                {
+                    "provider": "openalex",
+                    "provider_id": "W1_DUPLICATE",
+                    "retrieval_query_id": "tier_0_all_main",
+                    "query_rank": 50,
+                }
+            ],
+        }
+    ]
+
+    page_by_query_id, rank_by_query_id, offset_by_query_id = query_resume_state(
+        existing_candidates,
+        per_page=25,
+    )
+
+    assert page_by_query_id["tier_0_all_main"] == 3
+    assert rank_by_query_id["tier_0_all_main"] == 50
+    assert offset_by_query_id["tier_0_all_main"] == 0
+
+
+def test_openalex_tiered_fetch_reports_exhausted_query_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls: list[str] = []
+
+    def fake_fetch_json(url: str) -> dict[str, object]:
+        urls.append(url)
+        return {"results": []}
+
+    monkeypatch.setattr(
+        "ad_lit_pipeline.providers.openalex.fetch_json",
+        fake_fetch_json,
+    )
+    plan = openalex_plan()
+    plan["retrieval_strategy"] = {"iterations_per_group": 1}
+    plan["query_groups"] = [
+        {
+            "group_id": "tier_0",
+            "tier": 0,
+            "queries": [
+                {
+                    "query_id": "tier_0_all_main",
+                    "tier": 0,
+                    "query": "(AI) AND (school)",
+                    "reason": "Tier 0.",
+                    "requires_title_screening": False,
+                    "blocks": [
+                        {
+                            "topic_id": "ai",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["AI"],
+                        },
+                        {
+                            "topic_id": "education",
+                            "kind": "main",
+                            "field": "title",
+                            "terms": ["school"],
+                        },
+                    ],
+                }
+            ],
+        }
+    ]
+
+    provider = OpenAlexProvider()
+    candidates = provider.fetch_candidates(
+        plan,
+        max_results=1,
+        per_page=25,
+        mailto="person@example.test",
+        sleep_seconds=0,
+    )
+
+    diagnostics = provider.last_fetch_diagnostics
+    assert candidates == []
+    assert diagnostics["exhausted_query_count"] == 1
+    assert diagnostics["exhausted_queries"] == [
+        {
+            "query_id": "tier_0_all_main",
+            "logical_query_id": "tier_0_all_main",
+            "tier": 0,
+            "iteration": 1,
+            "page": 1,
+            "per_page": 25,
+            "query_url": redact_openalex_url(urls[0]),
+            "reason": "empty_results",
+            "pagination": "page",
+            "backfill_round": 0,
+            "results_returned": 0,
+        }
+    ]
+    assert diagnostics["query_page_states"]["tier_0_all_main"]["page"] == 1
 
 
 def test_fetch_candidates_rejects_unsupported_provider(tmp_path: Path) -> None:

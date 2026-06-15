@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.steps.collection import verify_full_text_availability
 from ad_lit_pipeline.topics.matching import (
     format_secondary_group_value_map,
     format_topic_value_map,
@@ -32,7 +33,28 @@ OUTPUT_COLUMNS = [
     "url",
     "source",
     "full_text_path",
+    "full_text_availability_status",
+    "full_text_availability_source",
+    "full_text_url",
+    "full_text_url_kind",
+    "full_text_url_checked_at",
+    "full_text_url_content_type",
+    "full_text_license",
+    "full_text_is_open_access",
+    "full_text_availability_error",
     "notes",
+]
+
+AVAILABILITY_OUTPUT_COLUMNS = [
+    "full_text_availability_status",
+    "full_text_availability_source",
+    "full_text_url",
+    "full_text_url_kind",
+    "full_text_url_checked_at",
+    "full_text_url_content_type",
+    "full_text_license",
+    "full_text_is_open_access",
+    "full_text_availability_error",
 ]
 
 
@@ -77,6 +99,30 @@ def screening_key(row: dict[str, str]) -> tuple[str, str]:
     doi = str(row.get("doi") or "").strip().lower()
     provider_id = str(row.get("provider_id") or "").strip()
     return doi, provider_id
+
+
+def availability_key(row: dict[str, str]) -> tuple[str, str]:
+    doi = str(row.get("doi") or "").strip().lower()
+    provider_id = str(row.get("provider_id") or "").strip()
+    return doi, provider_id
+
+
+def availability_by_key(
+    availability_rows: list[dict[str, str]] | None,
+) -> dict[tuple[str, str], dict[str, str]]:
+    return {
+        availability_key(row): row
+        for row in availability_rows or []
+        if availability_key(row) != ("", "")
+    }
+
+
+def is_verified_availability(row: dict[str, str] | None) -> bool:
+    return (
+        row is not None
+        and row.get("full_text_availability_status")
+        == verify_full_text_availability.STATUS_VERIFIED
+    )
 
 
 def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
@@ -144,7 +190,12 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
 def candidate_to_canonical_row(
     candidate: dict[str, Any],
     screening: dict[str, str],
+    availability: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    availability_fields = {
+        column: (availability or {}).get(column, "")
+        for column in AVAILABILITY_OUTPUT_COLUMNS
+    }
     return {
         "paper_id": screening.get("paper_id", ""),
         "title": str(candidate.get("title") or screening.get("title") or ""),
@@ -156,6 +207,7 @@ def candidate_to_canonical_row(
         "url": str(candidate.get("url") or ""),
         "source": f"collected:{candidate.get('provider', '')}",
         "full_text_path": "",
+        **availability_fields,
         "notes": make_notes(candidate, screening),
     }
 
@@ -164,8 +216,11 @@ def export_included(
     candidates: list[dict[str, Any]],
     screening_rows: list[dict[str, str]],
     limit: int | None = None,
+    availability_rows: list[dict[str, str]] | None = None,
+    require_verified_full_text: bool = False,
 ) -> list[dict[str, str]]:
     candidates_by_key = {candidate_key(candidate): candidate for candidate in candidates}
+    full_text_availability = availability_by_key(availability_rows)
 
     output_rows = []
 
@@ -175,6 +230,7 @@ def export_included(
 
         key = screening_key(screening)
         candidate = candidates_by_key.get(key)
+        availability = full_text_availability.get(key)
 
         if candidate is None:
             raise ValueError(
@@ -182,7 +238,10 @@ def export_included(
                 f"doi={key[0]} provider_id={key[1]}"
             )
 
-        output_rows.append(candidate_to_canonical_row(candidate, screening))
+        if require_verified_full_text and not is_verified_availability(availability):
+            continue
+
+        output_rows.append(candidate_to_canonical_row(candidate, screening, availability))
         if limit is not None and len(output_rows) >= limit:
             break
 
@@ -208,10 +267,27 @@ def run(
     screening_path: Path,
     output_path: Path,
     max_results: int | None = None,
+    availability_path: Path | None = None,
+    require_full_text_availability: bool = False,
+    fail_below_export_ratio: float | None = None,
 ) -> StepResult:
+    if fail_below_export_ratio is not None and not 0 <= fail_below_export_ratio <= 1:
+        raise ValueError("--fail-below-export-ratio must be between 0 and 1.")
+
     candidates = read_jsonl(candidates_path)
     screening_rows = read_csv(screening_path)
-    output_rows = export_included(candidates, screening_rows, max_results)
+    availability_rows = (
+        read_csv(availability_path)
+        if availability_path is not None and availability_path.exists()
+        else []
+    )
+    output_rows = export_included(
+        candidates,
+        screening_rows,
+        max_results,
+        availability_rows=availability_rows,
+        require_verified_full_text=require_full_text_availability,
+    )
     write_csv(output_path, output_rows)
     included_screening_rows = sum(
         1 for row in screening_rows if row.get("screening_decision") == "include"
@@ -222,34 +298,94 @@ def run(
     review_screening_rows = sum(
         1 for row in screening_rows if row.get("screening_decision") == "review"
     )
-    warnings = []
-    if max_results is not None and len(output_rows) < max_results:
-        warnings.append(
-            "Exported fewer included papers than requested; candidate sources "
-            "may have been exhausted before the target was reached: "
-            f"requested={max_results} exported={len(output_rows)}."
+    availability_lookup = availability_by_key(availability_rows)
+    included_rows = [
+        row for row in screening_rows if row.get("screening_decision") == "include"
+    ]
+    verified_full_text_rows = sum(
+        1
+        for row in included_rows
+        if is_verified_availability(availability_lookup.get(screening_key(row)))
+    )
+    skipped_full_text_unverified = (
+        sum(
+            1
+            for row in included_rows
+            if not is_verified_availability(availability_lookup.get(screening_key(row)))
         )
+        if require_full_text_availability
+        else 0
+    )
+    warnings = []
+    export_ratio = (
+        len(output_rows) / max_results
+        if max_results is not None and max_results > 0
+        else None
+    )
+    error = None
+    if max_results is not None and len(output_rows) < max_results:
+        if require_full_text_availability:
+            warnings.append(
+                "Exported fewer verified-full-text papers than requested; "
+                "candidate sources may have been exhausted before the target "
+                "was reached, or some included candidates did not have a "
+                "reachable full-text URL: "
+                f"requested={max_results} exported={len(output_rows)}."
+            )
+        else:
+            warnings.append(
+                "Exported fewer included papers than requested; candidate sources "
+                "may have been exhausted before the target was reached: "
+                f"requested={max_results} exported={len(output_rows)}."
+            )
+
+    if (
+        fail_below_export_ratio is not None
+        and export_ratio is not None
+        and export_ratio < fail_below_export_ratio
+    ):
+        error = (
+            "Export quality gate failed: "
+            f"exported={len(output_rows)} requested={max_results} "
+            f"ratio={export_ratio:.3f} "
+            f"threshold={fail_below_export_ratio:.3f}."
+        )
+
+    inputs = {
+        "deduped_candidates_jsonl": candidates_path,
+        "candidate_screening_csv": screening_path,
+    }
+    if availability_path is not None:
+        inputs["full_text_availability_csv"] = availability_path
 
     return StepResult(
         step_name=STEP.name,
-        inputs={
-            "deduped_candidates_jsonl": candidates_path,
-            "candidate_screening_csv": screening_path,
-        },
+        inputs=inputs,
         outputs={"papers_csv": output_path},
         row_counts={
             "screened_rows": len(screening_rows),
             "included_screening_rows": included_screening_rows,
             "excluded_screening_rows": excluded_screening_rows,
             "review_screening_rows": review_screening_rows,
+            "verified_full_text_rows": verified_full_text_rows,
+            "skipped_full_text_unverified": skipped_full_text_unverified,
             "included_rows_exported": len(output_rows),
-            "skipped_by_export_cap": max(0, included_screening_rows - len(output_rows)),
+            "skipped_by_export_cap": max(
+                0,
+                included_screening_rows
+                - skipped_full_text_unverified
+                - len(output_rows),
+            ),
         },
         warnings=warnings,
+        error=error,
         metadata={
             "max_results": max_results,
             "target_export_rows": max_results,
             "export_target_policy": "requested_max_results",
+            "require_full_text_availability": require_full_text_availability,
+            "export_ratio": export_ratio,
+            "fail_below_export_ratio": fail_below_export_ratio,
         },
     )
 
@@ -267,6 +403,25 @@ def main() -> None:
         default=None,
         help="Optional maximum number of included rows to export.",
     )
+    parser.add_argument(
+        "--availability",
+        default=None,
+        help="Optional full-text availability CSV.",
+    )
+    parser.add_argument(
+        "--require-full-text-availability",
+        action="store_true",
+        help="Export only included rows with verified full-text availability.",
+    )
+    parser.add_argument(
+        "--fail-below-export-ratio",
+        type=float,
+        default=None,
+        help=(
+            "Fail the export step if exported rows divided by --max-results "
+            "is below this ratio."
+        ),
+    )
     args = parser.parse_args()
 
     result = run(
@@ -274,8 +429,13 @@ def main() -> None:
         Path(args.screening),
         Path(args.output),
         args.max_results,
+        availability_path=Path(args.availability) if args.availability else None,
+        require_full_text_availability=args.require_full_text_availability,
+        fail_below_export_ratio=args.fail_below_export_ratio,
     )
 
     print(f"Screened rows: {result.row_counts['screened_rows']}")
     print(f"Included rows exported: {result.row_counts['included_rows_exported']}")
+    if result.error:
+        raise SystemExit(result.error)
     print(f"Wrote {args.output}")

@@ -175,9 +175,9 @@ def test_run_collection_explain_lists_steps() -> None:
     assert "plan_search" in result.stdout
     assert "fetch_candidates" in result.stdout
     assert "screen_title_relevance" in result.stdout
-    assert "select_calibration_papers" in result.stdout
-    assert "prepare_calibration_full_text" in result.stdout
-    assert "calibrate_topic_contract" in result.stdout
+    assert "select_calibration_papers" not in result.stdout
+    assert "prepare_calibration_full_text" not in result.stdout
+    assert "calibrate_topic_contract" not in result.stdout
     assert "generate_topic_contract" in result.stdout
     assert "prepare_review_full_text" in result.stdout
     assert "example_openalex_candidates.jsonl" in result.stdout
@@ -210,7 +210,7 @@ def test_run_collection_dry_run_can_generate_contract_first() -> None:
     assert "pytest_contract_dry_run_topic_contract.yaml" in result.stdout
 
 
-def test_run_collection_dry_run_includes_contract_calibration() -> None:
+def test_run_collection_dry_run_skips_contract_calibration_by_default() -> None:
     result = run_script(
         "scripts/run_collection.py",
         "run",
@@ -223,9 +223,9 @@ def test_run_collection_dry_run_includes_contract_calibration() -> None:
         "pytest-collection-calibration-dry-run",
     )
 
-    assert "Would run step: select_calibration_papers" in result.stdout
-    assert "Would run step: prepare_calibration_full_text" in result.stdout
-    assert "Would run step: calibrate_topic_contract" in result.stdout
+    assert "Would run step: select_calibration_papers" not in result.stdout
+    assert "Would run step: prepare_calibration_full_text" not in result.stdout
+    assert "Would run step: calibrate_topic_contract" not in result.stdout
     assert "Would run step: export_included_candidates" in result.stdout
 
 
@@ -310,7 +310,8 @@ def test_run_collection_with_contract_can_start_at_review_refinement() -> None:
     assert "Would run step: prepare_review_full_text" in result.stdout
     assert "Would run step: refine_topic_contract" in result.stdout
     assert "Would run step: plan_search" in result.stdout
-    assert "Would run step: calibrate_topic_contract" in result.stdout
+    assert "Would run step: calibrate_topic_contract" not in result.stdout
+    assert "Would run step: export_included_candidates" in result.stdout
 
 
 def test_run_collection_requires_topic_when_generating_contract() -> None:

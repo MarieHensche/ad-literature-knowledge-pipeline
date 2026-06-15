@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl
 from urllib.parse import urlencode
 from urllib.parse import urlsplit
 from urllib.parse import urlunsplit
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from ad_lit_pipeline.steps.collection.candidate_identity import dedupe_key
@@ -24,6 +24,9 @@ from ad_lit_pipeline.topics.retrieval import execution_queries_for_provider
 
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
 USER_AGENT = "ad-literature-knowledge-pipeline/0.1"
+OPENALEX_FETCH_RETRIES = 6
+OPENALEX_RETRY_SLEEP_SECONDS = 1.0
+OPENALEX_TRANSIENT_HTTP_CODES = {500, 502, 503, 504}
 
 
 def normalize_doi(value: object) -> str:
@@ -90,6 +93,113 @@ def extract_url(work: dict[str, object]) -> str:
         return str(primary_location["landing_page_url"])
 
     return str(work.get("id") or "")
+
+
+def normalize_full_text_url(value: object) -> str:
+    url = str(value or "").strip()
+    return url if url.startswith(("http://", "https://")) else ""
+
+
+def full_text_kind(url: str, fallback: str = "landing_page") -> str:
+    lower = url.lower().split("?", 1)[0]
+    if lower.endswith(".pdf") or "/pdf" in lower:
+        return "pdf"
+    return fallback
+
+
+def append_full_text_location(
+    locations: list[dict[str, object]],
+    url: object,
+    source: str,
+    kind: str = "landing_page",
+    license_value: object = "",
+    is_open_access: object = "",
+) -> None:
+    cleaned = normalize_full_text_url(url)
+    if not cleaned:
+        return
+    locations.append(
+        {
+            "source": source,
+            "url": cleaned,
+            "kind": full_text_kind(cleaned, kind),
+            "license": str(license_value or ""),
+            "is_open_access": bool(is_open_access)
+            if isinstance(is_open_access, bool)
+            else "",
+        }
+    )
+
+
+def location_license(location: dict[str, object]) -> object:
+    return location.get("license") or location.get("license_id") or ""
+
+
+def full_text_locations_from_work(work: dict[str, object]) -> list[dict[str, object]]:
+    locations: list[dict[str, object]] = []
+    open_access = work.get("open_access")
+    open_access_map = open_access if isinstance(open_access, dict) else {}
+    is_oa = open_access_map.get("is_oa")
+    append_full_text_location(
+        locations,
+        open_access_map.get("oa_url"),
+        "openalex_open_access",
+        is_open_access=is_oa,
+    )
+
+    for key, source in (
+        ("best_oa_location", "openalex_best_oa_location"),
+        ("primary_location", "openalex_primary_location"),
+    ):
+        location = work.get(key)
+        if not isinstance(location, dict):
+            continue
+        append_full_text_location(
+            locations,
+            location.get("pdf_url"),
+            source,
+            kind="pdf",
+            license_value=location_license(location),
+            is_open_access=location.get("is_oa", is_oa),
+        )
+        append_full_text_location(
+            locations,
+            location.get("landing_page_url"),
+            source,
+            license_value=location_license(location),
+            is_open_access=location.get("is_oa", is_oa),
+        )
+
+    raw_locations = work.get("locations")
+    if isinstance(raw_locations, list):
+        for location in raw_locations:
+            if not isinstance(location, dict):
+                continue
+            append_full_text_location(
+                locations,
+                location.get("pdf_url"),
+                "openalex_location",
+                kind="pdf",
+                license_value=location_license(location),
+                is_open_access=location.get("is_oa", is_oa),
+            )
+            append_full_text_location(
+                locations,
+                location.get("landing_page_url"),
+                "openalex_location",
+                license_value=location_license(location),
+                is_open_access=location.get("is_oa", is_oa),
+            )
+
+    seen = set()
+    deduped = []
+    for location in locations:
+        url = str(location.get("url") or "")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        deduped.append(location)
+    return deduped
 
 
 def active_filter_list_from_plan(plan: dict[str, object]) -> list[str]:
@@ -243,19 +353,41 @@ def redact_openalex_url(url: str) -> str:
     )
 
 
-def fetch_json(url: str) -> dict[str, object]:
+def fetch_json(
+    url: str,
+    attempts: int = OPENALEX_FETCH_RETRIES,
+    retry_sleep_seconds: float = OPENALEX_RETRY_SLEEP_SECONDS,
+) -> dict[str, object]:
     request = Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urlopen(request, timeout=60) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except HTTPError as error:
-        if error.code == 429:
-            raise RuntimeError(
-                "OpenAlex returned HTTP 429 Too Many Requests. If you have an "
-                "OpenAlex API key, make sure OPENALEX_API_KEY is set in .env or "
-                "the shell; the request URL shown in logs redacts this value."
-            ) from error
-        raise
+    last_error: BaseException | None = None
+    max_attempts = max(1, attempts)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with urlopen(request, timeout=60) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as error:
+            if error.code == 429:
+                raise RuntimeError(
+                    "OpenAlex returned HTTP 429 Too Many Requests. If you have an "
+                    "OpenAlex API key, make sure OPENALEX_API_KEY is set in .env "
+                    "or the shell; the request URL shown in logs redacts this value."
+                ) from error
+            if error.code not in OPENALEX_TRANSIENT_HTTP_CODES:
+                raise
+            last_error = error
+        except (URLError, TimeoutError, OSError) as error:
+            last_error = error
+
+        if attempt < max_attempts:
+            time.sleep(retry_sleep_seconds * attempt)
+
+    else:
+        display_url = redact_openalex_url(url)
+        raise RuntimeError(
+            "OpenAlex request failed after "
+            f"{max_attempts} attempt(s): {display_url}"
+        ) from last_error
 
     if not isinstance(data, dict):
         raise ValueError("OpenAlex response was not a JSON object.")
@@ -289,6 +421,7 @@ def candidate_from_work(
         "authors": extract_authors(work),
         "venue": extract_venue(work),
         "url": extract_url(work),
+        "full_text_locations": full_text_locations_from_work(work),
         "query": str(
             query or provider_plan.get("query") or plan.get("main_search_string") or ""
         ),
@@ -310,23 +443,57 @@ def int_value(value: object, default: int = 0) -> int:
         return default
 
 
+def exhausted_query_diagnostic(
+    query_id: str,
+    logical_query_id: str,
+    tier: int,
+    iteration: int,
+    page: int,
+    per_page: int,
+    query_url: str,
+    reason: str,
+    backfill_round: int | None,
+) -> dict[str, Any]:
+    return {
+        "query_id": query_id,
+        "logical_query_id": logical_query_id,
+        "tier": tier,
+        "iteration": iteration,
+        "page": page,
+        "per_page": per_page,
+        "query_url": redact_openalex_url(query_url),
+        "reason": reason,
+        "pagination": "page",
+        "backfill_round": backfill_round or 0,
+    }
+
+
 def query_resume_state(
     existing_candidates: list[dict[str, Any]],
     per_page: int,
 ) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
     """Return page, rank, and page-offset state for already-consumed queries."""
     max_rank_by_query_id: dict[str, int] = {}
-    for candidate in existing_candidates:
-        query_id = str(candidate.get("retrieval_query_id") or "").strip()
+    def record_consumed_rank(item: dict[str, Any]) -> None:
+        query_id = str(item.get("retrieval_query_id") or "").strip()
         if not query_id:
-            continue
-        query_rank = int_value(candidate.get("query_rank"))
+            return
+        query_rank = int_value(item.get("query_rank"))
         if query_rank <= 0:
-            continue
+            return
         max_rank_by_query_id[query_id] = max(
             max_rank_by_query_id.get(query_id, 0),
             query_rank,
         )
+
+    for candidate in existing_candidates:
+        record_consumed_rank(candidate)
+        provenance = candidate.get("in_fetch_duplicate_provenance")
+        if not isinstance(provenance, list):
+            continue
+        for duplicate in provenance:
+            if isinstance(duplicate, dict):
+                record_consumed_rank(duplicate)
 
     page_by_query_id: dict[str, int] = {}
     rank_by_query_id: dict[str, int] = {}
@@ -346,6 +513,7 @@ class OpenAlexProvider:
     """Candidate provider for the OpenAlex Works API."""
 
     name = "openalex"
+    max_per_page = 100
     supports_fielded_text_search = True
     supports_boolean_query_blocks = True
 
@@ -603,6 +771,8 @@ class OpenAlexProvider:
             "tier_counts": {},
             "query_counts": {},
             "logical_query_counts": {},
+            "exhausted_queries": [],
+            "query_page_states": {},
         }
 
         query_index = 0
@@ -696,11 +866,41 @@ class OpenAlexProvider:
                             f"group tier {tier} iteration {iteration} "
                             f"query {query_id} page {page}: {display_url}"
                         )
+                        page_state = {
+                            "query_id": query_id,
+                            "logical_query_id": logical_query_id,
+                            "tier": tier,
+                            "iteration": iteration,
+                            "page": page,
+                            "per_page": per_page,
+                            "query_url": display_url,
+                            "pagination": "page",
+                            "backfill_round": backfill_round or 0,
+                        }
+                        diagnostics["query_page_states"][query_id] = page_state
 
                         response = fetch_json(query_url)
                         results = response.get("results")
                         if not isinstance(results, list) or not results:
                             exhausted_query_ids.add(query_id)
+                            diagnostics["exhausted_queries"].append(
+                                {
+                                    **exhausted_query_diagnostic(
+                                        query_id,
+                                        logical_query_id,
+                                        tier,
+                                        iteration,
+                                        page,
+                                        per_page,
+                                        query_url,
+                                        "empty_results",
+                                        backfill_round,
+                                    ),
+                                    "results_returned": 0
+                                    if isinstance(results, list)
+                                    else None,
+                                }
+                            )
                             break
 
                         for work in results:
@@ -782,6 +982,10 @@ class OpenAlexProvider:
                                             "year": candidate.get("year", ""),
                                             "rank": candidate.get("rank", ""),
                                             "query": candidate.get("query", ""),
+                                            "query_rank": candidate.get(
+                                                "query_rank",
+                                                "",
+                                            ),
                                             "retrieval_tier": tier,
                                             "retrieval_query_id": query_id,
                                         }

@@ -4,9 +4,12 @@ import csv
 import json
 import subprocess
 import sys
+from http.client import InvalidURL
 from pathlib import Path
 
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
+from ad_lit_pipeline.steps.collection import fetch_candidates as fetch_candidates_step
+from ad_lit_pipeline.steps.collection import verify_full_text_availability
 from ad_lit_pipeline.steps.collection.export_included import run as run_export_included
 from ad_lit_pipeline.steps.collection.fetch_review_overviews import (
     review_pool_size,
@@ -287,6 +290,15 @@ def test_screen_scope_preserves_metadata_and_appends_contract_fields(
             "url",
             "source",
             "full_text_path",
+            "full_text_availability_status",
+            "full_text_availability_source",
+            "full_text_url",
+            "full_text_url_kind",
+            "full_text_url_checked_at",
+            "full_text_url_content_type",
+            "full_text_license",
+            "full_text_is_open_access",
+            "full_text_availability_error",
             "notes",
             "abstract_available",
             "full_text_available",
@@ -701,6 +713,13 @@ def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None
             "year": 2024,
             "abstract": "",
             "rank": 1,
+            "full_text_locations": [
+                {
+                    "source": "provider_a",
+                    "url": "https://example.test/a.pdf",
+                    "kind": "pdf",
+                }
+            ],
             "topic_matches": {
                 "anchor_topic_id": "early_detection",
                 "main_topic_values": {
@@ -719,6 +738,18 @@ def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None
             "year": 2024,
             "abstract": "Useful abstract.",
             "rank": 2,
+            "full_text_locations": [
+                {
+                    "source": "provider_b",
+                    "url": "https://example.test/b.pdf",
+                    "kind": "pdf",
+                },
+                {
+                    "source": "provider_b_duplicate",
+                    "url": "https://example.test/a.pdf",
+                    "kind": "pdf",
+                },
+            ],
             "topic_matches": {
                 "anchor_topic_id": "early_detection",
                 "main_topic_values": {
@@ -756,6 +787,14 @@ def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None
     ] == [
         {"value": "screening", "field": "abstract"},
         {"value": "early detection", "field": "title"},
+    ]
+    assert output_rows[0]["full_text_locations"] == [
+        {"source": "provider_b", "url": "https://example.test/b.pdf", "kind": "pdf"},
+        {
+            "source": "provider_b_duplicate",
+            "url": "https://example.test/a.pdf",
+            "kind": "pdf",
+        },
     ]
 
 
@@ -1032,6 +1071,15 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
             "url": "https://example.test",
             "source": "collected:openalex",
             "full_text_path": "",
+            "full_text_availability_status": "",
+            "full_text_availability_source": "",
+            "full_text_url": "",
+            "full_text_url_kind": "",
+            "full_text_url_checked_at": "",
+            "full_text_url_content_type": "",
+            "full_text_license": "",
+            "full_text_is_open_access": "",
+            "full_text_availability_error": "",
             "notes": (
                 "provider=openalex; provider_id=W1; source_rank=1; "
                 "retrieval_date=2026-05-25; screening_confidence=high; "
@@ -1199,6 +1247,727 @@ def test_export_included_warns_when_below_requested_count(tmp_path: Path) -> Non
     assert result.metadata["target_export_rows"] == 2
     assert result.metadata["export_target_policy"] == "requested_max_results"
     assert "fewer included papers than requested" in result.warnings[0]
+
+
+def test_export_included_quality_gate_sets_error_below_threshold(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    output_path = tmp_path / "papers.csv"
+    write_jsonl(
+        candidates_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.123/one",
+                "title": "Only Included",
+                "year": 2024,
+                "rank": 1,
+            }
+        ],
+    )
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "one",
+                "title": "Only Included",
+                "year": "2024",
+                "doi": "10.123/one",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "source_rank": "1",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_relevance_tier": "0",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "provider",
+            "provider_id",
+            "source_rank",
+            "screening_decision",
+            "screening_confidence",
+            "screening_reason",
+            "title_relevance_tier",
+        ],
+    )
+
+    result = run_export_included(
+        candidates_path,
+        screening_path,
+        output_path,
+        max_results=2,
+        fail_below_export_ratio=0.75,
+    )
+
+    assert output_path.exists()
+    assert result.row_counts["included_rows_exported"] == 1
+    assert result.metadata["export_ratio"] == 0.5
+    assert result.metadata["fail_below_export_ratio"] == 0.75
+    assert result.error is not None
+    assert "Export quality gate failed" in result.error
+
+
+def test_verify_full_text_availability_checks_provider_neutral_locations(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    availability_path = tmp_path / "availability.csv"
+    contract_path = tmp_path / "contract.yaml"
+    contract_path.write_text(
+        "collection:\n  require_full_text_availability: true\n",
+        encoding="utf-8",
+    )
+    write_jsonl(
+        candidates_path,
+        [
+            {
+                "provider": "other_library",
+                "provider_id": "P1",
+                "doi": "10.123/full",
+                "title": "Full Text Paper",
+                "full_text_locations": [
+                    {
+                        "source": "other_library_record",
+                        "url": "https://example.test/full.pdf",
+                        "kind": "pdf",
+                        "license": "cc-by",
+                        "is_open_access": True,
+                    }
+                ],
+            }
+        ],
+    )
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "full_text_paper",
+                "title": "Full Text Paper",
+                "doi": "10.123/full",
+                "provider": "other_library",
+                "provider_id": "P1",
+                "screening_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "doi",
+            "provider",
+            "provider_id",
+            "screening_decision",
+        ],
+    )
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        assert location.source == "other_library_record"
+        assert location.kind == "pdf"
+        assert timeout_seconds == 1.5
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            kind=location.kind,
+            checked_at="2026-06-11T00:00:00+00:00",
+            content_type="application/pdf",
+            license=location.license,
+            is_open_access=location.is_open_access,
+        )
+
+    result = verify_full_text_availability.run(
+        candidates_path,
+        screening_path,
+        availability_path,
+        contract_path,
+        timeout_seconds=1.5,
+        checker=fake_checker,
+    )
+
+    rows = read_csv(availability_path)
+    assert result.row_counts["verified_full_text_rows"] == 1
+    assert rows[0]["full_text_availability_status"] == "verified"
+    assert rows[0]["full_text_url"] == "https://example.test/full.pdf"
+    assert rows[0]["full_text_license"] == "cc-by"
+    assert rows[0]["full_text_is_open_access"] == "yes"
+
+
+def test_fetch_candidates_defaults_to_provider_max_per_page(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    output_path = tmp_path / "candidates.jsonl"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "recommended_provider": "openalex",
+                "provider_specific_plan": {
+                    "provider": "openalex",
+                    "query": "AI school performance",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeProvider:
+        name = "openalex"
+        max_per_page = 100
+        last_fetch_diagnostics = {}
+
+        def __init__(self) -> None:
+            self.per_page: int | None = None
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            pass
+
+        def fetch_candidates(
+            self,
+            plan: dict[str, object],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+        ) -> list[dict[str, object]]:
+            self.per_page = per_page
+            return [
+                {
+                    "provider": "openalex",
+                    "provider_id": "W1",
+                    "doi": "10.1/example",
+                    "title": "Example",
+                }
+            ]
+
+    provider = FakeProvider()
+    monkeypatch.setitem(fetch_candidates_step.PROVIDERS, "openalex", provider)
+
+    result = fetch_candidates_step.run(plan_path, output_path, max_results=1)
+
+    assert provider.per_page == 100
+    assert result.metadata["per_page"] == 100
+    assert result.metadata["provider_max_per_page"] == 100
+
+
+def test_verify_full_text_availability_skips_excluded_candidates(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    availability_path = tmp_path / "availability.csv"
+    contract_path = tmp_path / "contract.yaml"
+    contract_path.write_text(
+        "collection:\n  require_full_text_availability: true\n",
+        encoding="utf-8",
+    )
+    write_jsonl(
+        candidates_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.123/include",
+                "title": "Included Candidate",
+                "full_text_locations": [
+                    {"source": "provider", "url": "https://example.test/one.pdf"}
+                ],
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W2",
+                "doi": "10.123/exclude",
+                "title": "Excluded Candidate",
+                "full_text_locations": [
+                    {"source": "provider", "url": "https://example.test/two.pdf"}
+                ],
+            },
+        ],
+    )
+    fieldnames = [
+        "paper_id",
+        "title",
+        "doi",
+        "provider",
+        "provider_id",
+        "screening_decision",
+    ]
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "included",
+                "title": "Included Candidate",
+                "doi": "10.123/include",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "screening_decision": "include",
+            },
+            {
+                "paper_id": "excluded",
+                "title": "Excluded Candidate",
+                "doi": "10.123/exclude",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "screening_decision": "exclude",
+            },
+        ],
+        fieldnames,
+    )
+    checked_urls: list[str] = []
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        checked_urls.append(location.url)
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            kind=location.kind,
+            checked_at="2026-06-11T00:00:00+00:00",
+        )
+
+    result = verify_full_text_availability.run(
+        candidates_path,
+        screening_path,
+        availability_path,
+        contract_path,
+        checker=fake_checker,
+    )
+
+    rows = read_csv(availability_path)
+    assert checked_urls == ["https://example.test/one.pdf"]
+    assert [row["full_text_availability_status"] for row in rows] == [
+        "verified",
+        "skipped_not_included",
+    ]
+    assert result.row_counts["availability_rows"] == 2
+    assert result.row_counts["verified_rows"] == 1
+    assert result.row_counts["skipped_not_included_rows"] == 1
+    assert result.row_counts["verified_full_text_rows"] == 1
+
+
+def test_verify_full_text_availability_reuses_url_cache(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    availability_path = tmp_path / "availability.csv"
+    contract_path = tmp_path / "contract.yaml"
+    contract_path.write_text(
+        "collection:\n  require_full_text_availability: true\n",
+        encoding="utf-8",
+    )
+    shared_url = "https://example.test/shared.pdf"
+    write_jsonl(
+        candidates_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.123/one",
+                "title": "One",
+                "full_text_locations": [{"source": "provider", "url": shared_url}],
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W2",
+                "doi": "10.123/two",
+                "title": "Two",
+                "full_text_locations": [{"source": "provider", "url": shared_url}],
+            },
+        ],
+    )
+    fieldnames = [
+        "paper_id",
+        "title",
+        "doi",
+        "provider",
+        "provider_id",
+        "screening_decision",
+    ]
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "one",
+                "title": "One",
+                "doi": "10.123/one",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "screening_decision": "include",
+            },
+            {
+                "paper_id": "two",
+                "title": "Two",
+                "doi": "10.123/two",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "screening_decision": "include",
+            },
+        ],
+        fieldnames,
+    )
+    checked_urls: list[str] = []
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        checked_urls.append(location.url)
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            kind=location.kind,
+            checked_at="2026-06-11T00:00:00+00:00",
+        )
+
+    result = verify_full_text_availability.run(
+        candidates_path,
+        screening_path,
+        availability_path,
+        contract_path,
+        checker=fake_checker,
+        workers=1,
+    )
+
+    rows = read_csv(availability_path)
+    assert checked_urls == [shared_url]
+    assert result.row_counts["url_cache_hits"] == 1
+    assert [row["full_text_availability_status"] for row in rows] == [
+        "verified",
+        "verified",
+    ]
+
+
+def test_full_text_availability_uses_unpaywall_fallback(
+    monkeypatch,
+) -> None:
+    requested_urls: list[str] = []
+
+    def fake_request_json(
+        url: str,
+        timeout_seconds: float,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        requested_urls.append(url)
+        return {
+            "best_oa_location": {
+                "url_for_pdf": "https://example.test/unpaywall.pdf",
+                "license": "cc-by",
+            }
+        }
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            kind=location.kind,
+            license=location.license,
+        )
+
+    monkeypatch.setattr(
+        verify_full_text_availability,
+        "request_json",
+        fake_request_json,
+    )
+
+    result = verify_full_text_availability.verify_candidate(
+        {"doi": "10.123/example", "title": "Example"},
+        checker=fake_checker,
+        unpaywall_email="test@example.com",
+    )
+
+    assert "api.unpaywall.org" in requested_urls[0]
+    assert result.status == "verified"
+    assert result.source == "unpaywall"
+    assert result.url == "https://example.test/unpaywall.pdf"
+    assert result.license == "cc-by"
+
+
+def test_full_text_availability_uses_provider_metadata_before_resolvers(
+    monkeypatch,
+) -> None:
+    def fail_request_json(
+        url: str,
+        timeout_seconds: float,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        raise AssertionError("External resolver should not be called.")
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            kind=location.kind,
+        )
+
+    monkeypatch.setattr(
+        verify_full_text_availability,
+        "request_json",
+        fail_request_json,
+    )
+
+    result = verify_full_text_availability.verify_candidate(
+        {
+            "doi": "10.123/example",
+            "title": "Example",
+            "full_text_locations": [
+                {
+                    "source": "provider_record",
+                    "url": "https://example.test/provider.pdf",
+                    "kind": "pdf",
+                }
+            ],
+        },
+        checker=fake_checker,
+        unpaywall_email="test@example.com",
+        core_api_key="core-key",
+    )
+
+    assert result.status == "verified"
+    assert result.source == "provider_record"
+    assert result.url == "https://example.test/provider.pdf"
+
+
+def test_full_text_availability_uses_core_fallback(
+    monkeypatch,
+) -> None:
+    requested: list[tuple[str, dict[str, str] | None]] = []
+
+    def fake_request_json(
+        url: str,
+        timeout_seconds: float,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        requested.append((url, headers))
+        return {
+            "results": [
+                {
+                    "downloadUrl": "https://example.test/core.pdf",
+                }
+            ]
+        }
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            kind=location.kind,
+        )
+
+    monkeypatch.setattr(
+        verify_full_text_availability,
+        "request_json",
+        fake_request_json,
+    )
+
+    result = verify_full_text_availability.verify_candidate(
+        {"doi": "10.123/example", "title": "Example"},
+        checker=fake_checker,
+        core_api_key="core-key",
+    )
+
+    assert "api.core.ac.uk" in requested[0][0]
+    assert requested[0][1] == {"Authorization": "Bearer core-key"}
+    assert result.status == "verified"
+    assert result.source == "core"
+    assert result.url == "https://example.test/core.pdf"
+
+
+def test_full_text_availability_marks_invalid_provider_urls_unverified(
+    monkeypatch,
+) -> None:
+    def invalid_request_url(
+        url: str,
+        method: str,
+        timeout_seconds: float,
+    ) -> tuple[int, str, str]:
+        raise InvalidURL("URL can't contain control characters")
+
+    monkeypatch.setattr(
+        verify_full_text_availability,
+        "request_url",
+        invalid_request_url,
+    )
+
+    result = verify_full_text_availability.check_location(
+        verify_full_text_availability.FullTextLocation(
+            source="provider_redirect",
+            url="https://example.test/download",
+            kind="pdf",
+        )
+    )
+
+    assert result.status == verify_full_text_availability.STATUS_UNVERIFIED
+    assert "InvalidURL" in result.error
+
+
+def test_full_text_availability_request_url_percent_encodes_spaces() -> None:
+    assert (
+        verify_full_text_availability.request_safe_url(
+            "https://example.test/Downloads/Paper Name.pdf?file=Paper Name.pdf"
+        )
+        == "https://example.test/Downloads/Paper%20Name.pdf?file=Paper%20Name.pdf"
+    )
+
+
+def test_export_included_requires_verified_full_text_when_enabled(
+    tmp_path: Path,
+) -> None:
+    candidates_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    availability_path = tmp_path / "availability.csv"
+    output_path = tmp_path / "papers.csv"
+    write_jsonl(
+        candidates_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.123/verified",
+                "title": "Verified Full Text",
+                "year": 2024,
+                "rank": 1,
+            },
+            {
+                "provider": "openalex",
+                "provider_id": "W2",
+                "doi": "10.123/unverified",
+                "title": "Unverified Full Text",
+                "year": 2024,
+                "rank": 2,
+            },
+        ],
+    )
+    screening_fieldnames = [
+        "paper_id",
+        "title",
+        "year",
+        "doi",
+        "provider",
+        "provider_id",
+        "source_rank",
+        "screening_decision",
+        "screening_confidence",
+        "screening_reason",
+        "title_relevance_tier",
+    ]
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "verified",
+                "title": "Verified Full Text",
+                "year": "2024",
+                "doi": "10.123/verified",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "source_rank": "1",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_relevance_tier": "0",
+            },
+            {
+                "paper_id": "unverified",
+                "title": "Unverified Full Text",
+                "year": "2024",
+                "doi": "10.123/unverified",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "source_rank": "2",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_relevance_tier": "0",
+            },
+        ],
+        screening_fieldnames,
+    )
+    write_csv(
+        availability_path,
+        [
+            {
+                "paper_id": "verified",
+                "title": "Verified Full Text",
+                "doi": "10.123/verified",
+                "provider": "openalex",
+                "provider_id": "W1",
+                "screening_decision": "include",
+                "full_text_availability_status": "verified",
+                "full_text_availability_source": "openalex_best_oa_location",
+                "full_text_url": "https://example.test/verified.pdf",
+                "full_text_url_kind": "pdf",
+                "full_text_url_checked_at": "2026-06-11T00:00:00+00:00",
+                "full_text_url_content_type": "application/pdf",
+                "full_text_license": "cc-by",
+                "full_text_is_open_access": "yes",
+                "full_text_availability_error": "",
+            },
+            {
+                "paper_id": "unverified",
+                "title": "Unverified Full Text",
+                "doi": "10.123/unverified",
+                "provider": "openalex",
+                "provider_id": "W2",
+                "screening_decision": "include",
+                "full_text_availability_status": "unverified",
+                "full_text_availability_source": "openalex_best_oa_location",
+                "full_text_url": "https://example.test/unverified.pdf",
+                "full_text_url_kind": "pdf",
+                "full_text_url_checked_at": "2026-06-11T00:00:00+00:00",
+                "full_text_url_content_type": "",
+                "full_text_license": "",
+                "full_text_is_open_access": "yes",
+                "full_text_availability_error": "HEAD: HTTP 403",
+            },
+        ],
+        verify_full_text_availability.AVAILABILITY_COLUMNS,
+    )
+
+    result = run_export_included(
+        candidates_path,
+        screening_path,
+        output_path,
+        max_results=2,
+        availability_path=availability_path,
+        require_full_text_availability=True,
+    )
+
+    rows = read_csv(output_path)
+    assert [row["paper_id"] for row in rows] == ["verified"]
+    assert rows[0]["full_text_url"] == "https://example.test/verified.pdf"
+    assert result.row_counts["verified_full_text_rows"] == 1
+    assert result.row_counts["skipped_full_text_unverified"] == 1
+    assert "verified-full-text papers" in result.warnings[0]
 
 
 def test_select_calibration_papers_skips_reviews_and_protocols(tmp_path: Path) -> None:

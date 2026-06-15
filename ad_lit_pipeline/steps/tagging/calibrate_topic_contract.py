@@ -315,6 +315,29 @@ def merge_calibrated_tagging(
     return merged
 
 
+def drop_invalid_applies_when_references(contract: dict[str, Any]) -> dict[str, Any]:
+    """Remove invalid conditional category references before validation retries."""
+    repaired = deepcopy(contract)
+    categories = repaired.get("tagging", {}).get("categories", {})
+    if not isinstance(categories, dict):
+        return repaired
+
+    valid_category_ids = set(categories)
+    for category in categories.values():
+        if not isinstance(category, dict):
+            continue
+        applies_when = category.get("applies_when")
+        if applies_when in (None, {}):
+            continue
+        if not isinstance(applies_when, dict):
+            category["applies_when"] = None
+            continue
+        referenced_id = str(applies_when.get("category_id") or "").strip()
+        if referenced_id not in valid_category_ids:
+            category["applies_when"] = None
+    return repaired
+
+
 def call_llm(
     topic_description: str,
     current_contract: dict[str, Any],
@@ -357,8 +380,12 @@ def call_llm(
 
         try:
             proposed_contract = contract_from_model_payload(result.parsed)
+            proposed_contract = drop_invalid_applies_when_references(
+                proposed_contract
+            )
             validate_topic_contract(proposed_contract)
             contract = merge_calibrated_tagging(current_contract, proposed_contract)
+            contract = drop_invalid_applies_when_references(contract)
             validate_topic_contract(contract)
             validate_generated_tagging_quality(
                 contract,

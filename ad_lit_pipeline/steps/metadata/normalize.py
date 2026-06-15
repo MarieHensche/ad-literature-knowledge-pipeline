@@ -24,6 +24,15 @@ OPTIONAL_COLUMNS = [
     "url",
     "source",
     "full_text_path",
+    "full_text_availability_status",
+    "full_text_availability_source",
+    "full_text_url",
+    "full_text_url_kind",
+    "full_text_url_checked_at",
+    "full_text_url_content_type",
+    "full_text_license",
+    "full_text_is_open_access",
+    "full_text_availability_error",
     "notes",
 ]
 
@@ -94,7 +103,10 @@ def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
         notes.append("missing_year")
     if not abstract:
         notes.append("missing_abstract")
-    if not optional_fields.get("full_text_path"):
+    full_text_locator = optional_fields.get("full_text_path") or optional_fields.get(
+        "full_text_url"
+    )
+    if not full_text_locator:
         notes.append("missing_full_text_path")
 
     return {
@@ -105,7 +117,7 @@ def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
         "abstract": abstract,
         **optional_fields,
         "abstract_available": "yes" if abstract else "no",
-        "full_text_available": "yes" if optional_fields.get("full_text_path") else "no",
+        "full_text_available": "yes" if full_text_locator else "no",
         "metadata_notes": "; ".join(notes),
     }
 

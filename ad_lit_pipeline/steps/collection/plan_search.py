@@ -29,6 +29,24 @@ STEP = StepSpec(
 
 SYSTEM_MESSAGE = "You create careful, inspectable digital-library search plans as strict JSON."
 
+FULL_TEXT_PREFILTER_KEYS = (
+    "open_access_only",
+    "has_full_text",
+    "has_pdf_url",
+    "has_content_pdf",
+)
+
+FULL_TEXT_PROVIDER_FILTER_NAMES = {
+    "open_access",
+    "open_access_only",
+    "open_access.is_oa",
+    "has_full_text",
+    "has_fulltext",
+    "has_pdf_url",
+    "has_content_pdf",
+    "has_content.pdf",
+}
+
 ALL_PROVIDERS = [
     {
         "provider": "openalex",
@@ -229,6 +247,7 @@ def ensure_search_queries(
 def enforce_topic_plan_constraints(
     plan: dict[str, object],
     topic_contract: dict[str, Any],
+    require_full_text_availability: bool = False,
 ) -> list[str]:
     """Apply deterministic collection constraints from the topic contract."""
     warnings = []
@@ -241,8 +260,11 @@ def enforce_topic_plan_constraints(
         )
 
     exclude_review_type = collection.get("exclude_openalex_review_type") is True
-
-    if missing_abstract_policy != "exclude" and not exclude_review_type:
+    if (
+        missing_abstract_policy != "exclude"
+        and not exclude_review_type
+        and not require_full_text_availability
+    ):
         return warnings
 
     filters = plan.setdefault("filters", {})
@@ -262,6 +284,34 @@ def enforce_topic_plan_constraints(
     provider_filters = provider_plan.setdefault("filters", [])
     if not isinstance(provider_filters, list):
         raise ValueError("provider_specific_plan.filters must be a list.")
+
+    if require_full_text_availability:
+        for key in FULL_TEXT_PREFILTER_KEYS:
+            if filters.get(key) is True:
+                filters[key] = None
+                warnings.append(
+                    f"Cleared filters.{key} because full-text availability is "
+                    "verified after relevance screening."
+                )
+
+        filtered_provider_filters = []
+        removed_provider_filter_names = []
+        for item in provider_filters:
+            if not isinstance(item, dict):
+                filtered_provider_filters.append(item)
+                continue
+            name = str(item.get("name") or "").strip()
+            if name in FULL_TEXT_PROVIDER_FILTER_NAMES:
+                removed_provider_filter_names.append(name)
+                continue
+            filtered_provider_filters.append(item)
+        if removed_provider_filter_names:
+            provider_filters[:] = filtered_provider_filters
+            removed = ", ".join(sorted(set(removed_provider_filter_names)))
+            warnings.append(
+                "Removed provider full-text availability prefilters "
+                f"({removed}) because URLs are verified after relevance screening."
+            )
 
     has_provider_filter = any(
         isinstance(item, dict) and item.get("name") == "has_abstract"
@@ -353,6 +403,7 @@ def run(
     topic_contract_path: Path,
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
+    require_full_text_availability: bool = False,
 ) -> StepResult:
     topic_contract = load_topic_contract(topic_contract_path)
     providers = providers_for_contract(topic_contract)
@@ -368,7 +419,13 @@ def run(
     )
     warnings = []
     warnings.extend(ensure_search_queries(plan, topic_contract))
-    warnings.extend(enforce_topic_plan_constraints(plan, topic_contract))
+    warnings.extend(
+        enforce_topic_plan_constraints(
+            plan,
+            topic_contract,
+            require_full_text_availability=require_full_text_availability,
+        )
+    )
     plan["topic_match_spec"] = topic_match_spec_from_contract(topic_contract)
     retrieval_strategy = build_query_groups_from_contract(topic_contract, max_results)
     if retrieval_strategy:
@@ -424,6 +481,14 @@ def main() -> None:
         default=None,
         help="Optional directory where prompt/response traces are written.",
     )
+    parser.add_argument(
+        "--require-full-text-availability",
+        action="store_true",
+        help=(
+            "Require verified full-text availability after screening without "
+            "prefiltering provider search results."
+        ),
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -438,6 +503,7 @@ def main() -> None:
         model,
         Path(args.topic_contract),
         trace_dir=trace_dir,
+        require_full_text_availability=args.require_full_text_availability,
     )
 
     print(f"Recommended provider: {result.metadata['recommended_provider']}")

@@ -17,6 +17,7 @@ from ad_lit_pipeline.steps.collection.plan_search import (
     run as run_plan_search,
 )
 from ad_lit_pipeline.steps.collection import fetch_candidates as fetch_candidates_step
+from ad_lit_pipeline.steps.collection import verify_full_text_availability
 from ad_lit_pipeline.steps.collection.generate_topic_contract import (
     contract_from_model_payload,
     run as run_generate_topic_contract,
@@ -1166,6 +1167,123 @@ def test_review_exclusion_does_not_force_abstracts_without_policy() -> None:
     ]
 
 
+def test_full_text_requirement_does_not_prefilter_provider_search() -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["collection"]["require_full_text_availability"] = True
+    contract["collection"]["full_text_availability_policy"] = "verified_url"
+    contract["collection"]["exclude_openalex_review_type"] = False
+    contract["candidate_screening"]["missing_abstract_policy"] = "exclude"
+    plan = {
+        "recommended_provider": "openalex",
+        "main_search_string": "early detection",
+        "filters": {
+            "year_from": None,
+            "year_to": None,
+            "publication_types": [],
+            "open_access_only": None,
+            "has_abstract": None,
+            "has_full_text": None,
+            "language": None,
+            "venue_or_source": [],
+            "field_or_domain": [],
+        },
+        "provider_specific_plan": {
+            "provider": "openalex",
+            "query": "early detection",
+            "filters": [],
+            "sort": None,
+            "max_results_recommendation": 5,
+        },
+    }
+
+    warnings = enforce_topic_plan_constraints(
+        plan,
+        contract,
+        require_full_text_availability=True,
+    )
+
+    assert plan["filters"]["has_abstract"] is True
+    assert plan["filters"]["open_access_only"] is None
+    assert plan["filters"]["has_full_text"] is None
+    assert plan["provider_specific_plan"]["filters"] == [
+        {
+            "name": "has_abstract",
+            "value": "true",
+            "reason": (
+                "The topic contract excludes candidates without abstracts, "
+                "so the provider query should retrieve works with abstracts."
+            ),
+        }
+    ]
+    assert warnings == [
+        "Set filters.has_abstract=true because topic contract excludes missing abstracts.",
+        "Added provider_specific_plan has_abstract filter for screening policy.",
+    ]
+
+
+def test_full_text_requirement_clears_llm_full_text_prefilters() -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["collection"]["require_full_text_availability"] = True
+    contract["collection"]["full_text_availability_policy"] = "verified_url"
+    contract["collection"]["exclude_openalex_review_type"] = False
+    contract["candidate_screening"]["missing_abstract_policy"] = "include"
+    plan = {
+        "recommended_provider": "openalex",
+        "main_search_string": "early detection",
+        "filters": {
+            "year_from": None,
+            "year_to": None,
+            "publication_types": [],
+            "open_access_only": True,
+            "has_abstract": None,
+            "has_full_text": True,
+            "has_pdf_url": True,
+            "has_content_pdf": True,
+            "language": None,
+            "venue_or_source": [],
+            "field_or_domain": [],
+        },
+        "provider_specific_plan": {
+            "provider": "openalex",
+            "query": "early detection",
+            "filters": [
+                {"name": "open_access", "value": "true", "reason": "LLM prefilter."},
+                {"name": "has_full_text", "value": "true", "reason": "LLM prefilter."},
+                {"name": "language", "value": "en", "reason": "Keep this."},
+            ],
+            "sort": None,
+            "max_results_recommendation": 5,
+        },
+    }
+
+    warnings = enforce_topic_plan_constraints(
+        plan,
+        contract,
+        require_full_text_availability=True,
+    )
+
+    assert plan["filters"]["open_access_only"] is None
+    assert plan["filters"]["has_full_text"] is None
+    assert plan["filters"]["has_pdf_url"] is None
+    assert plan["filters"]["has_content_pdf"] is None
+    assert plan["provider_specific_plan"]["filters"] == [
+        {"name": "language", "value": "en", "reason": "Keep this."},
+    ]
+    assert warnings == [
+        "Cleared filters.open_access_only because full-text availability is "
+        "verified after relevance screening.",
+        "Cleared filters.has_full_text because full-text availability is "
+        "verified after relevance screening.",
+        "Cleared filters.has_pdf_url because full-text availability is "
+        "verified after relevance screening.",
+        "Cleared filters.has_content_pdf because full-text availability is "
+        "verified after relevance screening.",
+        "Removed provider full-text availability prefilters "
+        "(has_full_text, open_access) because URLs are verified after relevance "
+        "screening.",
+    ]
+
+
 def test_candidate_screening_uses_fake_client(tmp_path: Path) -> None:
     input_path = tmp_path / "candidates.jsonl"
     output_path = tmp_path / "screening.csv"
@@ -1879,6 +1997,88 @@ def test_title_relevance_screens_tier_zero_when_main_topic_only_in_abstract(
     ]
 
 
+def test_title_relevance_can_defer_llm_until_full_text(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "candidates.jsonl"
+    output_path = tmp_path / "title_screening.csv"
+    write_jsonl(
+        input_path,
+        [
+            {
+                "provider": "openalex",
+                "provider_id": "W1",
+                "doi": "10.1/abstract-only",
+                "title": "Deep learning in K-12 classrooms",
+                "abstract": "The study reports improved grades.",
+                "year": 2024,
+                "rank": 1,
+                "query": "relaxed tier zero",
+                "retrieval_tier": 0,
+                "topic_matches": {
+                    "anchor_topic_id": "ai",
+                    "anchor_present": True,
+                    "matched_main_topics": [
+                        "ai",
+                        "formal_education",
+                        "learning_impact",
+                    ],
+                    "matched_secondary_topics": [],
+                    "missing_main_topics": [],
+                    "main_topic_values": {
+                        "ai": [{"value": "deep learning", "field": "title"}],
+                        "formal_education": [
+                            {"value": "K-12", "field": "title"}
+                        ],
+                        "learning_impact": [
+                            {"value": "grades", "field": "abstract"}
+                        ],
+                    },
+                    "secondary_topic_values": {
+                        "formal_education": [],
+                        "learning_impact": [],
+                    },
+                },
+            }
+        ],
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "Allowed fields contain all main topics.",
+            }
+        ]
+    )
+
+    result = run_title_relevance(
+        input_path,
+        output_path,
+        "test-model",
+        ROOT / "configs/topics/ai_in_education.yaml",
+        client=client,
+        trace_dir=tmp_path / "traces",
+        defer_llm_until_full_text=True,
+    )
+
+    rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert rows[0]["screening_decision"] == "review"
+    assert rows[0]["screening_status"] == "pending_llm_full_text"
+    assert result.row_counts["pending_llm_full_text_rows"] == 1
+    assert result.row_counts["llm_screened"] == 0
+    assert client.requests == []
+
+
 def test_backfill_fetches_and_screens_when_title_screening_drops_too_many(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1993,6 +2193,15 @@ def test_backfill_fetches_and_screens_when_title_screening_drops_too_many(
             return [
                 {
                     "provider": "openalex",
+                    "provider_id": "W1",
+                    "doi": "10.1/included",
+                    "title": "ChatGPT in school improves grades",
+                    "year": 2024,
+                    "rank": 1,
+                    "query": "AI school performance",
+                },
+                {
+                    "provider": "openalex",
                     "provider_id": "W3",
                     "doi": "10.1/backfill",
                     "title": "AI in classroom learning outcomes",
@@ -2037,6 +2246,7 @@ def test_backfill_fetches_and_screens_when_title_screening_drops_too_many(
     rows = list(csv.DictReader(screening_path.open(newline="", encoding="utf-8")))
     assert result.row_counts["backfill_triggered"] == 1
     assert result.row_counts["backfill_candidates_fetched"] == 1
+    assert result.metadata["fetch_diagnostics"]["new_candidates_after_seen_filter"] == 1
     assert result.row_counts["final_included_rows"] == 2
     assert len(rows) == 3
     assert rows[-1]["screening_decision"] == "include"
@@ -2380,6 +2590,228 @@ def test_backfill_runs_when_initial_includes_reach_old_threshold(
     assert len(read_jsonl_objects(deduped_path)) == 11
     assert len(client.requests) == 1
     assert not result.warnings
+
+
+def test_backfill_after_full_text_loss_uses_provider_continuation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    candidates_path = tmp_path / "candidates.jsonl"
+    deduped_path = tmp_path / "deduped.jsonl"
+    screening_path = tmp_path / "screening.csv"
+    availability_path = tmp_path / "availability.csv"
+    contract_path = tmp_path / "contract.yaml"
+    contract = load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml")
+    contract["collection"]["allowed_providers"] = ["digital_library"]
+    contract["collection"]["preferred_provider"] = "digital_library"
+    contract["collection"]["require_full_text_availability"] = True
+    write_yaml_object(contract_path, contract)
+    plan_path.write_text(
+        json.dumps(
+            {
+                "recommended_provider": "digital_library",
+                "provider_specific_plan": {
+                    "provider": "digital_library",
+                    "query": "AI school performance",
+                    "filters": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    existing_candidates = [
+        {
+            "provider": "digital_library",
+            "provider_id": "D1",
+            "doi": "10.1/verified",
+            "title": "AI classroom learning outcomes verified",
+            "year": 2024,
+            "rank": 1,
+            "query": "AI school performance",
+            "full_text_locations": [
+                {"source": "digital_library_record", "url": "https://example.test/1.pdf"}
+            ],
+        },
+        {
+            "provider": "digital_library",
+            "provider_id": "D2",
+            "doi": "10.1/missing-full-text",
+            "title": "ChatGPT school academic performance missing full text",
+            "year": 2024,
+            "rank": 2,
+            "query": "AI school performance",
+        },
+    ]
+    write_jsonl(candidates_path, existing_candidates)
+    write_jsonl(deduped_path, existing_candidates)
+    write_csv(
+        screening_path,
+        [
+            {
+                "paper_id": "verified",
+                "title": "AI classroom learning outcomes verified",
+                "year": "2024",
+                "doi": "10.1/verified",
+                "provider": "digital_library",
+                "provider_id": "D1",
+                "source_rank": "1",
+                "source_query": "AI school performance",
+                "source_query_reason": "",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "0",
+                "title_matched_main_topics": "ai; formal_education; learning_impact",
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "",
+            },
+            {
+                "paper_id": "missing_full_text",
+                "title": "ChatGPT school academic performance missing full text",
+                "year": "2024",
+                "doi": "10.1/missing-full-text",
+                "provider": "digital_library",
+                "provider_id": "D2",
+                "source_rank": "2",
+                "source_query": "AI school performance",
+                "source_query_reason": "",
+                "screening_decision": "include",
+                "screening_confidence": "high",
+                "screening_reason": "Relevant.",
+                "title_anchor_present": "yes",
+                "title_relevance_tier": "0",
+                "title_matched_main_topics": "ai; formal_education; learning_impact",
+                "title_matched_secondary_topics": "",
+                "title_missing_main_topics": "",
+            },
+        ],
+        TITLE_RELEVANCE_COLUMNS,
+    )
+
+    class FakeDigitalLibraryProvider:
+        name = "digital_library"
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int, int]] = []
+            self.last_fetch_diagnostics: dict[str, object] = {}
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            assert plan["recommended_provider"] == "digital_library"
+
+        def fetch_additional_candidates(
+            self,
+            plan: dict[str, object],
+            existing_candidates: list[dict[str, object]],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+            backfill_round: int = 1,
+        ) -> list[dict[str, object]]:
+            self.calls.append((backfill_round, len(existing_candidates), max_results))
+            self.last_fetch_diagnostics = {
+                "mode": "fake_provider_resume",
+                "backfill_round": backfill_round,
+                "target_candidates": max_results,
+            }
+            assert [candidate["provider_id"] for candidate in existing_candidates] == [
+                "D1",
+                "D2",
+            ]
+            return [
+                {
+                    "provider": "digital_library",
+                    "provider_id": "D3",
+                    "doi": "10.1/backfill-full-text",
+                    "title": "AI classroom learning outcomes backfill",
+                    "year": 2024,
+                    "rank": 3,
+                    "query": "AI school performance",
+                    "full_text_locations": [
+                        {
+                            "source": "digital_library_record",
+                            "url": "https://example.test/3.pdf",
+                        }
+                    ],
+                }
+            ]
+
+    checked_urls: list[str] = []
+
+    def fake_checker(
+        location: verify_full_text_availability.FullTextLocation,
+        timeout_seconds: float,
+    ) -> verify_full_text_availability.AvailabilityResult:
+        checked_urls.append(location.url)
+        return verify_full_text_availability.AvailabilityResult(
+            status=verify_full_text_availability.STATUS_VERIFIED,
+            source=location.source,
+            url=location.url,
+            checked_at="2026-06-11T00:00:00+00:00",
+        )
+
+    fake_provider = FakeDigitalLibraryProvider()
+    monkeypatch.setitem(
+        fetch_candidates_step.PROVIDERS,
+        "digital_library",
+        fake_provider,
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "anchor_present": True,
+                "matched_main_topics": [
+                    "ai",
+                    "formal_education",
+                    "learning_impact",
+                ],
+                "matched_secondary_topics": [],
+                "missing_main_topics": [],
+                "relevance_tier": 0,
+                "decision": "include",
+                "confidence": "high",
+                "reason": "The title contains all components.",
+            }
+        ]
+    )
+
+    result = run_backfill_candidates(
+        plan_path,
+        candidates_path,
+        deduped_path,
+        screening_path,
+        contract_path,
+        "test-model",
+        max_results=2,
+        client=client,
+        trace_dir=tmp_path / "traces",
+        availability_path=availability_path,
+        require_full_text_availability=True,
+        availability_checker=fake_checker,
+    )
+
+    availability_rows = list(
+        csv.DictReader(availability_path.open(newline="", encoding="utf-8"))
+    )
+    assert result.row_counts["backfill_triggered"] == 1
+    assert result.row_counts["initial_included_rows"] == 2
+    assert result.row_counts["initial_verified_full_text_rows"] == 1
+    assert result.row_counts["backfill_candidates_fetched"] == 1
+    assert result.row_counts["final_included_rows"] == 3
+    assert result.row_counts["final_verified_full_text_rows"] == 2
+    assert fake_provider.calls == [(1, 2, 1)]
+    assert checked_urls == [
+        "https://example.test/1.pdf",
+        "https://example.test/3.pdf",
+    ]
+    assert [row["full_text_availability_status"] for row in availability_rows] == [
+        "verified",
+        "not_available",
+        "verified",
+    ]
+    assert len(client.requests) == 1
 
 
 def test_generate_rules_uses_fake_client_and_validates(tmp_path: Path) -> None:
