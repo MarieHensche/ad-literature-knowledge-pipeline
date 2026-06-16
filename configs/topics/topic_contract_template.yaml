@@ -33,6 +33,19 @@ topic_structure:
         - replace with secondary focus
         - replace with close variant
   secondary_topics:
+    primary_topic:
+      - secondary_topic_id: adjacent_primary_topic
+        label: Adjacent primary topic
+        field: title_or_abstract
+        terms:
+          - replace with adjacent primary topic
+          - replace with neighboring focus
+        retrieval_terms:
+          - replace with adjacent primary topic
+          - replace with neighboring focus
+        matching_terms:
+          - replace with adjacent primary topic
+          - replace with neighboring focus
     secondary_focus:
       - secondary_topic_id: adjacent_secondary_focus
         label: Adjacent secondary focus

@@ -21,15 +21,21 @@ Rules:
   the anchor, set `anchor_topic_id` to that main topic. For questions like
   "Could X be used to..." or "Use of X in/for...", X is usually the
   non-replaceable anchor, not the application, outcome, or replacement goal.
-- Do not define secondary replacements for the anchor.
 - Add secondary-topic fallback groups only when they provide clean adjacent or
-  alternate wording for one non-anchor main topic.
-- Broad method, tool, model, analysis, evidence-signal, intervention, or
-  platform families may have multiple secondary-topic groups when there are
-  genuinely distinct adjacent expansions.
-- If a validation issue names a missing non-anchor secondary topic, create a
-  useful controlled fallback group for that exact main topic only when such
-  adjacent wording is available.
+  alternate sibling directions for one main topic, including the anchor.
+- Secondary topics should be adjacent sibling directions, not narrower internal
+  subtypes of broad method, tool, model, analysis, evidence-signal,
+  intervention, or platform families.
+- If a validation issue names a missing secondary topic, create a useful
+  controlled adjacent sibling group for that exact main topic. For disease
+  parents, adjacent disease/application directions such as Parkinson's disease,
+  cancer, or named non-parent diseases may be appropriate when relevant.
+- If a validation issue names a missing secondary topic for a computational
+  method parent, create an adjacent non-computational method group such as
+  `experimental_methods`, `laboratory_methods`, or `clinical_methods`. Do not
+  use AI, ML, deep learning, supervised learning, unsupervised learning,
+  statistical modeling, network analysis, or systems biology as secondary
+  topics for computational methods; those are parent terms.
 - If the missing secondary topic is an application/domain topic, add adjacent
   application/domain wording rather than criterion wording. For building
   materials, use groups such as `construction_products`, `building_products`,
@@ -47,7 +53,7 @@ Rules:
 - Keep each main topic to exactly one conceptual area.
 - If the validation issues say explicit paired concepts are buried under an
   umbrella topic, split those named concepts into separate main topics and give
-  each non-anchor topic its own secondary fallback group.
+  each resulting main topic its own secondary fallback group.
 - If the validation issues say a broad criterion or motivation topic is being
   used instead of a concrete comparator/application, replace that broad main
   topic with a concrete replacement, comparator, material, application, or use
@@ -90,8 +96,52 @@ Rules:
   synonyms, variants, abbreviations, named subtypes, or concrete indicators for
   that same component when the vocabulary supports it. Do not pad with broad
   background words.
+- Terms inside a main topic must include in-family surface forms for that main
+  topic: types, variants, subcategories, versions, stages, other names,
+  abbreviations, common synonyms, and narrower indicators that still belong to
+  the same family. Do not keep these in-family forms as secondary topics.
+- Main-topic terms should include common in-family categories, subtopics,
+  applications, methods, concepts, components, and properties when they remain
+  inside the same subject area. For a method topic such as
+  `computational_methods`, include terms such as machine learning, ML, deep
+  learning, supervised learning, unsupervised learning, statistical modeling,
+  network analysis, systems biology, and other common computational submethods
+  when relevant.
+- Do not put bare domain/object terms inside method topics. Prefer qualified
+  method phrases such as computational genomics, genomic analysis, or
+  bioinformatics analysis; avoid bare terms such as genomics, biomarkers,
+  amyloid plaques, tau tangles, or patient cohorts as method-topic terms.
+- For disease or condition main topics, include common in-family disease names,
+  abbreviations, variants, stages, subtypes, and related impairment states in
+  the parent terms when they are part of the same disease area. For
+  Alzheimer's disease, this can include MCI, prodromal disease, preclinical
+  disease, dementia, or dementia-related cognitive impairment when relevant.
+  Use secondary topics for neighboring disease/application directions, not for
+  variants that belong inside the parent disease family.
 - Keep `retrieval_terms` component-pure; do not mix vocabulary from different
   main topics into one retrieval term.
+- Secondary topics must be adjacent sibling directions that go in a different
+  direction from the parent, not versions, aliases, variants, types,
+  subcategories, synonyms, spelling variants, examples, or narrower subtypes.
+  For example, `parkinsons_disease` or `cancer` may be adjacent sibling disease
+  directions for an `alzheimers_disease` parent, while dementia, cognitive
+  decline, MCI, mild cognitive impairment, prodromal disease, and preclinical
+  disease belong in the Alzheimer's disease parent terms. Likewise,
+  `machine_learning` and `deep_learning` are internal parts of
+  `computational_methods` and belong in the parent terms.
+- Each secondary group must name exactly one adjacent concept, and its `terms`,
+  `retrieval_terms`, and `matching_terms` must be aliases, variants, types,
+  abbreviations, or surface forms of that one secondary concept. Do not keep
+  vague secondary buckets such as `related_diseases`, `other_diseases`, or
+  `dementia_types`. For example, use a `parkinsons_disease` group with terms
+  such as Parkinson's disease, Parkinson disease, and PD, and a separate
+  `cancer` group with terms such as cancer, neoplasm, and tumor. Do not put
+  generic descriptors such as `dementia types`, `neurodegenerative diseases`,
+  or `cognitive impairments` in a secondary group's term lists.
+- Parent and secondary term groups must be disjoint across `terms`,
+  `retrieval_terms`, and `matching_terms`. If a secondary term overlaps the
+  parent or is an in-family subtype, move it into the parent terms or remove the
+  secondary group.
 - Avoid broad standalone terms such as `education`, `learning environment`,
   `educational settings`, `performance metrics`, `technology`, `tools`,
   `educational technology`, `digital technology`, `outcomes`, or `students`.
@@ -108,6 +158,11 @@ Rules:
   are required for relevance.
 - Include domain-specific named variants, abbreviations, subtypes, tools, and
   concrete indicators for each component.
+- Include commonly used surface forms explicitly when they matter:
+  abbreviations and full forms such as `AI` and `artificial intelligence`,
+  spelling or punctuation variants such as `A.I.` when common in the
+  literature, and common synonyms. Do not add rare, invented, or merely
+  capitalization-only variants.
 - Use only `title`, `abstract`, or `title_or_abstract` for fields.
 - Use compact lowercase snake_case ids.
 - Return JSON matching the topic-structure schema.

@@ -113,6 +113,23 @@ topic_structure:
         - sensor
         - multimodal
   secondary_topics:
+    early_detection:
+      - secondary_topic_id: disease_monitoring
+        label: Disease monitoring
+        field: title_or_abstract
+        terms:
+          - disease monitoring
+          - cognitive monitoring
+          - clinical monitoring
+        retrieval_terms:
+          - disease monitoring
+          - cognitive monitoring
+          - clinical monitoring
+        matching_terms:
+          - disease monitoring
+          - cognitive monitoring
+          - clinical monitoring
+          - longitudinal monitoring
     disease_state:
       - secondary_topic_id: neurodegenerative_impairment
         label: Neurodegenerative or memory impairment

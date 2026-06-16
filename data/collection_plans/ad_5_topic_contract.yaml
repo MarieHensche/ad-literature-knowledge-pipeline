@@ -1,0 +1,143 @@
+topic_id: computational_biology_alzheimers
+research_topic:
+  title: Computational Biology Methods for Alzheimer's Disease Research
+  description: Exploring the application of computational biology techniques to advance
+    understanding and treatment of Alzheimer's Disease.
+topic_structure:
+  anchor_topic_id: alzheimers_disease
+  anchor_reason: Alzheimer's Disease is the fundamental focus of the research question.
+  main_topics:
+  - topic_id: computational_methods
+    label: Computational Methods
+    field: title
+    terms:
+    - computational biology
+    - machine learning
+    - bioinformatics
+    - genomic analysis
+    - network modeling
+    - ML
+    - artificial intelligence
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - AI
+    - AI applications
+    - AI algorithms
+    retrieval_terms:
+    - computational biology
+    - machine learning
+    - bioinformatics
+    - data science
+    - AI techniques
+    - ML
+    - artificial intelligence
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - AI
+    - AI applications
+    matching_terms:
+    - computational methods
+    - bioinformatics techniques
+    - statistical modeling
+    - AI applications
+    - genomic tools
+    - ML
+    - artificial intelligence
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - AI
+    - machine learning
+    - AI algorithms
+  - topic_id: alzheimers_disease
+    label: Alzheimer's Disease
+    field: title
+    terms:
+    - Alzheimer's disease
+    - AD
+    - neurodegeneration
+    - cognitive decline
+    - dementia
+    retrieval_terms:
+    - Alzheimer's disease
+    - AD
+    - dementia
+    - neurodegenerative disease
+    matching_terms:
+    - Alzheimer's
+    - AD
+    - cognitive impairment
+    - memory loss
+    - Alzheimer pathology
+  secondary_topics: {}
+scope:
+  include_criteria:
+  - Papers directly studying computational biology methods applied to Alzheimer's
+    Disease
+  - Papers examining related methods, applications, and outcomes in Alzheimer's research
+  - Reviews and meta-analyses that discuss computational approaches in the context
+    of Alzheimer's Disease
+  exclude_criteria:
+  - Papers that do not specifically address Alzheimer's Disease or related computational
+    methods
+  boundary_rules:
+  - Include borderline relevant papers that discuss computational methods in neurodegenerative
+    research.
+  - Exclude papers when the title and abstract clearly indicate irrelevance.
+rule_based_screening:
+  include_terms:
+  - computational biology
+  - machine learning
+  - Alzheimer's disease
+  - neurodegeneration
+  - data analysis
+  exclude_terms: []
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for
+    primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of
+    the topic
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ''
+  categories:
+    computational_methods_detail:
+      required: false
+      values:
+      - machine_learning
+      - bioinformatics
+      - data_analysis
+      description: Specific computational techniques and approaches used in Alzheimer's
+        Disease research.
+      selection: multi
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: computational biology Alzheimer
+    reason: Directly related to the primary research question.
+  - query: AI methods in Alzheimer's research
+    reason: Explores specific methods relevant to the research.
+  - query: bioinformatics Alzheimer's
+    reason: Covers data analysis techniques in Alzheimer's context.
+  - query: machine learning neurodegeneration
+    reason: Broader reach into neurodegenerative conditions.
+  - query: reviews on Alzheimer computational methods
+    reason: Targeting review papers for overview insights.
+  - query: statistical modeling Alzheimer
+    reason: Focus on statistical approaches applicable to Alzheimer's research.
+  - query: Alzheimer's disease data analysis methods
+    reason: Gathers various analysis frameworks used in Alzheimer's.
+  - query: neurodegenerative disease computational approaches
+    reason: Expands search to other relevant neurodegenerative diseases.

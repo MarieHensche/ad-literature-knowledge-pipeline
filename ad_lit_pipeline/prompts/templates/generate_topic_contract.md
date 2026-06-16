@@ -53,9 +53,13 @@ Rules:
     name the parent `main_topic_id` it can replace, plus its own
     `secondary_topic_id`, `label`, `field`, `terms`, `retrieval_terms`, and
     `matching_terms`.
-    Use non-anchor main topic ids only. Do not define secondary replacements for
-    the anchor. Add secondary groups when there is clean adjacent wording that
-    can substitute for one parent component during recall-oriented discovery.
+    Every main topic, including the anchor, must have at least one secondary
+    group when a clean adjacent sibling direction exists. Secondary groups
+    provide neighboring directions for broader discovery, not internal subtypes
+    or duplicates of the parent. Each secondary group must name exactly one
+    adjacent concept, and its `terms`, `retrieval_terms`, and `matching_terms`
+    must be aliases, variants, types, abbreviations, or surface forms of that
+    one secondary concept.
 - Choose the anchor topic as the mandatory core concept for title screening: a
   title must show this concept to enter the collection. Make it broad enough to
   catch synonyms and abbreviations, but not so broad that unrelated papers enter.
@@ -76,6 +80,10 @@ Rules:
 - Terms inside a main topic must name only that one component. If `school` is a
   separate main topic, do not put `AI in schools` in the `ai` terms. Put `AI`
   terms under `ai` and school-setting terms under `school`.
+- Terms inside a main topic must include the in-family surface forms for that
+  main topic: types, variants, subcategories, versions, stages, other names,
+  abbreviations, common synonyms, and narrower indicators that still belong to
+  the same family. Do not move these in-family forms into secondary topics.
 - Do not use broad background words as topic terms when specific vocabulary is
   available. Avoid standalone terms like `education`, `learning environment`,
   `educational settings`, `performance metrics`, `technology`, `tools`,
@@ -145,17 +153,33 @@ Rules:
   categories may use those ids directly.
 - Later tagging categories may use those ids directly, so avoid changing them
   casually once a good decomposition exists.
-- Use secondary topics only as replacement wording for non-anchor main topics
-  when titles use adjacent language. Secondary topics should improve recall
+- Use secondary topics as adjacent sibling directions for each main topic when
+  titles use neighboring concepts. Secondary topics should improve recall
   without weakening topical fit.
-- For non-anchor main topics, add useful secondary-topic groups when the topic
-  has common adjacent wording. If the best fallback broadens the concept
-  slightly, make that broadening explicit in the group label and terms.
-- Broad method, tool, model, analysis, evidence-signal, intervention, or
-  platform families may need multiple secondary-topic groups. Split distinct
-  adjacent expansions into separate groups, such as one group for genomic
-  analysis and another for network/pathway modeling when both are plausible for
-  a computational-methods component.
+- For every main topic, including the anchor, add useful secondary-topic groups
+  when the topic has genuinely adjacent sibling directions. Secondary topics
+  must be adjacent concepts in the same broad kind of thing as the parent, but
+  not related as versions, aliases, variants, types, subcategories, examples,
+  or narrower subtypes of the parent. For example, `parkinsons_disease` or
+  `cancer` may be adjacent sibling disease directions for an
+  `alzheimers_disease` parent, while dementia, cognitive decline, MCI, mild
+  cognitive impairment, prodromal disease, and preclinical disease belong in
+  the Alzheimer's disease parent terms. Likewise, `machine_learning` and
+  `deep_learning` are internal parts of `computational_methods` and belong in
+  the parent terms.
+- Do not create vague secondary buckets such as `related_diseases`,
+  `other_diseases`, or `dementia_types`. Use one secondary group per adjacent
+  concept. For example, use a `parkinsons_disease` group with terms such as
+  Parkinson's disease, Parkinson disease, and PD, and a separate `cancer`
+  group with terms such as cancer, neoplasm, and tumor. Do not put generic
+  descriptors such as `dementia types`, `neurodegenerative diseases`, or
+  `cognitive impairments` in a secondary group's term lists.
+- For computational-method parents, use adjacent non-computational method
+  families such as `experimental_methods`, `laboratory_methods`, or
+  `clinical_methods` as secondary topics when a secondary is needed. Do not use
+  AI, ML, deep learning, supervised learning, unsupervised learning,
+  statistical modeling, network analysis, or systems biology as secondary
+  topics for computational methods; those belong in the parent terms.
 - Keep secondary replacements as separate semantic groups. Do not mix different
   fallback concepts into one group. For example, for a `school_setting` main
   topic, use one secondary group for higher education terms and another
@@ -171,6 +195,26 @@ Rules:
   component. Each main topic should usually have at least 6 matching terms when
   the domain vocabulary supports that many. Include singular/plural variants
   only when they help retrieval.
+- Main-topic terms should include common in-family categories, subtopics,
+  applications, methods, concepts, components, and properties when they remain
+  inside the same subject area. For a method topic such as
+  `computational_methods`, include terms such as machine learning, ML, deep
+  learning, supervised learning, unsupervised learning, statistical modeling,
+  network analysis, systems biology, and other common computational submethods
+  when relevant.
+- Do not put bare domain/object terms inside method topics. Prefer qualified
+  method phrases such as computational genomics, genomic analysis, or
+  bioinformatics analysis; avoid bare terms such as genomics, biomarkers,
+  amyloid plaques, tau tangles, or patient cohorts as method-topic terms.
+- For disease or condition main topics, include common in-family disease names,
+  abbreviations, variants, stages, subtypes, and related impairment states in
+  the parent terms when they are part of the same disease area. Use secondary
+  topics for neighboring disease/application directions, not for variants that
+  belong inside the parent disease family.
+- Include commonly used surface forms explicitly when they matter: abbreviations
+  and full forms such as `AI` and `artificial intelligence`, spelling or
+  punctuation variants such as `A.I.` when common in the literature, and common
+  synonyms. Do not add rare, invented, or merely capitalization-only variants.
 - For broad components such as AI, fungi/mycelium, Alzheimer disease,
   computational methods, school settings, or building materials, provide at
   least 4 focused `terms` and usually 6 or more `matching_terms` when the
@@ -199,10 +243,14 @@ Rules:
 - Avoid making abstract outcome words mandatory title components when papers
   are likely to express that component through concrete outcome names. Put the
   concrete names in the component's terms or in secondary-topic replacements.
-- Put related-but-not-same concepts in `secondary_topics`, not in the anchor.
-- Secondary topics are controlled replacement groups for one non-anchor main
-  topic. They should not combine several fallback concepts or redefine the
-  research question.
+- Put related-but-not-same concepts in `secondary_topics`, including for the anchor.
+- Secondary topics are controlled adjacent sibling groups for one main
+  topic. They should be adjacent sibling directions that go in a different
+  direction from the parent, not internal subtypes or examples. If a secondary
+  term is an in-family subtype of the parent, move it into the parent terms.
+- Parent and secondary term groups must be disjoint across `terms`,
+  `retrieval_terms`, and `matching_terms`. Do not repeat parent terms,
+  synonyms, or internal subtypes in secondary groups.
 - Do not create a secondary topic that simply repeats a parent main-topic term.
   For example, if `academic achievement` is already in
   `student_performance.terms`, do not add an `academic_achievement` secondary

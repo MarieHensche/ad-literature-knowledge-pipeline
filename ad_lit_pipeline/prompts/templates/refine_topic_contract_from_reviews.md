@@ -34,8 +34,8 @@ Rules:
 - Keep `collection.allowed_providers` to the providers already in the contract.
 - In the JSON response, return `topic_structure.secondary_topics` as an array of
   grouped secondary objects. Each object must include the parent `main_topic_id`
-  it can replace, plus `secondary_topic_id`, `label`, `field`, `terms`,
-  `retrieval_terms`, and `matching_terms`.
+  it expands with an adjacent sibling direction, plus `secondary_topic_id`,
+  `label`, `field`, `terms`, `retrieval_terms`, and `matching_terms`.
 - Rebuild or keep `topic_structure` based on the review full-text evidence:
   - `anchor_topic_id` is the mandatory core concept for title screening. A
     paper title must show this topic to enter the collection.
@@ -133,6 +133,34 @@ Rules:
     are required for relevance.
   - Include domain-specific named variants, abbreviations, subtypes, tools, and
     concrete indicators for each component.
+  - Terms inside a main topic must include in-family surface forms for that
+    main topic: types, variants, subcategories, versions, stages, other names,
+    abbreviations, common synonyms, and narrower indicators that still belong
+    to the same family. Do not move these in-family forms into secondary
+    topics.
+  - Main-topic terms should include common in-family categories, subtopics,
+    applications, methods, concepts, components, and properties when they remain
+    inside the same subject area. For a method topic such as
+    `computational_methods`, include terms such as machine learning, ML, deep
+    learning, supervised learning, unsupervised learning, statistical modeling,
+    network analysis, systems biology, and other common computational
+    submethods when relevant.
+  - Do not put bare domain/object terms inside method topics. Prefer qualified
+    method phrases such as computational genomics, genomic analysis, or
+    bioinformatics analysis; avoid bare terms such as genomics, biomarkers,
+    amyloid plaques, tau tangles, or patient cohorts as method-topic terms.
+  - For disease or condition main topics, include common in-family disease
+    names, abbreviations, variants, stages, subtypes, and related impairment
+    states in the parent terms when they are part of the same disease area.
+    For Alzheimer's disease, this can include MCI, prodromal disease,
+    preclinical disease, dementia, or dementia-related cognitive impairment
+    when relevant. Use secondary topics for neighboring disease/application
+    directions, not for variants that belong inside the parent disease family.
+  - Include commonly used surface forms explicitly when they matter:
+    abbreviations and full forms such as `AI` and `artificial intelligence`,
+    spelling or punctuation variants such as `A.I.` when common in the
+    literature, and common synonyms. Do not add rare, invented, or merely
+    capitalization-only variants.
   - Set `retrieval_terms` to the strongest provider-search terms for that
     topic, with at most 12 terms. Keep these compact and high-signal.
   - Keep `retrieval_terms` component-pure. Do not include phrases that mix this
@@ -144,16 +172,40 @@ Rules:
   - Do not use generic main topics such as `method`, `outcome`, `population`,
     `technology`, `setting`, or `target` unless the id is made
     topic-specific.
-  - `secondary_topics` are replacement terms for non-anchor main topics when
-    paper titles use adjacent wording. They should improve recall without weakening topical fit,
-    and must not be defined for the anchor.
-  - Add useful secondary-topic groups for non-anchor main topics when the
-    review evidence shows common adjacent wording. If the best fallback
-    broadens the concept slightly, make that broadening explicit in the group
-    label and terms.
-  - Broad method, tool, model, analysis, evidence-signal, intervention, or
-    platform families may need multiple secondary-topic groups. Split distinct
-    adjacent expansions into separate groups when they are genuinely useful.
+  - `secondary_topics` are adjacent sibling directions for main topics when
+    paper titles use neighboring concepts. They should improve recall without
+    weakening topical fit and should also be defined for the anchor when there
+    are clean adjacent directions.
+  - Add useful secondary-topic groups for every main topic, including the
+    anchor, when the review evidence shows genuinely adjacent sibling
+    directions. Secondary topics must be adjacent concepts in the same broad
+    kind of thing as the parent, but not related as versions, aliases,
+    variants, types, subcategories, examples, or narrower subtypes of the
+    parent. For example, `parkinsons_disease` or `cancer` may be adjacent
+    sibling disease directions for an `alzheimers_disease` parent, while
+    dementia, cognitive decline, MCI, mild cognitive impairment, prodromal
+    disease, and preclinical disease belong in the Alzheimer's disease parent
+    terms. Likewise, `machine_learning` and `deep_learning` are internal parts
+    of `computational_methods` and belong in the parent terms.
+  - Each secondary group must name exactly one adjacent concept, and its
+    `terms`, `retrieval_terms`, and `matching_terms` must be aliases,
+    variants, types, abbreviations, or surface forms of that one secondary
+    concept. Do not create vague secondary buckets such as `related_diseases`,
+    `other_diseases`, or `dementia_types`. For example, use a
+    `parkinsons_disease` group with terms such as Parkinson's disease,
+    Parkinson disease, and PD, and a separate `cancer` group with terms such
+    as cancer, neoplasm, and tumor. Do not put generic descriptors such as
+    `dementia types`, `neurodegenerative diseases`, or `cognitive impairments`
+    in a secondary group's term lists.
+  - For computational-method parents, use adjacent non-computational method
+    families such as `experimental_methods`, `laboratory_methods`, or
+    `clinical_methods` as secondary topics when a secondary is needed. Do not
+    use AI, ML, deep learning, supervised learning, unsupervised learning,
+    statistical modeling, network analysis, or systems biology as secondary
+    topics for computational methods; those belong in the parent terms.
+  - Parent and secondary term groups must be disjoint across `terms`,
+    `retrieval_terms`, and `matching_terms`. Do not repeat parent terms,
+    synonyms, or internal subtypes in secondary groups.
   - Do not create a secondary topic that simply repeats a parent main-topic
     term. For example, if `academic achievement` is already in
     `student_performance.terms`, do not add an `academic_achievement` secondary

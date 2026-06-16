@@ -84,8 +84,8 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "Set the anchor main topic's `field` to `title`" in prompt
     assert "Keep `retrieval_terms` component-pure" in prompt
     assert "Do not create a secondary topic that simply repeats" in prompt
-    assert "Every non-anchor main topic must have at least one" in prompt
-    assert "Broad method, tool, model, analysis" in prompt
+    assert "genuinely adjacent sibling directions" in prompt
+    assert "machine_learning` and `deep_learning`" in prompt
     assert "Do not use `abstract` for generated main topics" in prompt
     assert "Setting, context, or population components should use `title`" in prompt
     assert "domain-specific named variants" in prompt
@@ -150,8 +150,8 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "Set the anchor main topic's `field` to `title`" in prompt
     assert "Keep `retrieval_terms` component-pure" in prompt
     assert "Do not create a secondary topic that simply repeats" in prompt
-    assert "Every non-anchor main topic must have at least one" in prompt
-    assert "Broad method, tool, model, analysis" in prompt
+    assert "genuinely adjacent sibling directions" in prompt
+    assert "machine_learning` and `deep_learning`" in prompt
     assert "Do not use `abstract` for generated main topics" in prompt
     assert "Setting, context, or population components should use `title`" in prompt
     assert "multiple outcomes, targets, signals" in prompt
@@ -273,8 +273,8 @@ def test_repair_topic_structure_prompt_is_structure_only() -> None:
     assert "Do not return a full topic contract" in prompt
     assert "source/tool/intervention/material should be\n  the anchor" in prompt
     assert "not the application, outcome, or replacement goal" in prompt
-    assert "Every non-anchor main topic must have at least one" in prompt
-    assert "Broad method, tool, model, analysis" in prompt
+    assert "adjacent sibling directions" in prompt
+    assert "not narrower internal\n  subtypes" in prompt
     assert "Do not use `abstract` for generated main topics" in prompt
     assert "Setting, context, or population components should use `title`" in prompt
     assert "explicit paired concepts are buried" in prompt

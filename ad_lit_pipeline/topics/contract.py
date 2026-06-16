@@ -262,32 +262,194 @@ BROAD_UMBRELLA_TOPIC_WORDS = {
     "outcomes",
     "performance",
 }
-BROAD_SECONDARY_FAMILY_WORDS = {
+METHOD_TOPIC_WORDS = {
     "analysis",
-    "analyses",
     "approach",
     "approaches",
-    "assay",
-    "assays",
-    "data",
-    "evidence",
-    "intervention",
-    "interventions",
+    "computational",
     "method",
     "methods",
     "model",
     "modeling",
-    "models",
     "modelling",
-    "platform",
-    "platforms",
-    "signal",
-    "signals",
+    "models",
     "technique",
     "techniques",
-    "tool",
-    "tools",
 }
+METHOD_INTERNAL_SUBTYPE_TERMS = {
+    "a.i.",
+    "ai",
+    "algorithm",
+    "algorithm development",
+    "algorithms",
+    "artificial intelligence",
+    "bioinformatics",
+    "classification",
+    "computational biology",
+    "computational genomics",
+    "computational modeling",
+    "deep learning",
+    "ensemble learning",
+    "machine learning",
+    "mathematical modeling",
+    "ml",
+    "modeling",
+    "network analysis",
+    "predictive modeling",
+    "statistical modeling",
+    "supervised learning",
+    "systems biology",
+    "unsupervised learning",
+}
+METHOD_TOPIC_BARE_DOMAIN_TERMS = {
+    "amyloid plaques",
+    "biomarker",
+    "biomarkers",
+    "cancer",
+    "cognitive decline",
+    "dementia",
+    "gene expression",
+    "genomics",
+    "parkinson",
+    "parkinson's disease",
+    "parkinsons disease",
+    "patient cohort",
+    "patient cohorts",
+    "tau tangles",
+}
+ALZHEIMER_DISEASE_SIGNAL_TERMS = {
+    "ad",
+    "alzheimer disease",
+    "alzheimer's disease",
+    "alzheimers disease",
+}
+ALZHEIMER_DISEASE_FAMILY_TERMS = {
+    "ad",
+    "alzheimer disease",
+    "alzheimer's disease",
+    "alzheimers disease",
+    "cognitive decline",
+    "dementia",
+    "dementia-related cognitive impairment",
+    "dementia related cognitive impairment",
+    "mci",
+    "mild cognitive impairment",
+    "preclinical ad",
+    "preclinical alzheimer disease",
+    "preclinical alzheimer's disease",
+    "preclinical alzheimers disease",
+    "preclinical disease",
+    "prodromal ad",
+    "prodromal alzheimer disease",
+    "prodromal alzheimer's disease",
+    "prodromal alzheimers disease",
+    "prodromal disease",
+}
+ALZHEIMER_DISEASE_NON_FAMILY_TERMS = {
+    "amyloid plaque",
+    "amyloid plaques",
+    "amyloid pathology",
+    "memory loss",
+    "neurodegeneration",
+    "tau pathology",
+    "tau tangles",
+}
+PARKINSONS_DISEASE_SIGNAL_TERMS = {
+    "parkinson disease",
+    "parkinson's disease",
+    "parkinsons disease",
+    "pd",
+}
+PARKINSONS_DISEASE_NON_FAMILY_TERMS = {
+    "movement disorder",
+    "movement disorders",
+}
+EXPERIMENTAL_METHODS_SIGNAL_TERMS = {
+    "clinical method",
+    "clinical methods",
+    "experimental method",
+    "experimental methods",
+    "laboratory method",
+    "laboratory methods",
+    "wet lab method",
+    "wet lab methods",
+}
+EXPERIMENTAL_METHODS_NON_FAMILY_TERMS = {
+    "clinical trial",
+    "clinical trials",
+    "data collection",
+    "experimental design",
+    "experimental designs",
+}
+GENERIC_SECONDARY_TOPIC_BUCKET_IDS = {
+    "adjacent diseases",
+    "dementia types",
+    "disease types",
+    "neurodegenerative diseases",
+    "neurodegenerative disorders",
+    "other diseases",
+    "related diseases",
+}
+GENERIC_SECONDARY_TOPIC_TERMS = {
+    "cognitive impairments",
+    "dementia types",
+    "disease types",
+    "diseases",
+    "neurodegenerative diseases",
+    "neurodegenerative disorders",
+    "other diseases",
+    "related diseases",
+}
+COMMON_SURFACE_FORM_GROUPS = (
+    {
+        "label": "artificial intelligence",
+        "abbreviations": {"ai", "a.i."},
+        "full_forms": {"artificial intelligence"},
+    },
+    {
+        "label": "machine learning",
+        "abbreviations": {"ml"},
+        "full_forms": {"machine learning"},
+    },
+    {
+        "label": "large language models",
+        "abbreviations": {"llm", "llms"},
+        "full_forms": {"large language model", "large language models"},
+    },
+    {
+        "label": "Alzheimer's disease",
+        "abbreviations": {"ad"},
+        "full_forms": {"alzheimer's disease", "alzheimer disease"},
+    },
+    {
+        "label": "mild cognitive impairment",
+        "abbreviations": {"mci"},
+        "full_forms": {"mild cognitive impairment"},
+    },
+    {
+        "label": "electroencephalography",
+        "abbreviations": {"eeg"},
+        "full_forms": {"electroencephalography"},
+    },
+    {
+        "label": "magnetic resonance imaging",
+        "abbreviations": {"mri"},
+        "full_forms": {"magnetic resonance imaging"},
+    },
+    {
+        "label": "positron emission tomography",
+        "abbreviations": {"pet"},
+        "full_forms": {"positron emission tomography"},
+    },
+    {
+        "label": "electronic health records",
+        "abbreviations": {"ehr", "ehrs"},
+        "full_forms": {
+            "electronic health record",
+            "electronic health records",
+        },
+    },
+)
 BROAD_CRITERION_TOPIC_WORDS = {
     "ecological",
     "eco",
@@ -465,11 +627,14 @@ CRUCIAL_TOPIC_STRUCTURE_ISSUE_CODES = {
     "cross_topic_retrieval_term",
     "cross_topic_term",
     "criterion_topic_instead_of_comparator",
-    "duplicate_secondary_topic",
     "explicit_pair_buried_in_umbrella_topic",
+    "generic_secondary_topic_bucket",
+    "generic_secondary_topic_term",
     "merged_topic_id",
     "merged_topic_label",
+    "missing_secondary_topic",
     "non_exception_topic_field_not_title",
+    "parent_secondary_term_overlap",
     "replacement_application_not_main_topic",
     "replacement_secondary_application_term",
     "replacement_secondary_criterion_term",
@@ -481,6 +646,7 @@ CRUCIAL_TOPIC_STRUCTURE_ISSUE_CODES = {
     "replacement_topic_foreign_component_term",
     "replacement_topic_material_family_term",
     "source_anchor_expected",
+    "disease_research_anchor_expected",
 }
 
 
@@ -730,17 +896,13 @@ def validate_secondary_topics(
     main_topic_ids: set[str],
     anchor_topic_id: str,
 ) -> None:
+    _ = anchor_topic_id
     if isinstance(secondary_topics, dict):
         for topic_id, groups_value in secondary_topics.items():
             if topic_id not in main_topic_ids:
                 raise ValueError(
                     "topic_structure.secondary_topics contains unknown main topic id: "
                     f"{topic_id}"
-                )
-            if topic_id == anchor_topic_id and groups_value:
-                raise ValueError(
-                    "topic_structure.secondary_topics must not define replacements "
-                    "for the anchor topic."
                 )
             groups = require_list(
                 groups_value,
@@ -778,11 +940,6 @@ def validate_secondary_topics(
                 raise ValueError(
                     "topic_structure.secondary_topics contains unknown main topic id: "
                     f"{topic_id}"
-                )
-            if topic_id == anchor_topic_id:
-                raise ValueError(
-                    "topic_structure.secondary_topics must not define replacements "
-                    "for the anchor topic."
                 )
             validate_secondary_group(
                 group_map,
@@ -1277,6 +1434,11 @@ def is_application_topic(topic_id: str, topic: dict[str, Any]) -> bool:
     )
 
 
+def is_method_topic(topic_id: str, topic: dict[str, Any]) -> bool:
+    words = normalized_topic_words(f"{topic_id} {topic.get('label') or ''}")
+    return bool(words.intersection(METHOD_TOPIC_WORDS))
+
+
 def is_title_or_abstract_exception_topic(
     topic_id: str,
     topic: dict[str, Any],
@@ -1320,6 +1482,78 @@ def unique_string_count(values: object) -> int:
             if str(value or "").strip()
         }
     )
+
+
+def topic_surface_form_terms(topic: dict[str, Any]) -> set[str]:
+    """Return normalized terms across all topic term lists."""
+    terms = set()
+    for key in ("terms", "retrieval_terms", "matching_terms"):
+        values = topic.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            term = normalized_topic_term(value)
+            if term:
+                terms.add(term)
+    return terms
+
+
+def method_internal_subtype_matches(value: object) -> list[str]:
+    """Return known method-subtype phrases contained in a term."""
+    normalized = normalized_topic_term(value)
+    padded = f" {normalized} "
+    return sorted(
+        subtype
+        for subtype in METHOD_INTERNAL_SUBTYPE_TERMS
+        if normalized == subtype or f" {subtype} " in padded
+    )
+
+
+def is_alzheimer_disease_topic(topic_id: str, topic: dict[str, Any]) -> bool:
+    """Return whether a topic represents the Alzheimer disease family."""
+    surface_terms = topic_surface_form_terms(topic)
+    surface_terms.add(normalized_topic_term(topic_id))
+    surface_terms.add(normalized_topic_term(topic.get("label")))
+    return bool(surface_terms.intersection(ALZHEIMER_DISEASE_SIGNAL_TERMS))
+
+
+def disease_family_variant_matches(
+    parent_topic_id: str,
+    parent_topic: dict[str, Any],
+    value: object,
+) -> list[str]:
+    """Return known in-family disease variants contained in a term."""
+    if not is_alzheimer_disease_topic(parent_topic_id, parent_topic):
+        return []
+    normalized = normalized_topic_term(value)
+    if normalized in ALZHEIMER_DISEASE_FAMILY_TERMS:
+        return [normalized]
+    return []
+
+
+def alzheimer_disease_non_family_term_matches(value: object) -> bool:
+    """Return whether a term names pathology/process, not the disease family."""
+    return normalized_topic_term(value) in ALZHEIMER_DISEASE_NON_FAMILY_TERMS
+
+
+def parkinsons_disease_non_family_term_matches(value: object) -> bool:
+    """Return whether a Parkinson secondary term is an umbrella descriptor."""
+    return normalized_topic_term(value) in PARKINSONS_DISEASE_NON_FAMILY_TERMS
+
+
+def experimental_methods_non_family_term_matches(value: object) -> bool:
+    """Return whether an experimental-method secondary term is not a method family."""
+    return normalized_topic_term(value) in EXPERIMENTAL_METHODS_NON_FAMILY_TERMS
+
+
+def generic_secondary_topic_bucket_matches(value: object) -> bool:
+    """Return whether a secondary topic id/label is a vague bucket."""
+    return normalized_topic_term(value) in GENERIC_SECONDARY_TOPIC_BUCKET_IDS
+
+
+def generic_secondary_topic_term_matches(value: object) -> bool:
+    """Return whether a secondary term is a generic neighborhood descriptor."""
+    return normalized_topic_term(value) in GENERIC_SECONDARY_TOPIC_TERMS
 
 
 EXPLICIT_PAIR_STOPWORDS = {
@@ -1540,6 +1774,11 @@ def generated_topic_structure_quality_issue_records(
         require_mapping(topic, f"topic_structure.main_topics[{index}]")
         for index, topic in enumerate(main_topics, start=1)
     ]
+    topic_by_id = {
+        str(topic.get("topic_id") or "").strip(): topic
+        for topic in topic_maps
+        if str(topic.get("topic_id") or "").strip()
+    }
     words_by_topic_id: dict[str, set[str]] = {}
     core_words_by_topic_id: dict[str, set[str]] = {}
     for topic in topic_maps:
@@ -1653,6 +1892,33 @@ def generated_topic_structure_quality_issue_records(
 
     anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
     anchor_core_words = core_words_by_topic_id.get(anchor_topic_id, set())
+    alzheimer_topic_ids = [
+        topic_id
+        for topic_id, topic in topic_by_id.items()
+        if is_alzheimer_disease_topic(topic_id, topic)
+    ]
+    anchor_topic = topic_by_id.get(anchor_topic_id)
+    if (
+        alzheimer_topic_ids
+        and anchor_topic is not None
+        and not is_alzheimer_disease_topic(anchor_topic_id, anchor_topic)
+        and is_method_topic(anchor_topic_id, anchor_topic)
+    ):
+        issues.append(
+            TopicStructureQualityIssue(
+                code="disease_research_anchor_expected",
+                topic_id=anchor_topic_id or None,
+                value=alzheimer_topic_ids[0],
+                message=(
+                    "topic_structure.anchor_topic_id is "
+                    f"`{anchor_topic_id}`, a method component, while "
+                    f"`{alzheimer_topic_ids[0]}` represents Alzheimer's "
+                    "disease. For disease-specific method research, the "
+                    "disease is the non-replaceable title anchor; method "
+                    "components can have adjacent method secondaries."
+                ),
+            )
+        )
     for display, candidate_words in explicit_source_anchor_candidates(
         topic_description
     ):
@@ -1827,11 +2093,40 @@ def generated_topic_structure_quality_issue_records(
         own_core_words = core_words_by_topic_id.get(topic_id, set())
         replacement_topic = is_replacement_topic(topic_id, topic)
         application_topic = is_application_topic(topic_id, topic)
+        method_topic = is_method_topic(topic_id, topic)
         replacement_allowed_words = replacement_term_allowed_words(
             topic_id,
             topic,
             replacement_targets,
         )
+        surface_terms = topic_surface_form_terms(topic)
+        for group in COMMON_SURFACE_FORM_GROUPS:
+            abbreviations = group["abbreviations"]
+            full_forms = group["full_forms"]
+            has_abbreviation = bool(surface_terms.intersection(abbreviations))
+            has_full_form = bool(surface_terms.intersection(full_forms))
+            if has_abbreviation == has_full_form:
+                continue
+            missing_kind = "full form" if has_abbreviation else "abbreviation"
+            present_terms = sorted(
+                surface_terms.intersection(abbreviations.union(full_forms))
+            )
+            issues.append(
+                TopicStructureQualityIssue(
+                    code="missing_common_surface_form",
+                    topic_id=topic_id,
+                    value=str(group["label"]),
+                    message=(
+                        "topic_structure.main_topics."
+                        f"{topic_id} uses common surface form(s) "
+                        f"{present_terms} for {group['label']} but is missing "
+                        f"the common {missing_kind}. Include commonly used "
+                        "abbreviations, full forms, spelling/punctuation "
+                        "variants, and synonyms explicitly when they matter; "
+                        "do not invent rare variants."
+                    ),
+                )
+            )
         for other_topic_id, words in words_by_topic_id.items():
             if other_topic_id != topic_id:
                 other_topic_words.update(words)
@@ -1862,6 +2157,27 @@ def generated_topic_structure_quality_issue_records(
                     )
 
                 term_words = normalized_topic_words(term)
+                if (
+                    method_topic
+                    and normalized_topic_term(term) in METHOD_TOPIC_BARE_DOMAIN_TERMS
+                ):
+                    issues.append(
+                        TopicStructureQualityIssue(
+                            code="method_topic_bare_domain_term",
+                            topic_id=topic_id,
+                            value=term,
+                            message=(
+                                "topic_structure.main_topics."
+                                f"{topic_id}.{key} contains bare domain/object "
+                                f"term `{term}`. Method-topic terms should "
+                                "name methods, submethods, approaches, models, "
+                                "or method-qualified applications. Use phrases "
+                                "such as computational genomics or genomic "
+                                "analysis instead of bare domain terms when "
+                                "they are intended as methods."
+                            ),
+                        )
+                    )
                 if (
                     key in {"terms", "retrieval_terms"}
                     and normalized_topic_term(term)
@@ -2107,7 +2423,7 @@ def generated_topic_structure_quality_issue_records(
         main_topic_fields,
     )
     groups_by_main_topic_id: dict[str, list[dict[str, Any]]] = {
-        topic_id: [] for topic_id in topic_by_id if topic_id != anchor_topic_id
+        topic_id: [] for topic_id in topic_by_id
     }
     for group in secondary_groups:
         main_topic_id = str(group.get("main_topic_id") or "").strip()
@@ -2118,6 +2434,7 @@ def generated_topic_structure_quality_issue_records(
             continue
         parent_is_replacement = is_replacement_topic(main_topic_id, parent_topic)
         parent_is_application = is_application_topic(main_topic_id, parent_topic)
+        parent_is_method = is_method_topic(main_topic_id, parent_topic)
         parent_replacement_allowed_words = replacement_term_allowed_words(
             main_topic_id,
             parent_topic,
@@ -2154,6 +2471,50 @@ def generated_topic_structure_quality_issue_records(
                         group_text_values.append((key, term))
 
         for key, term in group_text_values:
+            if key in {"secondary_topic_id", "label"} and (
+                generic_secondary_topic_bucket_matches(term)
+            ):
+                issues.append(
+                    TopicStructureQualityIssue(
+                        code="generic_secondary_topic_bucket",
+                        topic_id=main_topic_id,
+                        value=term,
+                        message=(
+                            "topic_structure.secondary_topics."
+                            f"{main_topic_id}.{group_id}.{key} is `{term}`, "
+                            "which is a vague mixed secondary bucket. Each "
+                            "secondary topic must name one adjacent concept, "
+                            "and that secondary topic's terms must be aliases, "
+                            "variants, or surface forms of that one secondary "
+                            "concept. Use separate groups such as "
+                            "`parkinsons_disease` and `cancer` instead of "
+                            "`related_diseases` or `other_diseases`."
+                        ),
+                    )
+                )
+            if key in {"terms", "retrieval_terms", "matching_terms"} and (
+                generic_secondary_topic_term_matches(term)
+            ):
+                issues.append(
+                    TopicStructureQualityIssue(
+                        code="generic_secondary_topic_term",
+                        topic_id=main_topic_id,
+                        value=term,
+                        message=(
+                            "topic_structure.secondary_topics."
+                            f"{main_topic_id}.{group_id}.{key} contains "
+                            f"`{term}`, which is a generic neighborhood "
+                            "descriptor rather than a term for this secondary "
+                            "topic. Secondary-topic terms must belong to the "
+                            "family of the secondary topic itself. For "
+                            "example, a `parkinsons_disease` secondary can "
+                            "use Parkinson's disease, Parkinson disease, or "
+                            "PD; it should not use dementia types, "
+                            "neurodegenerative diseases, or cognitive "
+                            "impairments."
+                        ),
+                    )
+                )
             term_words = normalized_topic_words(term)
             if parent_is_replacement:
                 material_family_words = broad_material_family_words(term_words)
@@ -2326,48 +2687,86 @@ def generated_topic_structure_quality_issue_records(
         substantive_group_terms = {
             term for term in group_terms if term and term not in {main_topic_id}
         }
-        duplicated = sorted(term for term in substantive_group_terms if term in parent_terms)
-        if duplicated and not (substantive_group_terms - parent_terms):
+        duplicated = sorted(
+            term for term in substantive_group_terms if term in parent_terms
+        )
+        if duplicated:
             issues.append(
                 TopicStructureQualityIssue(
-                    code="duplicate_secondary_topic",
+                    code="parent_secondary_term_overlap",
                     topic_id=main_topic_id,
                     value=group_id,
                     message=(
                         "topic_structure.secondary_topics."
-                        f"{main_topic_id}.{group_id} duplicates parent term(s) "
-                        f"{duplicated}. Secondary topics should be controlled "
-                        "fallback expansions, not restatements of the parent "
-                        "main topic. Remove duplicate parent terms or add "
-                        "genuine fallback terms."
+                        f"{main_topic_id}.{group_id} overlaps parent term(s) "
+                        f"{duplicated}. Secondary topics must be adjacent "
+                        "sibling directions, not restatements, synonyms, or "
+                        "subtypes of the parent main topic. Move in-family "
+                        "subtypes into the parent topic and keep secondary "
+                        "term groups disjoint from the parent."
                     ),
                 )
             )
-
-    for main_topic_id, groups in groups_by_main_topic_id.items():
-        if groups:
-            topic = topic_by_id.get(main_topic_id, {})
-            component_words = normalized_topic_words(
-                f"{main_topic_id} {topic.get('label') or ''}"
+        if parent_is_method:
+            subtype_terms = sorted(
+                {
+                    subtype
+                    for term in substantive_group_terms
+                    for subtype in method_internal_subtype_matches(term)
+                }
             )
-            if (
-                len(groups) < 2
-                and component_words.intersection(BROAD_SECONDARY_FAMILY_WORDS)
-            ):
+            if subtype_terms:
                 issues.append(
                     TopicStructureQualityIssue(
-                        code="too_few_secondary_topics_for_broad_family",
+                        code="secondary_topic_internal_subtype",
                         topic_id=main_topic_id,
+                        value=group_id,
                         message=(
-                            "topic_structure.secondary_topics should include at "
-                            f"least two controlled fallback groups when broad "
-                            f"non-anchor method/tool/evidence family "
-                            f"`{main_topic_id}`. Split distinct adjacent "
-                            "fallback concepts into separate secondary groups "
-                            "instead of one narrow expansion."
+                            "topic_structure.secondary_topics."
+                            f"{main_topic_id}.{group_id} contains method "
+                            f"subtype term(s) {subtype_terms}. Secondary "
+                            "topics should be adjacent sibling directions, "
+                            "not narrower internal parts of the parent. Move "
+                            "machine learning, deep learning, statistical "
+                            "modeling, network analysis, and similar method "
+                            "subtypes into the parent method topic."
                         ),
                     )
                 )
+        disease_family_terms = sorted(
+            {
+                variant
+                for term in substantive_group_terms
+                for variant in disease_family_variant_matches(
+                    main_topic_id,
+                    parent_topic,
+                    term,
+                )
+            }
+        )
+        if disease_family_terms:
+            issues.append(
+                TopicStructureQualityIssue(
+                    code="secondary_topic_disease_family_variant",
+                    topic_id=main_topic_id,
+                    value=group_id,
+                    message=(
+                        "topic_structure.secondary_topics."
+                        f"{main_topic_id}.{group_id} contains in-family "
+                        f"disease variant term(s) {disease_family_terms}. "
+                        "Secondary topics should be adjacent sibling "
+                        "directions, such as other diseases or application "
+                        "areas, not other names, stages, variants, or "
+                        "impairment states from the parent disease family. "
+                        "Move Alzheimer's disease variants such as dementia, "
+                        "MCI, mild cognitive impairment, cognitive decline, "
+                        "prodromal disease, or preclinical disease into the "
+                        "parent disease topic."
+                    ),
+                )
+            )
+    for main_topic_id, groups in groups_by_main_topic_id.items():
+        if groups:
             continue
         issues.append(
             TopicStructureQualityIssue(
@@ -2375,11 +2774,11 @@ def generated_topic_structure_quality_issue_records(
                 topic_id=main_topic_id,
                 message=(
                     "topic_structure.secondary_topics should include a "
-                    f"controlled fallback group for non-anchor main topic "
+                    f"controlled adjacent sibling group for main topic "
                     f"`{main_topic_id}`. Secondary topics should provide "
-                    "adjacent or alternate wording that can replace this "
-                    "component during recall-oriented discovery without "
-                    "duplicating parent terms."
+                    "a different neighboring direction for broader discovery "
+                    "without duplicating parent terms or listing internal "
+                    "subtypes."
                 ),
             )
         )

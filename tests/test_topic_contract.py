@@ -419,6 +419,28 @@ def test_generated_topic_structure_flags_broad_umbrella_terms_as_soft_issue() ->
     validate_generated_topic_structure_quality(contract)
 
 
+def test_generated_topic_structure_flags_missing_common_surface_form() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    topic = contract["topic_structure"]["main_topics"][0]
+    topic["terms"] = ["AI"]
+    topic["retrieval_terms"] = ["AI"]
+    topic["matching_terms"] = ["AI"]
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("missing the common full form" in issue for issue in issues)
+    assert generated_topic_structure_crucial_issues(contract) == []
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_accepts_common_surface_form_pair() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert not any("missing the common" in issue for issue in issues)
+
+
 def test_generated_topic_structure_rejects_broad_technology_terms() -> None:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
     contract["topic_structure"]["main_topics"][0]["terms"].append(
@@ -495,7 +517,7 @@ def test_generated_topic_structure_rejects_duplicate_secondary_topics() -> None:
 
     issues = generated_topic_structure_quality_issues(contract)
 
-    assert any("duplicates parent term" in issue for issue in issues)
+    assert any("overlaps parent term" in issue for issue in issues)
 
 
 def test_generated_topic_structure_accepts_secondary_with_useful_extra_terms() -> None:
@@ -505,47 +527,52 @@ def test_generated_topic_structure_accepts_secondary_with_useful_extra_terms() -
             "secondary_topic_id": "student_outcomes",
             "label": "Student outcomes",
             "field": "title_or_abstract",
-            "terms": ["learning outcomes", "dropout", "retention"],
-            "retrieval_terms": ["learning outcomes", "dropout"],
-            "matching_terms": ["learning outcomes", "dropout", "retention"],
+            "terms": ["dropout", "retention"],
+            "retrieval_terms": ["dropout"],
+            "matching_terms": ["dropout", "retention"],
         }
     )
 
     validate_generated_topic_structure_quality(contract)
 
 
-def test_generated_topic_structure_requires_non_anchor_secondary_topics() -> None:
+def test_generated_topic_structure_requires_secondary_topics_for_each_main_topic() -> None:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
     del contract["topic_structure"]["secondary_topics"]["learning_impact"]
 
     issues = generated_topic_structure_quality_issues(contract)
 
     assert any(
-        "non-anchor main topic `learning_impact`" in issue for issue in issues
+        "main topic `learning_impact`" in issue for issue in issues
     )
-    assert generated_topic_structure_crucial_issues(contract) == []
-    validate_generated_topic_structure_quality(contract)
+    assert any(
+        "main topic `learning_impact`" in issue
+        for issue in generated_topic_structure_crucial_issues(contract)
+    )
+    with pytest.raises(ValueError, match="missing_secondary_topic"):
+        validate_generated_topic_structure_quality(contract)
 
 
-def test_generated_topic_structure_requires_multiple_secondaries_for_broad_methods() -> None:
+def test_generated_topic_structure_flags_internal_subtype_secondary() -> None:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
     contract["topic_structure"]["main_topics"][1] = {
         "topic_id": "computational_methods",
         "label": "Computational methods",
-        "field": "title_or_abstract",
+        "field": "title",
         "terms": ["computational biology", "bioinformatics"],
         "retrieval_terms": ["computational biology", "bioinformatics"],
         "matching_terms": ["computational biology", "bioinformatics", "algorithms"],
     }
     contract["topic_structure"]["secondary_topics"] = {
+        "ai": contract["topic_structure"]["secondary_topics"]["ai"],
         "computational_methods": [
             {
-                "secondary_topic_id": "bioinformatics_approaches",
-                "label": "Bioinformatics approaches",
+                "secondary_topic_id": "machine_learning_techniques",
+                "label": "Machine learning techniques",
                 "field": "title_or_abstract",
-                "terms": ["genomic analysis", "sequence analysis"],
-                "retrieval_terms": ["genomic analysis"],
-                "matching_terms": ["genomic analysis", "sequence analysis"],
+                "terms": ["machine learning", "deep learning"],
+                "retrieval_terms": ["machine learning"],
+                "matching_terms": ["machine learning", "deep learning"],
             }
         ],
         "learning_impact": contract["topic_structure"]["secondary_topics"][
@@ -555,7 +582,139 @@ def test_generated_topic_structure_requires_multiple_secondaries_for_broad_metho
 
     issues = generated_topic_structure_quality_issues(contract)
 
-    assert any("at least two controlled fallback groups" in issue for issue in issues)
+    assert any("narrower internal parts of the parent" in issue for issue in issues)
+    assert generated_topic_structure_crucial_issues(contract) == []
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_flags_disease_family_variant_secondary() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "alzheimers_disease"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "alzheimers_disease",
+            "label": "Alzheimer's disease",
+            "field": "title",
+            "terms": ["Alzheimer's disease", "AD"],
+            "retrieval_terms": ["Alzheimer's disease", "AD"],
+            "matching_terms": ["Alzheimer's disease", "AD"],
+        },
+        contract["topic_structure"]["main_topics"][1],
+        contract["topic_structure"]["main_topics"][2],
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "alzheimers_disease": [
+            {
+                "secondary_topic_id": "mild_cognitive_impairment",
+                "label": "Mild cognitive impairment",
+                "field": "title",
+                "terms": ["MCI", "mild cognitive impairment"],
+                "retrieval_terms": ["MCI"],
+                "matching_terms": ["MCI", "mild cognitive impairment"],
+            },
+            {
+                "secondary_topic_id": "parkinsons_disease",
+                "label": "Parkinson's disease",
+                "field": "title",
+                "terms": ["Parkinson's disease"],
+                "retrieval_terms": ["Parkinson's disease"],
+                "matching_terms": ["Parkinson's disease", "parkinsonism"],
+            },
+        ],
+        "formal_education": contract["topic_structure"]["secondary_topics"][
+            "formal_education"
+        ],
+        "learning_impact": contract["topic_structure"]["secondary_topics"][
+            "learning_impact"
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("in-family disease variant" in issue for issue in issues)
+    assert not any(
+        "parkinsons_disease contains in-family disease variant" in issue
+        for issue in issues
+    )
+    assert generated_topic_structure_crucial_issues(contract) == []
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_rejects_generic_secondary_disease_bucket() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "alzheimers_disease"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "alzheimers_disease",
+            "label": "Alzheimer's disease",
+            "field": "title",
+            "terms": ["Alzheimer's disease", "AD", "dementia"],
+            "retrieval_terms": ["Alzheimer's disease", "AD"],
+            "matching_terms": ["Alzheimer's disease", "AD", "dementia"],
+        },
+        contract["topic_structure"]["main_topics"][1],
+        contract["topic_structure"]["main_topics"][2],
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "alzheimers_disease": [
+            {
+                "secondary_topic_id": "related_diseases",
+                "label": "Related Diseases",
+                "field": "title",
+                "terms": [
+                    "vascular dementia",
+                    "frontotemporal dementia",
+                    "Lewy body dementia",
+                ],
+                "retrieval_terms": ["vascular dementia", "frontotemporal dementia"],
+                "matching_terms": [
+                    "dementia types",
+                    "neurodegenerative diseases",
+                    "cognitive impairments",
+                ],
+            }
+        ],
+        "formal_education": contract["topic_structure"]["secondary_topics"][
+            "formal_education"
+        ],
+        "learning_impact": contract["topic_structure"]["secondary_topics"][
+            "learning_impact"
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("vague mixed secondary bucket" in issue for issue in issues)
+    assert any("generic neighborhood descriptor" in issue for issue in issues)
+    with pytest.raises(ValueError, match="generic_secondary_topic_bucket"):
+        validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_flags_bare_domain_terms_in_method_topic() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][1] = {
+        "topic_id": "computational_methods",
+        "label": "Computational methods",
+        "field": "title",
+        "terms": ["computational biology", "bioinformatics", "genomics"],
+        "retrieval_terms": ["computational biology", "genomics"],
+        "matching_terms": ["computational biology", "bioinformatics", "genomics"],
+    }
+    contract["topic_structure"]["secondary_topics"]["computational_methods"] = [
+        {
+            "secondary_topic_id": "wet_lab_methods",
+            "label": "Wet lab methods",
+            "field": "title",
+            "terms": ["wet lab methods", "experimental methods"],
+            "retrieval_terms": ["wet lab methods", "experimental methods"],
+            "matching_terms": ["wet lab methods", "experimental methods"],
+        }
+    ]
+    del contract["topic_structure"]["secondary_topics"]["formal_education"]
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("bare domain/object term `genomics`" in issue for issue in issues)
     assert generated_topic_structure_crucial_issues(contract) == []
     validate_generated_topic_structure_quality(contract)
 

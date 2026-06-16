@@ -688,7 +688,7 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
         "applies_when"
     ] == {"category_id": "adaptation_strategy", "values": ["heat_action_plan"]}
     assert contract["candidate_screening"]["borderline_policy"] == "include"
-    assert "climate_change" not in contract["topic_structure"]["secondary_topics"]
+    assert "climate_change" in contract["topic_structure"]["secondary_topics"]
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
 
@@ -823,6 +823,127 @@ def test_contract_payload_removes_duplicate_secondary_parent_terms() -> None:
     assert student_outcomes["terms"] == ["dropout", "retention"]
     assert student_outcomes["retrieval_terms"] == ["dropout"]
     assert student_outcomes["matching_terms"] == ["dropout", "retention"]
+
+
+def test_contract_payload_cleans_method_terms_and_subtype_secondaries() -> None:
+    payload = generated_topic_contract_payload()
+    payload["topic_structure"]["main_topics"][1] = {
+        "topic_id": "computational_methods",
+        "label": "Computational methods",
+        "field": "title",
+        "terms": ["computational biology", "data analysis", "machine learning"],
+        "retrieval_terms": ["computational biology", "data analysis"],
+        "matching_terms": ["computational biology", "machine learning"],
+    }
+    payload["topic_structure"]["secondary_topics"] = {
+        "computational_methods": [
+            {
+                "secondary_topic_id": "ai_in_biology",
+                "label": "AI in biology",
+                "field": "title",
+                "terms": ["artificial intelligence", "deep learning"],
+                "retrieval_terms": ["artificial intelligence"],
+                "matching_terms": ["artificial intelligence", "deep learning"],
+            }
+        ],
+        "learning_impact": payload["topic_structure"]["secondary_topics"][
+            "learning_impact"
+        ],
+    }
+
+    contract = contract_from_model_payload(payload)
+    methods = {
+        topic["topic_id"]: topic
+        for topic in contract["topic_structure"]["main_topics"]
+    }["computational_methods"]
+
+    assert "data analysis" not in methods["terms"]
+    assert "data analysis" not in methods["retrieval_terms"]
+    assert "ML" in methods["terms"]
+    assert "artificial intelligence" in methods["terms"]
+    assert "deep learning" in methods["terms"]
+    assert "supervised learning" in methods["terms"]
+    assert "unsupervised learning" in methods["terms"]
+    computational_secondaries = contract["topic_structure"]["secondary_topics"][
+        "computational_methods"
+    ]
+    assert computational_secondaries[0]["secondary_topic_id"] == "experimental_methods"
+    assert "experimental methods" in computational_secondaries[0]["terms"]
+
+
+def test_contract_payload_moves_disease_variants_to_parent_terms() -> None:
+    payload = generated_topic_contract_payload()
+    payload["topic_structure"]["anchor_topic_id"] = "alzheimers_disease"
+    payload["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "alzheimers_disease",
+            "label": "Alzheimer's disease",
+            "field": "title",
+            "terms": ["Alzheimer's disease", "AD"],
+            "retrieval_terms": ["Alzheimer's disease", "AD"],
+            "matching_terms": ["Alzheimer's disease", "AD"],
+        },
+        payload["topic_structure"]["main_topics"][1],
+    ]
+    payload["topic_structure"]["secondary_topics"] = {
+        "alzheimers_disease": [
+            {
+                "secondary_topic_id": "mild_cognitive_impairment",
+                "label": "Mild cognitive impairment",
+                "field": "title",
+                "terms": ["MCI", "mild cognitive impairment"],
+                "retrieval_terms": ["MCI"],
+                "matching_terms": ["MCI", "mild cognitive impairment"],
+            },
+            {
+                "secondary_topic_id": "other_diseases",
+                "label": "Other diseases",
+                "field": "title",
+                "terms": ["Parkinson's disease", "cancer", "dementia"],
+                "retrieval_terms": ["Parkinson's disease", "cancer", "dementia"],
+                "matching_terms": ["Parkinson's disease", "cancer", "dementia"],
+            },
+        ],
+        "formal_education": payload["topic_structure"]["secondary_topics"][
+            "formal_education"
+        ],
+    }
+
+    contract = contract_from_model_payload(payload)
+    topics = {
+        topic["topic_id"]: topic
+        for topic in contract["topic_structure"]["main_topics"]
+    }
+    alzheimers = topics["alzheimers_disease"]
+    alzheimer_terms = {
+        term.casefold()
+        for term in (
+            alzheimers["terms"]
+            + alzheimers["retrieval_terms"]
+            + alzheimers["matching_terms"]
+        )
+    }
+
+    assert "MCI".casefold() in alzheimer_terms
+    assert "mild cognitive impairment" in alzheimer_terms
+    assert "dementia" in alzheimer_terms
+    disease_secondaries = contract["topic_structure"]["secondary_topics"][
+        "alzheimers_disease"
+    ]
+    assert [group["secondary_topic_id"] for group in disease_secondaries] == [
+        "parkinsons_disease",
+        "cancer",
+    ]
+    assert disease_secondaries[0]["terms"] == [
+        "Parkinson's disease",
+        "Parkinson disease",
+        "PD",
+    ]
+    assert disease_secondaries[0]["retrieval_terms"] == [
+        "Parkinson's disease",
+        "Parkinson disease",
+    ]
+    assert disease_secondaries[1]["terms"] == ["cancer", "neoplasm", "tumor"]
 
 
 def test_generate_topic_contract_repairs_duplicate_secondary_topic(
@@ -990,6 +1111,15 @@ def test_generate_topic_contract_repairs_explicit_pair_umbrella_topic(
         ],
         "secondary_topics": [
             {
+                "main_topic_id": "traffic_noise",
+                "secondary_topic_id": "environmental_noise",
+                "label": "Environmental noise",
+                "field": "title",
+                "terms": ["environmental noise", "aircraft noise"],
+                "retrieval_terms": ["environmental noise", "aircraft noise"],
+                "matching_terms": ["environmental noise", "aircraft noise"],
+            },
+            {
                 "main_topic_id": "attention",
                 "secondary_topic_id": "executive_function",
                 "label": "Executive function",
@@ -1139,6 +1269,15 @@ def test_generate_topic_contract_repairs_criterion_topic_to_comparator(
         ],
         "secondary_topics": [
             {
+                "main_topic_id": "fungi",
+                "secondary_topic_id": "plant_based_materials",
+                "label": "Plant-based materials",
+                "field": "title_or_abstract",
+                "terms": ["plant-based materials", "cellulose materials"],
+                "retrieval_terms": ["plant-based materials", "cellulose materials"],
+                "matching_terms": ["plant-based materials", "cellulose materials"],
+            },
+            {
                 "main_topic_id": "building_materials",
                 "secondary_topic_id": "construction_products",
                 "label": "Construction products",
@@ -1262,6 +1401,15 @@ def test_generate_topic_contract_repairs_buried_replacement_target(
     ]
     repair_topic_structure["secondary_topics"] = [
         {
+            "main_topic_id": "fungi",
+            "secondary_topic_id": "plant_based_materials",
+            "label": "Plant-based materials",
+            "field": "title_or_abstract",
+            "terms": ["plant-based materials", "cellulose materials"],
+            "retrieval_terms": ["plant-based materials", "cellulose materials"],
+            "matching_terms": ["plant-based materials", "cellulose materials"],
+        },
+        {
             "main_topic_id": "building_materials",
             "secondary_topic_id": "construction_products",
             "label": "Construction products",
@@ -1383,6 +1531,15 @@ def test_generate_topic_contract_repairs_missing_replacement_application(
     ]
     repair_topic_structure["secondary_topics"] = [
         {
+            "main_topic_id": "fungi",
+            "secondary_topic_id": "plant_based_materials",
+            "label": "Plant-based materials",
+            "field": "title_or_abstract",
+            "terms": ["plant-based materials", "cellulose materials"],
+            "retrieval_terms": ["plant-based materials", "cellulose materials"],
+            "matching_terms": ["plant-based materials", "cellulose materials"],
+        },
+        {
             "main_topic_id": "building_materials",
             "secondary_topic_id": "construction_products",
             "label": "Construction products",
@@ -1501,6 +1658,15 @@ def test_generate_topic_contract_repairs_comparator_anchor(
     repair_topic_structure["main_topics"][1]["field"] = "title"
     repair_topic_structure["secondary_topics"] = [
         {
+            "main_topic_id": "fungi",
+            "secondary_topic_id": "plant_based_materials",
+            "label": "Plant-based materials",
+            "field": "title_or_abstract",
+            "terms": ["plant-based materials", "cellulose materials"],
+            "retrieval_terms": ["plant-based materials", "cellulose materials"],
+            "matching_terms": ["plant-based materials", "cellulose materials"],
+        },
+        {
             "main_topic_id": "building_materials",
             "secondary_topic_id": "construction_products",
             "label": "Construction products",
@@ -1544,7 +1710,13 @@ def test_generate_topic_contract_repairs_comparator_anchor(
         topic["topic_id"]: topic for topic in contract["topic_structure"]["main_topics"]
     }
     assert topic_by_id["fungi"]["field"] == "title"
-    assert "fungi" not in contract["topic_structure"]["secondary_topics"]
+    assert "fungi" in contract["topic_structure"]["secondary_topics"]
+    fungi_secondary_ids = {
+        group["secondary_topic_id"]
+        for group in contract["topic_structure"]["secondary_topics"]["fungi"]
+    }
+    assert "mycelium_materials" not in fungi_secondary_ids
+    assert "plant_based_materials" in fungi_secondary_ids
     assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
 
 
@@ -1657,6 +1829,15 @@ def test_generate_topic_contract_repairs_mixed_replacement_and_application_terms
             },
         ],
         "secondary_topics": [
+            {
+                "main_topic_id": "fungi",
+                "secondary_topic_id": "plant_based_materials",
+                "label": "Plant-based materials",
+                "field": "title_or_abstract",
+                "terms": ["plant-based materials", "cellulose materials"],
+                "retrieval_terms": ["plant-based materials", "cellulose materials"],
+                "matching_terms": ["plant-based materials", "cellulose materials"],
+            },
             {
                 "main_topic_id": "concrete_replacement",
                 "secondary_topic_id": "cement_substitution",
@@ -1803,6 +1984,15 @@ def test_generate_topic_contract_repairs_application_secondary_criterion_group(
     ]
     repair_topic_structure["secondary_topics"] = [
         {
+            "main_topic_id": "fungi",
+            "secondary_topic_id": "plant_based_materials",
+            "label": "Plant-based materials",
+            "field": "title_or_abstract",
+            "terms": ["plant-based materials", "cellulose materials"],
+            "retrieval_terms": ["plant-based materials", "cellulose materials"],
+            "matching_terms": ["plant-based materials", "cellulose materials"],
+        },
+        {
             "main_topic_id": "concrete_replacement",
             "secondary_topic_id": "cement_substitution",
             "label": "Cement substitution",
@@ -1919,6 +2109,15 @@ def test_generate_topic_contract_repairs_missing_application_secondary_group(
     }
     repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
     repair_topic_structure["secondary_topics"] = [
+        {
+            "main_topic_id": "fungi",
+            "secondary_topic_id": "plant_based_materials",
+            "label": "Plant-based materials",
+            "field": "title_or_abstract",
+            "terms": ["plant-based materials", "cellulose materials"],
+            "retrieval_terms": ["plant-based materials", "cellulose materials"],
+            "matching_terms": ["plant-based materials", "cellulose materials"],
+        },
         {
             "main_topic_id": "concrete_replacement",
             "secondary_topic_id": "cement_substitution",
