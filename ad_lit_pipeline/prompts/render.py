@@ -185,6 +185,21 @@ def render_repair_topic_contract_tagging_prompt(
     )
 
 
+def render_repair_topic_structure_prompt(
+    topic_description: str,
+    topic_structure: dict[str, Any],
+    validation_issues: list[dict[str, Any]],
+) -> str:
+    return render_template(
+        "repair_topic_structure.md",
+        {
+            "topic_description": topic_description,
+            "topic_structure_json": json_block(topic_structure),
+            "validation_issues_json": json_block(validation_issues),
+        },
+    )
+
+
 def render_calibrate_topic_contract_prompt(
     topic_description: str,
     current_contract: dict[str, Any],

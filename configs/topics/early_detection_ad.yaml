@@ -15,6 +15,7 @@ topic_structure:
   main_topics:
     - topic_id: early_detection
       label: Early detection or screening
+      field: title
       terms:
         - early detection
         - early diagnosis
@@ -23,8 +24,27 @@ topic_structure:
         - diagnosis
         - classification
         - prediction
+      retrieval_terms:
+        - early detection
+        - early diagnosis
+        - screening
+        - detection
+        - diagnosis
+        - classification
+        - prediction
+      matching_terms:
+        - early detection
+        - early diagnosis
+        - screening
+        - detection
+        - diagnosis
+        - classification
+        - prediction
+        - conversion prediction
+        - risk prediction
     - topic_id: disease_state
       label: Alzheimer's disease or related impairment
+      field: title
       terms:
         - Alzheimer's disease
         - AD
@@ -34,8 +54,29 @@ topic_structure:
         - cognitive impairment
         - prodromal Alzheimer's disease
         - preclinical Alzheimer's disease
+      retrieval_terms:
+        - Alzheimer's disease
+        - AD
+        - mild cognitive impairment
+        - MCI
+        - dementia
+        - cognitive impairment
+        - prodromal Alzheimer's disease
+        - preclinical Alzheimer's disease
+      matching_terms:
+        - Alzheimer's disease
+        - Alzheimer disease
+        - AD
+        - mild cognitive impairment
+        - MCI
+        - dementia
+        - cognitive impairment
+        - prodromal Alzheimer's disease
+        - preclinical Alzheimer's disease
+        - dementia-related cognitive impairment
     - topic_id: evidence_signal
       label: Diagnostic evidence or signal
+      field: title_or_abstract
       terms:
         - biomarker
         - neuroimaging
@@ -46,16 +87,80 @@ topic_structure:
         - omics
         - sensor
         - multimodal
+      retrieval_terms:
+        - biomarker
+        - neuroimaging
+        - cognitive test
+        - speech
+        - EEG
+        - retinal imaging
+        - omics
+        - sensor
+        - multimodal
+      matching_terms:
+        - biomarker
+        - biomarkers
+        - neuroimaging
+        - MRI
+        - PET
+        - cognitive test
+        - cognitive assessment
+        - speech
+        - language
+        - EEG
+        - retinal imaging
+        - omics
+        - sensor
+        - multimodal
   secondary_topics:
     disease_state:
-      - neurodegenerative disease
-      - cognitive decline
-      - memory impairment
+      - secondary_topic_id: neurodegenerative_impairment
+        label: Neurodegenerative or memory impairment
+        field: title_or_abstract
+        terms:
+          - neurodegenerative disease
+          - cognitive decline
+          - memory impairment
+        retrieval_terms:
+          - neurodegenerative disease
+          - cognitive decline
+          - memory impairment
+        matching_terms:
+          - neurodegenerative disease
+          - neurodegenerative disorder
+          - cognitive decline
+          - memory impairment
     evidence_signal:
-      - clinical data
-      - behavioral data
-      - electronic health record
-      - digital marker
+      - secondary_topic_id: clinical_behavioral_data
+        label: Clinical or behavioral data
+        field: title_or_abstract
+        terms:
+          - clinical data
+          - behavioral data
+          - electronic health record
+        retrieval_terms:
+          - clinical data
+          - behavioral data
+          - electronic health record
+        matching_terms:
+          - clinical data
+          - behavioral data
+          - electronic health record
+          - EHR
+      - secondary_topic_id: digital_marker
+        label: Digital marker
+        field: title_or_abstract
+        terms:
+          - digital marker
+          - digital biomarker
+        retrieval_terms:
+          - digital marker
+          - digital biomarker
+        matching_terms:
+          - digital marker
+          - digital markers
+          - digital biomarker
+          - digital biomarkers
 
 scope:
   include_criteria:

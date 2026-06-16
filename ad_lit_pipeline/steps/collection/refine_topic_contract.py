@@ -43,6 +43,7 @@ from ad_lit_pipeline.topics.contract import (
     load_topic_contract,
     normalize_tagging_label,
     validate_generated_tagging_quality,
+    validate_generated_topic_structure_quality,
     validate_topic_contract,
 )
 
@@ -730,6 +731,11 @@ def call_llm(
                 include_topic_structure=True,
             )
             validate_topic_contract(contract)
+            validate_generated_topic_structure_quality(
+                contract,
+                label="Refined topic contract",
+                topic_description=topic_description,
+            )
         except ValueError as error:
             last_error = error
             if attempt == MAX_CONTRACT_VALIDATION_ATTEMPTS:

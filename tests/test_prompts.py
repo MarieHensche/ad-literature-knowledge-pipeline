@@ -7,6 +7,7 @@ from ad_lit_pipeline.prompts.render import (
     render_generate_topic_contract_prompt,
     render_calibrate_topic_contract_prompt,
     render_repair_topic_contract_tagging_prompt,
+    render_repair_topic_structure_prompt,
     render_refine_topic_contract_prompt,
     render_screen_candidate_prompt,
     render_tag_paper_prompt,
@@ -66,14 +67,44 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
     assert "`applies_when`" in prompt
     assert "common abbreviations or acronyms" in prompt
     assert "Make main topics broad enough for title screening" in prompt
-    assert "at least 6 terms" in prompt
+    assert "least 4 focused `terms`" in prompt
+    assert "Do not pad term lists" in prompt
     assert "`retrieval_terms`" in prompt
     assert "`matching_terms`" in prompt
     assert "`secondary_topic_id`" in prompt
     assert "Keep secondary replacements as separate semantic groups" in prompt
     assert "`title`, `abstract`, or `title_or_abstract`" in prompt
     assert "mandatory core concept for title screening" in prompt
-    assert "later categories may use those ids directly" in prompt
+    assert "categories may use those ids directly" in prompt.lower()
+    assert "Could X be used to" in prompt
+    assert "Do not anchor on the application" in prompt
+    assert "Each main topic must represent exactly one\n    conceptual area" in prompt
+    assert "instead of `ai_in_school`" in prompt
+    assert "Terms inside a main topic must name only that one component" in prompt
+    assert "Set the anchor main topic's `field` to `title`" in prompt
+    assert "Keep `retrieval_terms` component-pure" in prompt
+    assert "Do not create a secondary topic that simply repeats" in prompt
+    assert "Every non-anchor main topic must have at least one" in prompt
+    assert "Broad method, tool, model, analysis" in prompt
+    assert "Do not use `abstract` for generated main topics" in prompt
+    assert "Setting, context, or population components should use `title`" in prompt
+    assert "domain-specific named variants" in prompt
+    assert "attention and" in prompt
+    assert "memory should use separate" in prompt
+    assert "broad criterion or motivation" in prompt
+    assert "concrete replacement, comparator" in prompt
+    assert "alternative to a concrete target" in prompt
+    assert "not only a broad `building_materials` topic" in prompt
+    assert "separate `fungi`, `building_materials`, and" in prompt
+    assert "Keep replacement/comparator topics component-pure" in prompt
+    assert "`cement substitute`" in prompt
+    assert "Keep application/domain topics concrete" in prompt
+    assert "`construction technology`" in prompt
+    assert "preserve that\n  wording in the main topic id/label" in prompt
+    assert "`construction_products` or `building_products`" in prompt
+    assert "`structural integrity`, `construction" in prompt
+    assert "`building techniques`" in prompt
+    assert "performance metrics" in prompt
     assert "climate change affect human health" in prompt
     assert "at least 6 knowledge tagging categories" not in prompt
     assert "mental distribution check" not in prompt
@@ -111,6 +142,31 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "topic_structure.main_topics" in prompt
     assert "mandatory core concept for title screening" in prompt
     assert "improve recall without weakening topical fit" in prompt
+    assert "Could X be used to" in prompt
+    assert "Do not anchor on the application" in prompt
+    assert "Each main topic must represent exactly one conceptual area" in prompt
+    assert "Bad examples: `ai_in_school`" in prompt
+    assert "Terms inside a main topic must name only that one component" in prompt
+    assert "Set the anchor main topic's `field` to `title`" in prompt
+    assert "Keep `retrieval_terms` component-pure" in prompt
+    assert "Do not create a secondary topic that simply repeats" in prompt
+    assert "Every non-anchor main topic must have at least one" in prompt
+    assert "Broad method, tool, model, analysis" in prompt
+    assert "Do not use `abstract` for generated main topics" in prompt
+    assert "Setting, context, or population components should use `title`" in prompt
+    assert "multiple outcomes, targets, signals" in prompt
+    assert "broad criterion or motivation" in prompt
+    assert "alternative to a concrete target" in prompt
+    assert "not only a broad `building_materials` topic" in prompt
+    assert "separate `fungi`, `building_materials`, and" in prompt
+    assert "Keep replacement/comparator topics component-pure" in prompt
+    assert "`cement substitute`" in prompt
+    assert "Keep application/domain topics concrete" in prompt
+    assert "`construction technology`" in prompt
+    assert "preserve that\n    wording in the main topic id/label" in prompt
+    assert "`construction_products` or\n    `building_products`" in prompt
+    assert "`structural integrity`, `construction" in prompt
+    assert "`building techniques`" in prompt
     assert "whole-question" in prompt
     assert "effect_of_x" in prompt
     assert "mental distribution check" in prompt
@@ -190,6 +246,53 @@ def test_repair_topic_contract_tagging_prompt_is_patch_only() -> None:
     assert "Do not return a full topic contract" in prompt
     assert "boilerplate_category_id" in prompt
     assert "Remove retired categories if they appear" in prompt
+
+
+def test_repair_topic_structure_prompt_is_structure_only() -> None:
+    prompt = render_repair_topic_structure_prompt(
+        topic_description="Use of AI in school lessons and student performance",
+        topic_structure={
+            "anchor_topic_id": "ai",
+            "main_topics": [
+                {"topic_id": "ai"},
+                {"topic_id": "school"},
+                {"topic_id": "student_performance"},
+            ],
+            "secondary_topics": [],
+        },
+        validation_issues=[
+            {
+                "code": "missing_secondary_topic",
+                "topic_id": "school",
+                "message": "Missing secondary topic.",
+            }
+        ],
+    )
+
+    assert "Return only a complete repaired `topic_structure` JSON object" in prompt
+    assert "Do not return a full topic contract" in prompt
+    assert "source/tool/intervention/material should be\n  the anchor" in prompt
+    assert "not the application, outcome, or replacement goal" in prompt
+    assert "Every non-anchor main topic must have at least one" in prompt
+    assert "Broad method, tool, model, analysis" in prompt
+    assert "Do not use `abstract` for generated main topics" in prompt
+    assert "Setting, context, or population components should use `title`" in prompt
+    assert "explicit paired concepts are buried" in prompt
+    assert "broad criterion or motivation topic" in prompt
+    assert "replacement target is not a main topic" in prompt
+    assert "do not leave\n  `concrete` only inside terms" in prompt
+    assert "replacement/comparator topic has criterion" in prompt
+    assert "concrete replacement, concrete\n  alternative, cement substitute" in prompt
+    assert "replacement application/domain is not a main" in prompt
+    assert "application/domain topic has generic terms" in prompt
+    assert "application/domain topic or secondary group has" in prompt
+    assert "`structural integrity`, `construction innovations`" in prompt
+    assert "application/domain secondary group has criterion" in prompt
+    assert "`construction_products`, `building_products`" in prompt
+    assert "missing secondary topic is an application/domain topic" in prompt
+    assert "without a fallback after removing invalid green" in prompt
+    assert "school" in prompt
+    assert "missing_secondary_topic" in prompt
 
 
 def test_tag_paper_prompt_only_mentions_review_status_when_configured() -> None:

@@ -1,0 +1,154 @@
+topic_id: use_of_ai_in_school_lessons
+research_topic:
+  title: Use of AI in School Lessons and Its Impact on Students' Performance
+  description: This research direction explores the integration of artificial intelligence
+    in educational settings and how it affects student performance and learning outcomes.
+topic_structure:
+  anchor_topic_id: ai
+  anchor_reason: AI is the fundamental technology driving innovations in school lessons.
+  main_topics:
+  - topic_id: ai
+    label: Artificial Intelligence
+    field: title_or_abstract
+    terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - deep learning
+    - intelligent tutoring systems
+    - adaptive learning
+    retrieval_terms:
+    - AI
+    - artificial intelligence
+    - machine learning
+    - intelligent tutoring
+    - educational AI
+    matching_terms:
+    - AI
+    - artificial intelligence
+    - machine learning
+    - deep learning
+    - adaptive learning
+    - intelligent tutors
+  - topic_id: school
+    label: School Context
+    field: title_or_abstract
+    terms:
+    - education
+    - school
+    - classroom
+    - learning environment
+    - educational settings
+    - K-12 education
+    retrieval_terms:
+    - school
+    - K-12
+    - classroom
+    - educational context
+    matching_terms:
+    - school
+    - classroom
+    - educational settings
+    - K-12
+    - learning environment
+  - topic_id: student_performance
+    label: Student Performance
+    field: title_or_abstract
+    terms:
+    - student performance
+    - academic achievement
+    - learning outcomes
+    - test scores
+    - engagement
+    - performance metrics
+    retrieval_terms:
+    - student performance
+    - academic outcomes
+    - test scores
+    - learning achievement
+    matching_terms:
+    - student performance
+    - academic achievement
+    - learning outcomes
+    - engagement
+    - performance indicators
+  secondary_topics:
+    student_performance:
+    - secondary_topic_id: academic_achievement
+      label: Academic Achievement
+      field: title_or_abstract
+      terms:
+      - academic performance
+      - academic success
+      - student outcomes
+      retrieval_terms:
+      - academic achievement
+      - student outcomes
+      matching_terms:
+      - academic achievement
+      - student performance
+      - learning outcomes
+scope:
+  include_criteria:
+  - Papers directly studying the use of AI in school lessons
+  - Papers examining the impact of AI on student performance and learning outcomes
+  - Reviews and meta-analyses on educational AI applications and implications in school
+    settings
+  exclude_criteria:
+  - Papers that do not address AI in the context of educational settings
+  - Non-relevant research focused exclusively on AI technologies without educational
+    context
+  boundary_rules:
+  - Include borderline or tangentially relevant papers if they discuss AI applications
+    in education, even in less direct ways.
+  - Exclude only when it is evident from the title and abstract that the paper is
+    unrelated to the research topic.
+rule_based_screening:
+  include_terms:
+  - artificial intelligence
+  - AI in education
+  - student performance
+  - educational technology
+  - learning effectiveness
+  exclude_terms: []
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include if title or metadata suggest relevance
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless primary studies only are requested
+  tangential_topic_policy: include if they touch on relevant aspects
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ''
+  categories:
+    student_performance_detail:
+      required: false
+      values:
+      - test_scores
+      - academic_success
+      - student_engagement
+      - performance_improvement
+      description: Specifics of student performance metrics in relation to AI usage.
+      selection: multi
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: AI in education impact on student performance
+    reason: Captures the primary intersection of AI usage and educational outcomes.
+  - query: effects of AI-based tools in classrooms
+    reason: Explores specific tools and their effectiveness in learning environments.
+  - query: artificial intelligence and academic achievement
+    reason: Focuses on academic performance outcomes related to AI usage.
+  - query: implementation of AI in school lessons
+    reason: Targets papers discussing the integration of AI in formal education settings.
+  - query: AI-driven educational tools and student engagement
+    reason: Investigates how AI tools influence student engagement levels.
+  - query: educational technology effectiveness
+    reason: Broader search on educational technology which includes AI tools.

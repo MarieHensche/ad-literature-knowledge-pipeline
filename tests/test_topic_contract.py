@@ -12,10 +12,13 @@ from ad_lit_pipeline.topics.contract import (
     generated_tagging_quality_issue_records,
     generated_tagging_quality_issues,
     generated_tagging_quality_warnings,
+    generated_topic_structure_crucial_issues,
+    generated_topic_structure_quality_issues,
     load_topic_contract,
     rule_based_screening_from_contract,
     tagging_config_from_contract,
     validate_generated_tagging_quality,
+    validate_generated_topic_structure_quality,
     validate_topic_contract,
 )
 
@@ -367,3 +370,799 @@ def test_topic_contract_rejects_invalid_topic_field() -> None:
 
     with pytest.raises(ValueError, match="field must be one of"):
         validate_topic_contract(contract)
+
+
+def test_generated_topic_structure_rejects_merged_main_topic_id() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["topic_id"] = "ai_in_school"
+    contract["topic_structure"]["anchor_topic_id"] = "ai_in_school"
+
+    with pytest.raises(ValueError, match="merges multiple concept areas"):
+        validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_rejects_cross_topic_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["terms"].append("AI in schools")
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("AI in schools" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_non_title_anchor_field() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["field"] = "title_or_abstract"
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("anchor topic" in issue and "`title`" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_generic_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][1]["terms"].append("education")
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("generic term `education`" in issue for issue in issues)
+
+
+def test_generated_topic_structure_flags_broad_umbrella_terms_as_soft_issue() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["terms"].append("data analysis")
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("broad umbrella term `data analysis`" in issue for issue in issues)
+    assert generated_topic_structure_crucial_issues(contract) == []
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_rejects_broad_technology_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["terms"].append(
+        "educational technology"
+    )
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("educational technology" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_abstract_only_main_topic_field() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][2]["field"] = "abstract"
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("abstract-only" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_context_field_not_title() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][1]["field"] = "title_or_abstract"
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("setting, context, or population gate" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_non_exception_title_or_abstract_field() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][2]["field"] = "title_or_abstract"
+
+    issues = generated_topic_structure_crucial_issues(contract)
+
+    assert any("should default to `title`" in issue for issue in issues)
+
+
+def test_generated_topic_structure_allows_title_or_abstract_for_detail_topic() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    topic = contract["topic_structure"]["main_topics"][2]
+    topic["topic_id"] = "model_validation"
+    topic["label"] = "Model validation"
+    topic["field"] = "title_or_abstract"
+
+    issues = generated_topic_structure_crucial_issues(contract)
+
+    assert not any("should default to `title`" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_cross_topic_retrieval_term() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][0]["retrieval_terms"].append(
+        "educational AI"
+    )
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("educational AI" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_duplicate_secondary_topics() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["secondary_topics"]["learning_impact"].append(
+        {
+            "secondary_topic_id": "student_achievement",
+            "label": "Student achievement",
+            "field": "title_or_abstract",
+            "terms": ["student achievement"],
+            "retrieval_terms": ["student achievement"],
+            "matching_terms": ["student achievement"],
+        }
+    )
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("duplicates parent term" in issue for issue in issues)
+
+
+def test_generated_topic_structure_accepts_secondary_with_useful_extra_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["secondary_topics"]["learning_impact"].append(
+        {
+            "secondary_topic_id": "student_outcomes",
+            "label": "Student outcomes",
+            "field": "title_or_abstract",
+            "terms": ["learning outcomes", "dropout", "retention"],
+            "retrieval_terms": ["learning outcomes", "dropout"],
+            "matching_terms": ["learning outcomes", "dropout", "retention"],
+        }
+    )
+
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_requires_non_anchor_secondary_topics() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    del contract["topic_structure"]["secondary_topics"]["learning_impact"]
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any(
+        "non-anchor main topic `learning_impact`" in issue for issue in issues
+    )
+    assert generated_topic_structure_crucial_issues(contract) == []
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_requires_multiple_secondaries_for_broad_methods() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["main_topics"][1] = {
+        "topic_id": "computational_methods",
+        "label": "Computational methods",
+        "field": "title_or_abstract",
+        "terms": ["computational biology", "bioinformatics"],
+        "retrieval_terms": ["computational biology", "bioinformatics"],
+        "matching_terms": ["computational biology", "bioinformatics", "algorithms"],
+    }
+    contract["topic_structure"]["secondary_topics"] = {
+        "computational_methods": [
+            {
+                "secondary_topic_id": "bioinformatics_approaches",
+                "label": "Bioinformatics approaches",
+                "field": "title_or_abstract",
+                "terms": ["genomic analysis", "sequence analysis"],
+                "retrieval_terms": ["genomic analysis"],
+                "matching_terms": ["genomic analysis", "sequence analysis"],
+            }
+        ],
+        "learning_impact": contract["topic_structure"]["secondary_topics"][
+            "learning_impact"
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("at least two controlled fallback groups" in issue for issue in issues)
+    assert generated_topic_structure_crucial_issues(contract) == []
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_rejects_explicit_pair_hidden_under_umbrella() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "traffic_noise"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "traffic_noise",
+            "label": "Traffic noise",
+            "field": "title",
+            "terms": ["traffic noise", "road traffic noise"],
+            "retrieval_terms": ["traffic noise", "road traffic noise"],
+            "matching_terms": ["traffic noise", "road noise"],
+        },
+        {
+            "topic_id": "cognitive_effects",
+            "label": "Cognitive effects",
+            "field": "title_or_abstract",
+            "terms": ["attention", "memory", "cognitive performance"],
+            "retrieval_terms": ["attention", "memory"],
+            "matching_terms": ["attention", "memory", "working memory"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "cognitive_effects": [
+            {
+                "secondary_topic_id": "executive_function",
+                "label": "Executive function",
+                "field": "title_or_abstract",
+                "terms": ["executive function", "cognitive control"],
+                "retrieval_terms": ["executive function"],
+                "matching_terms": ["executive function", "cognitive control"],
+            }
+        ]
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description="Impact of chronic traffic noise on attention and memory",
+    )
+
+    assert any("attention` and `memory" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_criterion_when_comparator_needed() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title_or_abstract",
+            "terms": ["building materials", "construction materials"],
+            "retrieval_terms": ["building materials"],
+            "matching_terms": ["building materials", "construction materials"],
+        },
+        {
+            "topic_id": "sustainability",
+            "label": "Sustainability",
+            "field": "title_or_abstract",
+            "terms": ["sustainability", "environmental impact"],
+            "retrieval_terms": ["sustainability"],
+            "matching_terms": ["sustainability", "green materials"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "building_materials": [
+            {
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            }
+        ],
+        "sustainability": [
+            {
+                "secondary_topic_id": "low_carbon_materials",
+                "label": "Low-carbon materials",
+                "field": "title_or_abstract",
+                "terms": ["low-carbon materials", "green materials"],
+                "retrieval_terms": ["low-carbon materials"],
+                "matching_terms": ["low-carbon materials", "green materials"],
+            }
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+    assert any("broad criterion or motivation topic" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_buried_replacement_target() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title",
+            "terms": ["building materials", "concrete", "biomaterials"],
+            "retrieval_terms": ["building materials", "concrete"],
+            "matching_terms": ["construction materials", "concrete"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "building_materials": [
+            {
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            }
+        ]
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+    assert any(
+        "`concrete`" in issue and "main topic id or label" in issue
+        for issue in issues
+    )
+
+
+def test_generated_topic_structure_accepts_replacement_target_main_topic() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title",
+            "terms": ["building materials", "construction materials"],
+            "retrieval_terms": ["building materials"],
+            "matching_terms": ["building materials", "construction materials"],
+        },
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title",
+            "terms": ["concrete replacement", "concrete alternative"],
+            "retrieval_terms": ["concrete replacement", "concrete alternative"],
+            "matching_terms": ["concrete replacement", "cement substitute"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "building_materials": [
+            {
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            }
+        ],
+        "concrete_replacement": [
+            {
+                "secondary_topic_id": "cement_substitution",
+                "label": "Cement substitution",
+                "field": "title_or_abstract",
+                "terms": ["cement substitute", "cement replacement"],
+                "retrieval_terms": ["cement substitute", "cement replacement"],
+                "matching_terms": ["cement substitute", "cement replacement"],
+            }
+        ],
+    }
+
+    validate_generated_topic_structure_quality(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+
+def test_generated_topic_structure_accepts_source_qualified_material_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium", "fungal materials"],
+            "matching_terms": [
+                "fungi",
+                "mycelium",
+                "mycelium-based materials",
+                "fungal composites",
+            ],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title",
+            "terms": [
+                "building materials",
+                "construction materials",
+                "structural materials",
+                "insulation materials",
+            ],
+            "retrieval_terms": ["building materials", "construction materials"],
+            "matching_terms": ["building elements", "construction components"],
+        },
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title",
+            "terms": ["concrete replacement", "concrete alternative"],
+            "retrieval_terms": ["concrete replacement", "concrete alternative"],
+            "matching_terms": ["concrete replacement", "cement substitute"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "building_materials": [
+            {
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            }
+        ],
+        "concrete_replacement": [
+            {
+                "secondary_topic_id": "cement_substitution",
+                "label": "Cement substitution",
+                "field": "title_or_abstract",
+                "terms": ["cement substitute", "cement replacement"],
+                "retrieval_terms": ["cement substitute", "cement replacement"],
+                "matching_terms": ["cement substitute", "cement replacement"],
+            }
+        ],
+    }
+
+    validate_generated_topic_structure_quality(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+
+def test_generated_topic_structure_rejects_missing_replacement_application_topic() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title_or_abstract",
+            "terms": [
+                "concrete alternative",
+                "sustainable building materials",
+                "green construction",
+            ],
+            "retrieval_terms": ["concrete alternative"],
+            "matching_terms": ["concrete replacement", "green construction"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "concrete_replacement": [
+            {
+                "secondary_topic_id": "cement_substitution",
+                "label": "Cement substitution",
+                "field": "title_or_abstract",
+                "terms": ["cement substitute", "cement replacement"],
+                "retrieval_terms": ["cement substitute", "cement replacement"],
+                "matching_terms": ["cement substitute", "cement replacement"],
+            }
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+    assert any(
+        "`building materials`" in issue
+        and "application/domain component" in issue
+        for issue in issues
+    )
+
+
+def test_generated_topic_structure_rejects_explicit_application_only_in_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title_or_abstract",
+            "terms": ["concrete replacement", "concrete alternative"],
+            "retrieval_terms": ["concrete replacement", "concrete alternative"],
+            "matching_terms": ["cement substitute", "cement replacement"],
+        },
+        {
+            "topic_id": "construction_products",
+            "label": "Construction products",
+            "field": "title_or_abstract",
+            "terms": ["building materials", "construction products"],
+            "retrieval_terms": ["building materials", "building products"],
+            "matching_terms": ["construction products", "building products"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "concrete_replacement": [
+            {
+                "secondary_topic_id": "cement_substitution",
+                "label": "Cement substitution",
+                "field": "title_or_abstract",
+                "terms": ["cement substitute", "cement replacement"],
+                "retrieval_terms": ["cement substitute", "cement replacement"],
+                "matching_terms": ["cement substitute", "cement replacement"],
+            }
+        ],
+        "construction_products": [
+            {
+                "secondary_topic_id": "building_products",
+                "label": "Building products",
+                "field": "title_or_abstract",
+                "terms": ["building products", "construction products"],
+                "retrieval_terms": ["building products"],
+                "matching_terms": ["building products", "construction products"],
+            }
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+    assert any(
+        "`building materials`" in issue
+        and "application/domain component" in issue
+        for issue in issues
+    )
+
+
+def test_generated_topic_structure_rejects_comparator_anchor_for_source_use_question() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "concrete_replacement"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title",
+            "terms": ["concrete replacement", "alternative to concrete"],
+            "retrieval_terms": ["concrete replacement", "concrete alternative"],
+            "matching_terms": ["concrete replacement", "cement substitute"],
+        },
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title_or_abstract",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title",
+            "terms": ["building materials", "construction materials"],
+            "retrieval_terms": ["building materials", "construction materials"],
+            "matching_terms": ["building materials", "construction materials"],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "fungi": [
+            {
+                "secondary_topic_id": "mycelium_materials",
+                "label": "Mycelium materials",
+                "field": "title_or_abstract",
+                "terms": ["mycelium materials", "fungal composites"],
+                "retrieval_terms": ["mycelium materials"],
+                "matching_terms": ["mycelium materials", "fungal composites"],
+            }
+        ],
+        "building_materials": [
+            {
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            }
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+    assert any(
+        "Main topic `fungi`" in issue
+        and "should be the `anchor_topic_id`" in issue
+        for issue in issues
+    )
+
+
+def test_generated_topic_structure_rejects_mixed_replacement_and_application_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title_or_abstract",
+            "terms": [
+                "concrete substitute",
+                "alternative building materials",
+                "green building materials",
+            ],
+            "retrieval_terms": [
+                "concrete replacement",
+                "alternative materials",
+                "sustainable materials",
+            ],
+            "matching_terms": ["building materials", "replacement materials"],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title_or_abstract",
+            "terms": ["building materials", "sustainable construction"],
+            "retrieval_terms": ["building materials"],
+            "matching_terms": [
+                "materials science",
+                "construction technology",
+                "innovative materials",
+            ],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "concrete_replacement": [
+            {
+                "secondary_topic_id": "green_alternatives",
+                "label": "Green alternatives",
+                "field": "title_or_abstract",
+                "terms": ["renewable building materials", "eco-materials"],
+                "retrieval_terms": ["green alternatives"],
+                "matching_terms": ["environmentally friendly materials"],
+            }
+        ],
+        "building_materials": [
+            {
+                "secondary_topic_id": "innovative_materials",
+                "label": "Innovative materials",
+                "field": "title_or_abstract",
+                "terms": ["novel building materials", "biomaterials"],
+                "retrieval_terms": ["biomaterials"],
+                "matching_terms": ["hybrid materials", "advanced materials"],
+            }
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(
+        contract,
+        topic_description=(
+            "Could fungi be used to create sustainable building materials "
+            "that replace concrete in certain applications?"
+        ),
+    )
+
+    assert any("alternative building materials" in issue for issue in issues)
+    assert any("green building materials" in issue for issue in issues)
+    assert any("materials science" in issue for issue in issues)
+    assert any("green_alternatives" in issue for issue in issues)
+    assert any("innovative_materials" in issue for issue in issues)
+
+
+def test_generated_topic_structure_rejects_application_process_property_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "fungi"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "fungi",
+            "label": "Fungi",
+            "field": "title",
+            "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+            "retrieval_terms": ["fungi", "mycelium"],
+            "matching_terms": ["fungi", "mycelium"],
+        },
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title_or_abstract",
+            "terms": ["building materials", "construction products"],
+            "retrieval_terms": ["building materials", "building products"],
+            "matching_terms": [
+                "structural integrity",
+                "construction innovations",
+                "building techniques",
+            ],
+        },
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "building_materials": [
+            {
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            }
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("structural integrity" in issue for issue in issues)
+    assert any("construction innovations" in issue for issue in issues)
+    assert any("building techniques" in issue for issue in issues)
+
+
+def test_generated_topic_structure_allows_one_secondary_for_narrow_outcome() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+
+    validate_generated_topic_structure_quality(contract)
+
+
+def test_generated_topic_structure_accepts_atomic_multiword_topics() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml"))
+
+    validate_generated_topic_structure_quality(contract)

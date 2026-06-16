@@ -504,17 +504,21 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
                             ],
                         },
                     ],
-                    "secondary_topics": {
-                        "climate_change": [
-                            "weather",
-                            "environmental change",
-                        ],
-                        "human_health": [
-                            "well-being",
-                            "public health adaptation",
-                        ],
+                        "secondary_topics": {
+                            "climate_change": [
+                                "weather",
+                                "environmental change",
+                            ],
+                            "human_health": [
+                                "well-being",
+                                "public health adaptation",
+                            ],
+                            "adaptation_strategy": [
+                                "resilience planning",
+                                "preparedness policy",
+                            ],
+                        },
                     },
-                },
                 "scope": {
                     "include_criteria": [
                         "Studies directly examining climate-related health outcomes",
@@ -767,6 +771,1201 @@ def test_generate_topic_contract_still_retries_on_structural_errors(
     assert client.requests[1]["call_id"] == "contract_retry_2"
     assert "previous JSON response failed validation" in client.requests[1]["prompt"]
     assert "topic_structure.anchor_topic_id" in client.requests[1]["prompt"]
+
+
+def test_generate_topic_contract_retries_on_merged_topic_structure(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_structure"]["main_topics"][0]["topic_id"] = "ai_in_school"
+    invalid_payload["topic_structure"]["anchor_topic_id"] = "ai_in_school"
+    client = StaticJSONClient([invalid_payload, generated_topic_contract_payload()])
+    output = tmp_path / "contract.yaml"
+
+    result = run_generate_topic_contract(
+        "Use of AI in school lessons and student performance",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    assert contract["topic_structure"]["anchor_topic_id"] == "ai"
+    assert result.row_counts["tagging_categories"] == 6
+    assert len(client.requests) == 2
+    assert client.requests[1]["call_id"] == "contract_retry_2"
+    assert "one concept area per main topic" in client.requests[1]["prompt"]
+    assert "ai_in_school" in client.requests[1]["prompt"]
+
+
+def test_contract_payload_removes_duplicate_secondary_parent_terms() -> None:
+    payload = generated_topic_contract_payload()
+    payload["topic_structure"]["secondary_topics"]["learning_impact"].append(
+        {
+            "secondary_topic_id": "student_outcomes",
+            "label": "Student outcomes",
+            "field": "title_or_abstract",
+            "terms": ["learning outcomes", "dropout", "retention"],
+            "retrieval_terms": ["learning outcomes", "dropout"],
+            "matching_terms": ["learning outcomes", "dropout", "retention"],
+        }
+    )
+
+    contract = contract_from_model_payload(payload)
+    groups = contract["topic_structure"]["secondary_topics"]["learning_impact"]
+    student_outcomes = [
+        group
+        for group in groups
+        if group["secondary_topic_id"] == "student_outcomes"
+    ][0]
+
+    assert student_outcomes["terms"] == ["dropout", "retention"]
+    assert student_outcomes["retrieval_terms"] == ["dropout"]
+    assert student_outcomes["matching_terms"] == ["dropout", "retention"]
+
+
+def test_generate_topic_contract_repairs_duplicate_secondary_topic(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_structure"]["secondary_topics"]["formal_education"].append(
+        {
+            "secondary_topic_id": "school",
+            "label": "School",
+            "field": "title",
+            "terms": ["school"],
+            "retrieval_terms": ["school"],
+            "matching_terms": ["school"],
+        }
+    )
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    repair_topic_structure["secondary_topics"]["formal_education"] = (
+        repair_topic_structure["secondary_topics"]["formal_education"][:-1]
+    )
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    result = run_generate_topic_contract(
+        "Use of AI in school lessons and student performance",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    assert result.row_counts["tagging_categories"] == 6
+    assert [request["call_id"] for request in client.requests] == [
+        "contract",
+        "contract_retry_2",
+        "contract_retry_3",
+        "contract_retry_3_topic_structure_repair",
+    ]
+    assert all(
+        group["secondary_topic_id"] != "school"
+        for group in contract["topic_structure"]["secondary_topics"][
+            "formal_education"
+        ]
+    )
+    assert any(
+        path.name.endswith("topic_structure_repair_parsed.json")
+        for path in result.trace_paths
+    )
+
+
+def test_generate_topic_contract_warns_when_topic_structure_repair_still_weak(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_structure"]["main_topics"][0]["topic_id"] = "ai_in_school"
+    invalid_payload["topic_structure"]["anchor_topic_id"] = "ai_in_school"
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    result = run_generate_topic_contract(
+        "Use of AI in school lessons and student performance",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    assert output.exists()
+    assert contract["topic_structure"]["anchor_topic_id"] == "ai_in_school"
+    assert len(client.requests) == 4
+    assert result.warnings
+    assert "Contract review recommended" in result.warnings[0]
+    assert "topic_structure" in result.warnings[0]
+    assert "ai_in_school" in result.warnings[0]
+
+
+def test_generate_topic_contract_repairs_explicit_pair_umbrella_topic(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "traffic_noise_attention_memory"
+    invalid_payload["research_topic"] = {
+        "title": "Traffic noise effects on attention and memory",
+        "description": "Research on chronic traffic noise, attention, and memory.",
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "traffic_noise",
+        "anchor_reason": "Traffic noise is the non-replaceable exposure.",
+        "main_topics": [
+            {
+                "topic_id": "traffic_noise",
+                "label": "Traffic noise",
+                "field": "title",
+                "terms": ["traffic noise", "road traffic noise"],
+                "retrieval_terms": ["traffic noise", "road traffic noise"],
+                "matching_terms": ["traffic noise", "road noise"],
+            },
+            {
+                "topic_id": "cognitive_effects",
+                "label": "Cognitive effects",
+                "field": "title_or_abstract",
+                "terms": ["attention", "memory", "cognitive performance"],
+                "retrieval_terms": ["attention", "memory"],
+                "matching_terms": ["attention", "memory", "working memory"],
+            },
+        ],
+        "secondary_topics": {
+            "cognitive_effects": [
+                {
+                    "secondary_topic_id": "executive_function",
+                    "label": "Executive function",
+                    "field": "title_or_abstract",
+                    "terms": ["executive function", "cognitive control"],
+                    "retrieval_terms": ["executive function"],
+                    "matching_terms": ["executive function", "cognitive control"],
+                }
+            ]
+        },
+    }
+    repair_topic_structure = {
+        "anchor_topic_id": "traffic_noise",
+        "anchor_reason": "Traffic noise is the non-replaceable exposure.",
+        "main_topics": [
+            {
+                "topic_id": "traffic_noise",
+                "label": "Traffic noise",
+                "field": "title",
+                "terms": ["traffic noise", "road traffic noise"],
+                "retrieval_terms": ["traffic noise", "road traffic noise"],
+                "matching_terms": ["traffic noise", "road noise"],
+            },
+            {
+                "topic_id": "attention",
+                "label": "Attention",
+                "field": "title_or_abstract",
+                "terms": ["attention", "sustained attention"],
+                "retrieval_terms": ["attention", "sustained attention"],
+                "matching_terms": ["attention", "attention span"],
+            },
+            {
+                "topic_id": "memory",
+                "label": "Memory",
+                "field": "title_or_abstract",
+                "terms": ["memory", "working memory"],
+                "retrieval_terms": ["memory", "working memory"],
+                "matching_terms": ["memory", "memory recall", "working memory"],
+            },
+        ],
+        "secondary_topics": [
+            {
+                "main_topic_id": "attention",
+                "secondary_topic_id": "executive_function",
+                "label": "Executive function",
+                "field": "title_or_abstract",
+                "terms": ["executive function", "cognitive control"],
+                "retrieval_terms": ["executive function"],
+                "matching_terms": ["executive function", "cognitive control"],
+            },
+            {
+                "main_topic_id": "memory",
+                "secondary_topic_id": "learning_recall",
+                "label": "Learning and recall",
+                "field": "title_or_abstract",
+                "terms": ["recall", "learning", "recognition memory"],
+                "retrieval_terms": ["recall", "recognition memory"],
+                "matching_terms": ["recall", "learning", "recognition memory"],
+            },
+        ],
+    }
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Impact of chronic traffic noise on attention and memory",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    topic_ids = [
+        topic["topic_id"] for topic in contract["topic_structure"]["main_topics"]
+    ]
+    assert "attention" in topic_ids
+    assert "memory" in topic_ids
+    assert "cognitive_effects" not in topic_ids
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_criterion_topic_to_comparator(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_sustainable_materials"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the non-replaceable biological source.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title_or_abstract",
+                "terms": ["building materials", "construction materials"],
+                "retrieval_terms": ["building materials"],
+                "matching_terms": ["building materials", "construction materials"],
+            },
+            {
+                "topic_id": "sustainability",
+                "label": "Sustainability",
+                "field": "title_or_abstract",
+                "terms": ["sustainability", "environmental impact"],
+                "retrieval_terms": ["sustainability"],
+                "matching_terms": ["sustainability", "green materials"],
+            },
+        ],
+        "secondary_topics": {
+            "building_materials": [
+                {
+                    "secondary_topic_id": "construction_products",
+                    "label": "Construction products",
+                    "field": "title_or_abstract",
+                    "terms": ["construction products", "building products"],
+                    "retrieval_terms": ["construction products"],
+                    "matching_terms": [
+                        "construction products",
+                        "building products",
+                    ],
+                }
+            ],
+            "sustainability": [
+                {
+                    "secondary_topic_id": "low_carbon_materials",
+                    "label": "Low-carbon materials",
+                    "field": "title_or_abstract",
+                    "terms": ["low-carbon materials", "green materials"],
+                    "retrieval_terms": ["low-carbon materials"],
+                    "matching_terms": ["low-carbon materials", "green materials"],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the non-replaceable biological source.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title_or_abstract",
+                "terms": ["building materials", "construction materials"],
+                "retrieval_terms": ["building materials"],
+                "matching_terms": ["building materials", "construction materials"],
+            },
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title_or_abstract",
+                "terms": ["concrete replacement", "concrete alternative"],
+                "retrieval_terms": ["concrete replacement", "concrete alternative"],
+                "matching_terms": [
+                    "concrete replacement",
+                    "concrete alternative",
+                    "cement substitute",
+                ],
+            },
+        ],
+        "secondary_topics": [
+            {
+                "main_topic_id": "building_materials",
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            },
+            {
+                "main_topic_id": "concrete_replacement",
+                "secondary_topic_id": "cement_substitution",
+                "label": "Cement substitution",
+                "field": "title_or_abstract",
+                "terms": ["cement substitute", "cement replacement"],
+                "retrieval_terms": ["cement substitute", "cement replacement"],
+                "matching_terms": ["cement substitute", "cement replacement"],
+            },
+        ],
+    }
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    topic_ids = [
+        topic["topic_id"] for topic in contract["topic_structure"]["main_topics"]
+    ]
+    assert "concrete_replacement" in topic_ids
+    assert "sustainability" not in topic_ids
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_buried_replacement_target(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_sustainable_building_materials"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the non-replaceable biological source.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title",
+                "terms": ["building materials", "concrete", "biomaterials"],
+                "retrieval_terms": ["building materials", "concrete"],
+                "matching_terms": ["building materials", "concrete"],
+            },
+        ],
+        "secondary_topics": {
+            "building_materials": [
+                {
+                    "secondary_topic_id": "construction_products",
+                    "label": "Construction products",
+                    "field": "title_or_abstract",
+                    "terms": ["construction products", "building products"],
+                    "retrieval_terms": ["construction products"],
+                    "matching_terms": [
+                        "construction products",
+                        "building products",
+                    ],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    repair_topic_structure["main_topics"].append(
+        {
+            "topic_id": "concrete_replacement",
+            "label": "Concrete replacement",
+            "field": "title_or_abstract",
+            "terms": ["concrete replacement", "concrete alternative"],
+            "retrieval_terms": ["concrete replacement", "concrete alternative"],
+            "matching_terms": ["concrete replacement", "cement substitute"],
+        }
+    )
+    repair_topic_structure["main_topics"][1]["terms"] = [
+        "building materials",
+        "construction materials",
+        "structural materials",
+        "insulation materials",
+    ]
+    repair_topic_structure["main_topics"][1]["retrieval_terms"] = [
+        "building materials",
+        "construction materials",
+    ]
+    repair_topic_structure["main_topics"][1]["matching_terms"] = [
+        "structural materials",
+        "insulation materials",
+    ]
+    repair_topic_structure["secondary_topics"] = [
+        {
+            "main_topic_id": "building_materials",
+            "secondary_topic_id": "construction_products",
+            "label": "Construction products",
+            "field": "title_or_abstract",
+            "terms": ["construction products", "building products"],
+            "retrieval_terms": ["construction products"],
+            "matching_terms": ["construction products", "building products"],
+        },
+        {
+            "main_topic_id": "concrete_replacement",
+            "secondary_topic_id": "cement_substitution",
+            "label": "Cement substitution",
+            "field": "title_or_abstract",
+            "terms": ["cement substitute", "cement replacement"],
+            "retrieval_terms": ["cement substitute", "cement replacement"],
+            "matching_terms": ["cement substitute", "cement replacement"],
+        },
+    ]
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    topic_ids = [
+        topic["topic_id"] for topic in contract["topic_structure"]["main_topics"]
+    ]
+    assert "concrete_replacement" in topic_ids
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_missing_replacement_application(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_sustainable_building_materials"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the non-replaceable biological source.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium"],
+            },
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title_or_abstract",
+                "terms": [
+                    "concrete alternative",
+                    "sustainable building materials",
+                    "green construction",
+                ],
+                "retrieval_terms": ["concrete alternative"],
+                "matching_terms": ["concrete replacement", "green construction"],
+            },
+        ],
+        "secondary_topics": {
+            "concrete_replacement": [
+                {
+                    "secondary_topic_id": "cement_substitution",
+                    "label": "Cement substitution",
+                    "field": "title_or_abstract",
+                    "terms": ["cement substitute", "cement replacement"],
+                    "retrieval_terms": ["cement substitute", "cement replacement"],
+                    "matching_terms": ["cement substitute", "cement replacement"],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    repair_topic_structure["main_topics"].insert(
+        1,
+        {
+            "topic_id": "building_materials",
+            "label": "Building materials",
+            "field": "title",
+            "terms": ["building materials", "construction materials"],
+            "retrieval_terms": ["building materials", "construction materials"],
+            "matching_terms": ["building materials", "construction materials"],
+        },
+    )
+    repair_topic_structure["main_topics"][2]["terms"] = [
+        "concrete replacement",
+        "concrete alternative",
+    ]
+    repair_topic_structure["main_topics"][2]["retrieval_terms"] = [
+        "concrete replacement",
+        "concrete alternative",
+    ]
+    repair_topic_structure["main_topics"][2]["matching_terms"] = [
+        "concrete replacement",
+        "cement substitute",
+    ]
+    repair_topic_structure["secondary_topics"] = [
+        {
+            "main_topic_id": "building_materials",
+            "secondary_topic_id": "construction_products",
+            "label": "Construction products",
+            "field": "title_or_abstract",
+            "terms": ["construction products", "building products"],
+            "retrieval_terms": ["construction products"],
+            "matching_terms": ["construction products", "building products"],
+        },
+        {
+            "main_topic_id": "concrete_replacement",
+            "secondary_topic_id": "cement_substitution",
+            "label": "Cement substitution",
+            "field": "title_or_abstract",
+            "terms": ["cement substitute", "cement replacement"],
+            "retrieval_terms": ["cement substitute", "cement replacement"],
+            "matching_terms": ["cement substitute", "cement replacement"],
+        },
+    ]
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    topic_ids = [
+        topic["topic_id"] for topic in contract["topic_structure"]["main_topics"]
+    ]
+    assert topic_ids == ["fungi", "building_materials", "concrete_replacement"]
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_comparator_anchor(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_concrete_replacement"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "concrete_replacement",
+        "anchor_reason": "Concrete replacement is required for title relevance.",
+        "main_topics": [
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title",
+                "terms": ["concrete replacement", "alternative to concrete"],
+                "retrieval_terms": ["concrete replacement", "concrete alternative"],
+                "matching_terms": ["concrete replacement", "cement substitute"],
+            },
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title_or_abstract",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title",
+                "terms": ["building materials", "construction materials"],
+                "retrieval_terms": ["building materials", "construction materials"],
+                "matching_terms": ["building materials", "construction materials"],
+            },
+        ],
+        "secondary_topics": {
+            "fungi": [
+                {
+                    "secondary_topic_id": "mycelium_materials",
+                    "label": "Mycelium materials",
+                    "field": "title_or_abstract",
+                    "terms": ["mycelium materials", "fungal composites"],
+                    "retrieval_terms": ["mycelium materials"],
+                    "matching_terms": ["mycelium materials", "fungal composites"],
+                }
+            ],
+            "building_materials": [
+                {
+                    "secondary_topic_id": "construction_products",
+                    "label": "Construction products",
+                    "field": "title_or_abstract",
+                    "terms": ["construction products", "building products"],
+                    "retrieval_terms": ["construction products"],
+                    "matching_terms": ["construction products", "building products"],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    repair_topic_structure["anchor_topic_id"] = "fungi"
+    repair_topic_structure["anchor_reason"] = (
+        "Fungi are the non-replaceable biological source."
+    )
+    repair_topic_structure["main_topics"][0]["field"] = "title_or_abstract"
+    repair_topic_structure["main_topics"][1]["field"] = "title"
+    repair_topic_structure["secondary_topics"] = [
+        {
+            "main_topic_id": "building_materials",
+            "secondary_topic_id": "construction_products",
+            "label": "Construction products",
+            "field": "title_or_abstract",
+            "terms": ["construction products", "building products"],
+            "retrieval_terms": ["construction products"],
+            "matching_terms": ["construction products", "building products"],
+        },
+        {
+            "main_topic_id": "concrete_replacement",
+            "secondary_topic_id": "cement_substitution",
+            "label": "Cement substitution",
+            "field": "title_or_abstract",
+            "terms": ["cement substitute", "cement replacement"],
+            "retrieval_terms": ["cement substitute", "cement replacement"],
+            "matching_terms": ["cement substitute", "cement replacement"],
+        },
+    ]
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    assert contract["topic_structure"]["anchor_topic_id"] == "fungi"
+    topic_by_id = {
+        topic["topic_id"]: topic for topic in contract["topic_structure"]["main_topics"]
+    }
+    assert topic_by_id["fungi"]["field"] == "title"
+    assert "fungi" not in contract["topic_structure"]["secondary_topics"]
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_mixed_replacement_and_application_terms(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_building_materials"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the proposed source material.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium"],
+            },
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title_or_abstract",
+                "terms": [
+                    "concrete substitute",
+                    "alternative building materials",
+                    "green building materials",
+                ],
+                "retrieval_terms": [
+                    "concrete replacement",
+                    "alternative materials",
+                    "sustainable materials",
+                ],
+                "matching_terms": ["building materials", "replacement materials"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title_or_abstract",
+                "terms": ["building materials", "sustainable construction"],
+                "retrieval_terms": ["building materials"],
+                "matching_terms": [
+                    "materials science",
+                    "construction technology",
+                    "innovative materials",
+                ],
+            },
+        ],
+        "secondary_topics": {
+            "concrete_replacement": [
+                {
+                    "secondary_topic_id": "green_alternatives",
+                    "label": "Green alternatives",
+                    "field": "title_or_abstract",
+                    "terms": ["renewable building materials", "eco-materials"],
+                    "retrieval_terms": ["green alternatives"],
+                    "matching_terms": ["environmentally friendly materials"],
+                }
+            ],
+            "building_materials": [
+                {
+                    "secondary_topic_id": "innovative_materials",
+                    "label": "Innovative materials",
+                    "field": "title_or_abstract",
+                    "terms": ["novel building materials", "biomaterials"],
+                    "retrieval_terms": ["biomaterials"],
+                    "matching_terms": ["hybrid materials", "advanced materials"],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the non-replaceable biological source.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium", "mushroom"],
+                "matching_terms": ["fungi", "mycelium", "fungal material"],
+            },
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title_or_abstract",
+                "terms": ["concrete replacement", "concrete alternative"],
+                "retrieval_terms": ["concrete replacement", "concrete alternative"],
+                "matching_terms": [
+                    "concrete substitute",
+                    "concrete alternative",
+                ],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title_or_abstract",
+                "terms": ["building materials", "construction materials"],
+                "retrieval_terms": ["building materials", "construction materials"],
+                "matching_terms": ["building elements", "construction components"],
+            },
+        ],
+        "secondary_topics": [
+            {
+                "main_topic_id": "concrete_replacement",
+                "secondary_topic_id": "cement_substitution",
+                "label": "Cement substitution",
+                "field": "title_or_abstract",
+                "terms": ["cement substitute", "cement replacement"],
+                "retrieval_terms": ["cement substitute", "cement replacement"],
+                "matching_terms": ["cement substitute", "cement replacement"],
+            },
+            {
+                "main_topic_id": "building_materials",
+                "secondary_topic_id": "construction_products",
+                "label": "Construction products",
+                "field": "title_or_abstract",
+                "terms": ["construction products", "building products"],
+                "retrieval_terms": ["construction products"],
+                "matching_terms": ["construction products", "building products"],
+            },
+        ],
+    }
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    topic_by_id = {
+        topic["topic_id"]: topic for topic in contract["topic_structure"]["main_topics"]
+    }
+    assert topic_by_id["concrete_replacement"]["terms"] == [
+        "concrete replacement",
+        "concrete alternative",
+    ]
+    assert "building materials" not in topic_by_id["concrete_replacement"][
+        "matching_terms"
+    ]
+    assert topic_by_id["building_materials"]["matching_terms"] == [
+        "building elements",
+        "construction components",
+    ]
+    assert "green_alternatives" not in {
+        group["secondary_topic_id"]
+        for group in contract["topic_structure"]["secondary_topics"][
+            "concrete_replacement"
+        ]
+    }
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_application_secondary_criterion_group(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_building_materials"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the proposed source material.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium"],
+                "matching_terms": ["fungi", "mycelium", "fungal material"],
+            },
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title_or_abstract",
+                "terms": ["concrete replacement", "concrete alternative"],
+                "retrieval_terms": ["concrete replacement", "concrete alternative"],
+                "matching_terms": ["concrete substitute", "concrete alternative"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title_or_abstract",
+                "terms": [
+                    "building materials",
+                    "construction materials",
+                    "structural materials",
+                    "insulation materials",
+                ],
+                "retrieval_terms": ["building materials", "construction materials"],
+                "matching_terms": ["building elements", "sustainable materials"],
+            },
+        ],
+        "secondary_topics": {
+            "concrete_replacement": [
+                {
+                    "secondary_topic_id": "cement_substitution",
+                    "label": "Cement substitution",
+                    "field": "title_or_abstract",
+                    "terms": ["cement substitute", "cement replacement"],
+                    "retrieval_terms": ["cement substitute", "cement replacement"],
+                    "matching_terms": ["cement substitute", "cement replacement"],
+                }
+            ],
+            "building_materials": [
+                {
+                    "secondary_topic_id": "eco_construction_materials",
+                    "label": "Eco construction materials",
+                    "field": "title_or_abstract",
+                    "terms": [
+                        "sustainable construction materials",
+                        "green alternatives",
+                        "eco-friendly materials",
+                    ],
+                    "retrieval_terms": ["eco-friendly materials"],
+                    "matching_terms": [
+                        "sustainable construction materials",
+                        "green alternatives",
+                    ],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    repair_topic_structure["main_topics"][2]["matching_terms"] = [
+        "building elements",
+        "construction components",
+    ]
+    repair_topic_structure["secondary_topics"] = [
+        {
+            "main_topic_id": "concrete_replacement",
+            "secondary_topic_id": "cement_substitution",
+            "label": "Cement substitution",
+            "field": "title_or_abstract",
+            "terms": ["cement substitute", "cement replacement"],
+            "retrieval_terms": ["cement substitute", "cement replacement"],
+            "matching_terms": ["cement substitute", "cement replacement"],
+        },
+        {
+            "main_topic_id": "building_materials",
+            "secondary_topic_id": "construction_products",
+            "label": "Construction products",
+            "field": "title_or_abstract",
+            "terms": ["construction products", "building products"],
+            "retrieval_terms": ["construction products"],
+            "matching_terms": ["construction products", "building products"],
+        },
+    ]
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    assert contract["topic_structure"]["secondary_topics"]["building_materials"][
+        0
+    ]["secondary_topic_id"] == "construction_products"
+    topic_by_id = {
+        topic["topic_id"]: topic for topic in contract["topic_structure"]["main_topics"]
+    }
+    assert "sustainable materials" not in topic_by_id["building_materials"][
+        "matching_terms"
+    ]
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
+
+
+def test_generate_topic_contract_repairs_missing_application_secondary_group(
+    tmp_path: Path,
+) -> None:
+    invalid_payload = generated_topic_contract_payload()
+    invalid_payload["topic_id"] = "fungi_building_materials"
+    invalid_payload["research_topic"] = {
+        "title": "Fungi as sustainable building materials",
+        "description": (
+            "Research on fungal materials that could replace concrete in "
+            "building applications."
+        ),
+    }
+    invalid_payload["topic_structure"] = {
+        "anchor_topic_id": "fungi",
+        "anchor_reason": "Fungi are the proposed source material.",
+        "main_topics": [
+            {
+                "topic_id": "fungi",
+                "label": "Fungi",
+                "field": "title",
+                "terms": ["fungi", "mycelium", "mushroom", "fungal material"],
+                "retrieval_terms": ["fungi", "mycelium", "fungal materials"],
+                "matching_terms": [
+                    "fungi",
+                    "mycelium",
+                    "mycelium-based materials",
+                    "fungal composites",
+                ],
+            },
+            {
+                "topic_id": "concrete_replacement",
+                "label": "Concrete replacement",
+                "field": "title_or_abstract",
+                "terms": ["concrete replacement", "concrete alternative"],
+                "retrieval_terms": ["concrete replacement", "concrete alternative"],
+                "matching_terms": ["concrete substitute", "concrete alternative"],
+            },
+            {
+                "topic_id": "building_materials",
+                "label": "Building materials",
+                "field": "title_or_abstract",
+                "terms": [
+                    "building materials",
+                    "construction materials",
+                    "structural materials",
+                    "insulation materials",
+                ],
+                "retrieval_terms": ["building materials", "construction materials"],
+                "matching_terms": ["building elements", "construction components"],
+            },
+        ],
+        "secondary_topics": {
+            "concrete_replacement": [
+                {
+                    "secondary_topic_id": "cement_substitution",
+                    "label": "Cement substitution",
+                    "field": "title_or_abstract",
+                    "terms": ["cement substitute", "cement replacement"],
+                    "retrieval_terms": ["cement substitute", "cement replacement"],
+                    "matching_terms": ["cement substitute", "cement replacement"],
+                }
+            ],
+        },
+    }
+    repair_topic_structure = deepcopy(invalid_payload["topic_structure"])
+    repair_topic_structure["secondary_topics"] = [
+        {
+            "main_topic_id": "concrete_replacement",
+            "secondary_topic_id": "cement_substitution",
+            "label": "Cement substitution",
+            "field": "title_or_abstract",
+            "terms": ["cement substitute", "cement replacement"],
+            "retrieval_terms": ["cement substitute", "cement replacement"],
+            "matching_terms": ["cement substitute", "cement replacement"],
+        },
+        {
+            "main_topic_id": "building_materials",
+            "secondary_topic_id": "construction_products",
+            "label": "Construction products",
+            "field": "title_or_abstract",
+            "terms": ["construction products", "building products"],
+            "retrieval_terms": ["construction products"],
+            "matching_terms": ["construction products", "building products"],
+        },
+    ]
+    client = StaticJSONClient(
+        [
+            invalid_payload,
+            deepcopy(invalid_payload),
+            deepcopy(invalid_payload),
+            repair_topic_structure,
+        ]
+    )
+    output = tmp_path / "contract.yaml"
+
+    run_generate_topic_contract(
+        "Could fungi be used to create sustainable building materials that "
+        "replace concrete in certain applications?",
+        output,
+        "test-model",
+        client=client,
+        trace_dir=tmp_path / "traces",
+    )
+
+    contract = load_topic_contract(output)
+    topic_by_id = {
+        topic["topic_id"]: topic for topic in contract["topic_structure"]["main_topics"]
+    }
+    assert "mycelium-based materials" in topic_by_id["fungi"]["matching_terms"]
+    assert contract["topic_structure"]["secondary_topics"]["building_materials"][
+        0
+    ]["secondary_topic_id"] == "construction_products"
+    assert client.requests[-1]["call_id"] == "contract_retry_3_topic_structure_repair"
 
 
 def test_refine_topic_contract_adds_review_seeded_categories(
@@ -1395,7 +2594,7 @@ def test_title_relevance_screening_applies_anchor_and_tiers(
                 "matched_secondary_topics": [
                     {
                         "main_topic_id": "formal_education",
-                        "secondary_topic_id": "formal_education_secondary_1",
+                        "secondary_topic_id": "higher_education",
                         "terms": ["university"],
                     }
                 ],
@@ -1421,7 +2620,7 @@ def test_title_relevance_screening_applies_anchor_and_tiers(
                 "matched_secondary_topics": [
                     {
                         "main_topic_id": "learning_impact",
-                        "secondary_topic_id": "learning_impact_secondary_1",
+                        "secondary_topic_id": "student_wellbeing",
                         "terms": ["well-being"],
                     }
                 ],

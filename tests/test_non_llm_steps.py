@@ -804,6 +804,9 @@ def test_candidate_topic_matches_record_values_and_fields() -> None:
         topic["field"] = "title_or_abstract"
         if topic["topic_id"] == "ai":
             topic["retrieval_terms"] = ["deep learning"]
+    for groups in contract["topic_structure"]["secondary_topics"].values():
+        for group in groups:
+            group["field"] = "title_or_abstract"
 
     candidate = {
         "title": "Deep learning in K-12 classroom instruction",

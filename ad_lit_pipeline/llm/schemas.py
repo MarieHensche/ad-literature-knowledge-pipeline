@@ -121,53 +121,8 @@ def plan_schema(provider_names: list[str]) -> dict[str, Any]:
     }
 
 
-def topic_contract_schema(
-    provider_names: list[str],
-    min_tagging_categories: int = 6,
-) -> dict[str, Any]:
-    """Build the JSON schema for generated topic contract drafts."""
-    category_dependency_schema = {
-        "type": "object",
-        "properties": {
-            "category_id": {"type": "string"},
-            "values": {
-                "type": "array",
-                "minItems": 1,
-                "items": {"type": "string"},
-            },
-        },
-        "required": ["category_id", "values"],
-        "additionalProperties": False,
-    }
-    category_schema = {
-        "type": "object",
-        "properties": {
-            "category_id": {"type": "string"},
-            "description": {"type": "string"},
-            "required": {"type": "boolean"},
-            "selection": {"type": "string", "enum": ["single", "multi"]},
-            "values": {
-                "type": "array",
-                "minItems": 2,
-                "items": {"type": "string"},
-            },
-            "applies_when": {
-                "type": ["object", "null"],
-                "properties": category_dependency_schema["properties"],
-                "required": category_dependency_schema["required"],
-                "additionalProperties": False,
-            },
-        },
-        "required": [
-            "category_id",
-            "description",
-            "required",
-            "selection",
-            "values",
-            "applies_when",
-        ],
-        "additionalProperties": False,
-    }
+def topic_structure_schema() -> dict[str, Any]:
+    """Build the JSON schema for generated topic structures."""
     main_topic_schema = {
         "type": "object",
         "properties": {
@@ -216,7 +171,7 @@ def topic_contract_schema(
             },
             "terms": {
                 "type": "array",
-                "minItems": 1,
+                "minItems": 2,
                 "items": {"type": "string"},
             },
             "retrieval_terms": {
@@ -246,6 +201,79 @@ def topic_contract_schema(
     return {
         "type": "object",
         "properties": {
+            "anchor_topic_id": {"type": "string"},
+            "anchor_reason": {"type": "string"},
+            "main_topics": {
+                "type": "array",
+                "minItems": 2,
+                "items": main_topic_schema,
+            },
+            "secondary_topics": {
+                "type": "array",
+                "items": secondary_topic_schema,
+            },
+        },
+        "required": [
+            "anchor_topic_id",
+            "anchor_reason",
+            "main_topics",
+            "secondary_topics",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def topic_contract_schema(
+    provider_names: list[str],
+    min_tagging_categories: int = 6,
+) -> dict[str, Any]:
+    """Build the JSON schema for generated topic contract drafts."""
+    category_dependency_schema = {
+        "type": "object",
+        "properties": {
+            "category_id": {"type": "string"},
+            "values": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["category_id", "values"],
+        "additionalProperties": False,
+    }
+    category_schema = {
+        "type": "object",
+        "properties": {
+            "category_id": {"type": "string"},
+            "description": {"type": "string"},
+            "required": {"type": "boolean"},
+            "selection": {"type": "string", "enum": ["single", "multi"]},
+            "values": {
+                "type": "array",
+                "minItems": 2,
+                "items": {"type": "string"},
+            },
+            "applies_when": {
+                "type": ["object", "null"],
+                "properties": category_dependency_schema["properties"],
+                "required": category_dependency_schema["required"],
+                "additionalProperties": False,
+            },
+        },
+        "required": [
+            "category_id",
+            "description",
+            "required",
+            "selection",
+            "values",
+            "applies_when",
+        ],
+        "additionalProperties": False,
+    }
+
+    return {
+        "type": "object",
+        "properties": {
             "topic_id": {"type": "string"},
             "research_topic": {
                 "type": "object",
@@ -256,29 +284,7 @@ def topic_contract_schema(
                 "required": ["title", "description"],
                 "additionalProperties": False,
             },
-            "topic_structure": {
-                "type": "object",
-                "properties": {
-                    "anchor_topic_id": {"type": "string"},
-                    "anchor_reason": {"type": "string"},
-                    "main_topics": {
-                        "type": "array",
-                        "minItems": 2,
-                        "items": main_topic_schema,
-                    },
-                    "secondary_topics": {
-                        "type": "array",
-                        "items": secondary_topic_schema,
-                    },
-                },
-                "required": [
-                    "anchor_topic_id",
-                    "anchor_reason",
-                    "main_topics",
-                    "secondary_topics",
-                ],
-                "additionalProperties": False,
-            },
+            "topic_structure": topic_structure_schema(),
             "scope": {
                 "type": "object",
                 "properties": {

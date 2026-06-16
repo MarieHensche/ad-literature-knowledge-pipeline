@@ -23,6 +23,7 @@ topic_structure:
   main_topics:
     - topic_id: ai
       label: Artificial intelligence
+      field: title
       terms:
         - artificial intelligence
         - AI
@@ -38,10 +39,40 @@ topic_structure:
         - AI tutor
         - automated feedback
         - algorithmic personalization
+      retrieval_terms:
+        - artificial intelligence
+        - AI
+        - machine learning
+        - generative AI
+        - ChatGPT
+        - chatbot
+        - large language model
+        - LLM
+        - intelligent tutoring system
+        - adaptive learning system
+        - automated feedback
+      matching_terms:
+        - artificial intelligence
+        - AI
+        - machine learning
+        - ML
+        - deep learning
+        - generative AI
+        - ChatGPT
+        - chatbot
+        - large language model
+        - LLM
+        - intelligent tutoring system
+        - intelligent tutoring systems
+        - adaptive learning system
+        - adaptive learning systems
+        - AI tutor
+        - automated feedback
+        - algorithmic personalization
     - topic_id: formal_education
       label: Formal education setting
+      field: title
       terms:
-        - education
         - school
         - classroom
         - primary school
@@ -50,9 +81,34 @@ topic_structure:
         - K-12
         - course
         - teaching
-        - learning
+        - school lesson
+      retrieval_terms:
+        - school
+        - classroom
+        - primary school
+        - secondary school
+        - high school
+        - K-12
+        - course
+        - formal education
+      matching_terms:
+        - school
+        - schools
+        - classroom
+        - classrooms
+        - primary school
+        - secondary school
+        - high school
+        - K-12
+        - course
+        - courses
+        - teaching
+        - formal education
+        - school lesson
+        - school lessons
     - topic_id: learning_impact
       label: Learning or student impact
+      field: title
       terms:
         - academic performance
         - learning outcomes
@@ -63,19 +119,100 @@ topic_structure:
         - motivation
         - participation
         - learning experience
+      retrieval_terms:
+        - academic performance
+        - learning outcomes
+        - student achievement
+        - grades
+        - test scores
+        - engagement
+        - motivation
+        - learning experience
+      matching_terms:
+        - academic performance
+        - learning outcomes
+        - student achievement
+        - student performance
+        - grades
+        - test scores
+        - exam scores
+        - engagement
+        - motivation
+        - participation
+        - learning experience
+        - learning gains
   secondary_topics:
     formal_education:
-      - higher education
-      - university
-      - college
-      - vocational education
-      - workplace training
+      - secondary_topic_id: higher_education
+        label: Higher education
+        field: title
+        terms:
+          - higher education
+          - university
+          - college
+        retrieval_terms:
+          - higher education
+          - university
+          - college
+        matching_terms:
+          - higher education
+          - university
+          - universities
+          - college
+          - colleges
+      - secondary_topic_id: vocational_education
+        label: Vocational education
+        field: title_or_abstract
+        terms:
+          - vocational education
+          - vocational training
+          - workplace training
+        retrieval_terms:
+          - vocational education
+          - vocational training
+          - workplace training
+        matching_terms:
+          - vocational education
+          - vocational training
+          - workplace training
+          - professional training
     learning_impact:
-      - well-being
-      - mental health
-      - productivity
-      - study habits
-      - self-efficacy
+      - secondary_topic_id: student_wellbeing
+        label: Student well-being
+        field: title_or_abstract
+        terms:
+          - well-being
+          - wellbeing
+          - mental health
+          - self-efficacy
+        retrieval_terms:
+          - well-being
+          - wellbeing
+          - mental health
+          - self-efficacy
+        matching_terms:
+          - well-being
+          - wellbeing
+          - mental health
+          - student wellbeing
+          - learner wellbeing
+          - self-efficacy
+      - secondary_topic_id: study_behavior
+        label: Study behavior
+        field: title_or_abstract
+        terms:
+          - study habits
+          - productivity
+          - learning behavior
+        retrieval_terms:
+          - study habits
+          - productivity
+          - learning behavior
+        matching_terms:
+          - study habits
+          - productivity
+          - learning behavior
+          - study behavior
 
 scope:
   include_criteria:

@@ -41,19 +41,103 @@ Rules:
     paper title must show this topic to enter the collection.
   - The anchor should be broad enough to catch synonyms, abbreviations, and
     close wording, but not so broad that unrelated papers enter.
+  - For questions like "Could X be used to..." or "Use of X in/for...", choose
+    X as the anchor when X is the proposed source, tool, intervention, material,
+    disease, exposure, or core phenomenon. Do not anchor on the application,
+    outcome, or replacement/comparator goal if papers about that goal without X
+    would be off-topic.
   - `main_topics` are the compact, evidence-derived research dimensions of the
     topic. They are the major components a paper can primarily focus on, such
     as a tool/intervention/exposure family, population/context, outcome/target,
     setting, evidence signal, mechanism, or measurement dimension.
+  - Each main topic must represent exactly one conceptual area. Do not combine
+    two required areas into one main topic id, label, or term list. For example,
+    use separate `ai`, `school`, and `student_performance` blocks instead of
+    `ai_in_school`, `school_ai_performance`, or
+    `ai_and_student_performance`.
+  - Main topic IDs must be short, stable, semantic component names. They must
+    not be whole-question labels or merged relationship labels. Good examples:
+    `ai`, `school`, `student_performance`, `computational_methods`,
+    `alzheimers_disease`. Bad examples: `ai_in_school`,
+    `ai_for_student_performance`, `computational_methods_for_alzheimer_research`.
+  - Do not use a broad criterion or motivation, such as sustainability,
+    environmental impact, green, eco-friendly, or renewable, as a required main
+    topic when the question names a more concrete replacement, comparator,
+    material, application, or use case.
+  - If the question says a concept could replace, substitute for, or be an
+    alternative to a concrete target, make that target or replacement relation a
+    main topic id/label. For example, use `concrete_replacement` or `concrete`,
+    not only a broad `building_materials` topic with `concrete` buried in its
+    terms.
+  - Keep replacement/comparator topics component-pure. Their terms should name
+    the target and substitution relation only, such as `concrete replacement`,
+    `concrete alternative`, `concrete substitute`, `cement replacement`, or
+    `cement substitute`. Do not include application/domain terms such as
+    `building materials`, or broad criterion words such as `sustainable`,
+    `green`, `eco-friendly`, or `renewable`. Do not use broad material-family
+    terms such as `biomaterials`, `biodegradable materials`, or `bio-based
+    alternatives` unless they are explicitly tied to the replacement target.
+  - If that same question also names an application or domain, keep it as a
+    separate main topic instead of folding it into the replacement topic. For
+    example, a topic about fungi creating building materials that replace
+    concrete should use separate `fungi`, `building_materials`, and
+    `concrete_replacement` main topics.
+  - When the user explicitly names a valid component phrase, preserve that
+    wording in the main topic id/label. Put inferred nearby wording in
+    secondary topics. For example, use `building_materials` as the main topic
+    when the user says building materials; use `construction_products` or
+    `building_products` as secondary groups.
+  - Keep application/domain topics concrete. Avoid generic terms like
+    `innovative materials`, `materials science`, `construction technology`,
+    `advanced materials`, or broad sustainability criteria unless the phrase is
+    the exact named domain in the user's question.
+  - Terms and matching terms for application/domain topics should name the use
+    area, product family, setting, or domain. Do not use property, process, or
+    evaluation phrases such as `structural integrity`, `construction
+    innovations`, `building techniques`, `effective products`, or `responsible
+    practices` unless that property/process is the actual research object.
+  - If the user explicitly names multiple outcomes, targets, signals, or
+    phenomena joined by `and`, split them into separate main topics when each is
+    a meaningful required concept.
+  - Terms inside a main topic must name only that one component. If `school` is
+    a separate main topic, do not put `AI in schools` in the `ai` terms. Put
+    `AI` terms under `ai` and school-setting terms under `school`.
+  - Do not use broad background words as topic terms when specific vocabulary
+    is available. Avoid standalone terms like `education`, `learning
+    environment`, `educational settings`, `performance metrics`, `technology`,
+    `educational technology`, `digital technology`, `tools`, `outcomes`, or
+    `students`; prefer concrete domain phrases.
+  - Avoid broad umbrella terms in `terms` and `retrieval_terms`, such as `data
+    analysis`, `neurological disorder`, `disease`, `condition`, `method`,
+    `approach`, `science`, or `technology`, unless that exact umbrella is the
+    named component itself.
   - Use at least 2 main topics; prefer 3 to 6 when the review evidence supports
     them. Each `topic_id` must be lowercase snake_case and compact enough to be
     useful as a tag value.
   - Each main topic must include `field`, `terms`, `retrieval_terms`, and
     `matching_terms`.
-  - Set `field` to `title`, `abstract`, or `title_or_abstract` depending on
-    where that topic should be required during provider-side retrieval.
+  - For broad components such as AI, fungi/mycelium, Alzheimer disease,
+    computational methods, school settings, or building materials, provide at
+    least 4 focused `terms` and usually 6 or more `matching_terms` when the
+    vocabulary supports it. Do not pad term lists with broad background words.
+  - Set `field` to `title`, `abstract`, or `title_or_abstract`. Default every
+    generated main topic to `title` unless it is a detail or explanatory
+    dimension that can be absent from the title without weakening collection
+    relevance, such as a mechanism, validation, workflow, measurement detail,
+    implementation detail, or explanatory process.
+  - Set the anchor main topic's `field` to `title`.
+  - Do not use `abstract` for generated main topics. If a concept may appear
+    only outside titles and is still required for relevance, keep it as a
+    `title` main topic with richer terms rather than weakening the field.
+  - Setting, context, or population components should use `title` whenever they
+    are required for relevance.
+  - Include domain-specific named variants, abbreviations, subtypes, tools, and
+    concrete indicators for each component.
   - Set `retrieval_terms` to the strongest provider-search terms for that
     topic, with at most 12 terms. Keep these compact and high-signal.
+  - Keep `retrieval_terms` component-pure. Do not include phrases that mix this
+    topic with another main topic, such as `educational AI` when `ai` and
+    `school` are separate blocks.
   - Set `matching_terms` to broader local-matching terms that explain returned
     papers, including useful synonyms, abbreviations, subtypes, and concrete
     indicators.
@@ -63,6 +147,17 @@ Rules:
   - `secondary_topics` are replacement terms for non-anchor main topics when
     paper titles use adjacent wording. They should improve recall without weakening topical fit,
     and must not be defined for the anchor.
+  - Add useful secondary-topic groups for non-anchor main topics when the
+    review evidence shows common adjacent wording. If the best fallback
+    broadens the concept slightly, make that broadening explicit in the group
+    label and terms.
+  - Broad method, tool, model, analysis, evidence-signal, intervention, or
+    platform families may need multiple secondary-topic groups. Split distinct
+    adjacent expansions into separate groups when they are genuinely useful.
+  - Do not create a secondary topic that simply repeats a parent main-topic
+    term. For example, if `academic achievement` is already in
+    `student_performance.terms`, do not add an `academic_achievement` secondary
+    group under `student_performance`.
   - Keep different replacement concepts in separate secondary groups. For
     example, higher education and workplace learning are two groups, not one
     mixed secondary-topic term list.
