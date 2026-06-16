@@ -21,6 +21,10 @@ Rules:
   the anchor, set `anchor_topic_id` to that main topic. For questions like
   "Could X be used to..." or "Use of X in/for...", X is usually the
   non-replaceable anchor, not the application, outcome, or replacement goal.
+- For disease-specific method/tool topics such as computational biology methods
+  for Alzheimer's disease research, choose the disease as the anchor. The
+  disease is non-replaceable; method components can have adjacent method
+  secondaries.
 - Add secondary-topic fallback groups only when they provide clean adjacent or
   alternate sibling directions for one main topic, including the anchor.
 - Secondary topics should be adjacent sibling directions, not narrower internal
@@ -118,6 +122,11 @@ Rules:
   disease, dementia, or dementia-related cognitive impairment when relevant.
   Use secondary topics for neighboring disease/application directions, not for
   variants that belong inside the parent disease family.
+- For disease or condition main topics, do not put pathology, mechanism,
+  biomarker, symptom, or process terms in the topic term lists. For Alzheimer's
+  disease, terms such as tau pathology, amyloid plaques, neurodegeneration, or
+  memory loss are not disease-family names; keep them for scope, screening, or
+  later tagging categories.
 - Keep `retrieval_terms` component-pure; do not mix vocabulary from different
   main topics into one retrieval term.
 - Secondary topics must be adjacent sibling directions that go in a different

@@ -946,6 +946,95 @@ def test_contract_payload_moves_disease_variants_to_parent_terms() -> None:
     assert disease_secondaries[1]["terms"] == ["cancer", "neoplasm", "tumor"]
 
 
+def test_contract_payload_cleans_disease_method_topic_structure() -> None:
+    payload = generated_topic_contract_payload()
+    payload["topic_structure"]["anchor_topic_id"] = "computational_methods"
+    payload["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "computational_methods",
+            "label": "Computational Methods",
+            "field": "title",
+            "terms": ["computational biology", "machine learning"],
+            "retrieval_terms": ["computational biology", "machine learning"],
+            "matching_terms": ["computational methods", "data analysis"],
+        },
+        {
+            "topic_id": "alzheimers_disease",
+            "label": "Alzheimer's Disease",
+            "field": "title",
+            "terms": [
+                "Alzheimer's disease",
+                "AD",
+                "tau pathology",
+                "amyloid plaques",
+                "neurodegeneration",
+            ],
+            "retrieval_terms": ["Alzheimer's disease", "AD"],
+            "matching_terms": ["Alzheimer's", "memory loss", "tau pathology"],
+        },
+    ]
+    payload["topic_structure"]["secondary_topics"] = {
+        "computational_methods": [
+            {
+                "secondary_topic_id": "experimental_methods",
+                "label": "Experimental Methods",
+                "field": "title",
+                "terms": [
+                    "laboratory techniques",
+                    "experimental designs",
+                    "clinical trials",
+                    "data collection",
+                ],
+                "retrieval_terms": ["experimental methods", "clinical trials"],
+                "matching_terms": ["laboratory methods", "experimental techniques"],
+            }
+        ],
+        "alzheimers_disease": [
+            {
+                "secondary_topic_id": "parkinsons_disease",
+                "label": "Parkinson's Disease",
+                "field": "title",
+                "terms": ["Parkinson's disease", "PD", "movement disorders"],
+                "retrieval_terms": ["Parkinson's disease", "PD"],
+                "matching_terms": ["Parkinson's", "movement disorders"],
+            }
+        ],
+    }
+
+    contract = contract_from_model_payload(payload)
+    topic_structure = contract["topic_structure"]
+    topics = {topic["topic_id"]: topic for topic in topic_structure["main_topics"]}
+
+    assert topic_structure["anchor_topic_id"] == "alzheimers_disease"
+    alzheimers = topics["alzheimers_disease"]
+    alzheimer_terms = [
+        *(alzheimers["terms"]),
+        *(alzheimers["retrieval_terms"]),
+        *(alzheimers["matching_terms"]),
+    ]
+    assert "tau pathology" not in alzheimer_terms
+    assert "amyloid plaques" not in alzheimer_terms
+    assert "neurodegeneration" not in alzheimer_terms
+    assert "memory loss" not in alzheimer_terms
+    assert "mild cognitive impairment" in alzheimers["terms"]
+    assert "MCI" in alzheimers["terms"]
+
+    experimental = topic_structure["secondary_topics"]["computational_methods"][0]
+    assert experimental["secondary_topic_id"] == "experimental_methods"
+    assert experimental["terms"] == [
+        "experimental methods",
+        "laboratory methods",
+        "clinical methods",
+    ]
+    parkinsons = topic_structure["secondary_topics"]["alzheimers_disease"][0]
+    assert parkinsons["terms"] == [
+        "Parkinson's disease",
+        "Parkinson disease",
+        "PD",
+    ]
+    assert "movement disorders" not in parkinsons["matching_terms"]
+
+
 def test_generate_topic_contract_repairs_duplicate_secondary_topic(
     tmp_path: Path,
 ) -> None:

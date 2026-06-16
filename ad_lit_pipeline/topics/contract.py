@@ -319,12 +319,14 @@ METHOD_TOPIC_BARE_DOMAIN_TERMS = {
 }
 ALZHEIMER_DISEASE_SIGNAL_TERMS = {
     "ad",
+    "alzheimer",
     "alzheimer disease",
     "alzheimer's disease",
     "alzheimers disease",
 }
 ALZHEIMER_DISEASE_FAMILY_TERMS = {
     "ad",
+    "alzheimer",
     "alzheimer disease",
     "alzheimer's disease",
     "alzheimers disease",
@@ -630,11 +632,13 @@ CRUCIAL_TOPIC_STRUCTURE_ISSUE_CODES = {
     "explicit_pair_buried_in_umbrella_topic",
     "generic_secondary_topic_bucket",
     "generic_secondary_topic_term",
+    "main_topic_non_family_term",
     "merged_topic_id",
     "merged_topic_label",
     "missing_secondary_topic",
     "non_exception_topic_field_not_title",
     "parent_secondary_term_overlap",
+    "secondary_topic_non_family_term",
     "replacement_application_not_main_topic",
     "replacement_secondary_application_term",
     "replacement_secondary_criterion_term",
@@ -2094,6 +2098,7 @@ def generated_topic_structure_quality_issue_records(
         replacement_topic = is_replacement_topic(topic_id, topic)
         application_topic = is_application_topic(topic_id, topic)
         method_topic = is_method_topic(topic_id, topic)
+        alzheimer_topic = is_alzheimer_disease_topic(topic_id, topic)
         replacement_allowed_words = replacement_term_allowed_words(
             topic_id,
             topic,
@@ -2157,6 +2162,27 @@ def generated_topic_structure_quality_issue_records(
                     )
 
                 term_words = normalized_topic_words(term)
+                if alzheimer_topic and alzheimer_disease_non_family_term_matches(term):
+                    issues.append(
+                        TopicStructureQualityIssue(
+                            code="main_topic_non_family_term",
+                            topic_id=topic_id,
+                            value=term,
+                            message=(
+                                "topic_structure.main_topics."
+                                f"{topic_id}.{key} contains `{term}`, which "
+                                "is pathology, mechanism, symptom, or process "
+                                "language rather than an Alzheimer's disease "
+                                "surface form. Disease main-topic terms should "
+                                "name the disease family itself: names, "
+                                "abbreviations, variants, stages, subtypes, "
+                                "or related impairment states such as AD, "
+                                "Alzheimer disease, dementia, MCI, mild "
+                                "cognitive impairment, prodromal disease, or "
+                                "preclinical disease."
+                            ),
+                        )
+                    )
                 if (
                     method_topic
                     and normalized_topic_term(term) in METHOD_TOPIC_BARE_DOMAIN_TERMS
@@ -2515,6 +2541,47 @@ def generated_topic_structure_quality_issue_records(
                         ),
                     )
                 )
+            if key in {"terms", "retrieval_terms", "matching_terms"}:
+                secondary_group_key = normalized_topic_term(group_id)
+                if secondary_group_key == "parkinsons disease" and (
+                    parkinsons_disease_non_family_term_matches(term)
+                ):
+                    issues.append(
+                        TopicStructureQualityIssue(
+                            code="secondary_topic_non_family_term",
+                            topic_id=main_topic_id,
+                            value=term,
+                            message=(
+                                "topic_structure.secondary_topics."
+                                f"{main_topic_id}.{group_id}.{key} contains "
+                                f"`{term}`, which is an umbrella descriptor, "
+                                "not a Parkinson's disease surface form. A "
+                                "`parkinsons_disease` secondary should use "
+                                "terms such as Parkinson's disease, Parkinson "
+                                "disease, PD, or parkinsonism."
+                            ),
+                        )
+                    )
+                if secondary_group_key == "experimental methods" and (
+                    experimental_methods_non_family_term_matches(term)
+                ):
+                    issues.append(
+                        TopicStructureQualityIssue(
+                            code="secondary_topic_non_family_term",
+                            topic_id=main_topic_id,
+                            value=term,
+                            message=(
+                                "topic_structure.secondary_topics."
+                                f"{main_topic_id}.{group_id}.{key} contains "
+                                f"`{term}`, which is not a focused "
+                                "experimental-method family term. An "
+                                "`experimental_methods` secondary should use "
+                                "terms such as experimental methods, "
+                                "laboratory methods, clinical methods, or wet "
+                                "lab methods."
+                            ),
+                        )
+                    )
             term_words = normalized_topic_words(term)
             if parent_is_replacement:
                 material_family_words = broad_material_family_words(term_words)

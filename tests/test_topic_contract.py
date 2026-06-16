@@ -690,6 +690,64 @@ def test_generated_topic_structure_rejects_generic_secondary_disease_bucket() ->
         validate_generated_topic_structure_quality(contract)
 
 
+def test_generated_topic_structure_rejects_disease_method_anchor_and_loose_terms() -> None:
+    contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
+    contract["topic_structure"]["anchor_topic_id"] = "computational_methods"
+    contract["topic_structure"]["main_topics"] = [
+        {
+            "topic_id": "computational_methods",
+            "label": "Computational Methods",
+            "field": "title",
+            "terms": ["computational biology", "machine learning"],
+            "retrieval_terms": ["computational biology", "machine learning"],
+            "matching_terms": ["computational methods", "machine learning"],
+        },
+        {
+            "topic_id": "alzheimers_disease",
+            "label": "Alzheimer's Disease",
+            "field": "title",
+            "terms": ["Alzheimer's disease", "AD", "tau pathology"],
+            "retrieval_terms": ["Alzheimer's disease", "AD"],
+            "matching_terms": ["Alzheimer's", "memory loss"],
+        },
+        contract["topic_structure"]["main_topics"][2],
+    ]
+    contract["topic_structure"]["secondary_topics"] = {
+        "computational_methods": [
+            {
+                "secondary_topic_id": "experimental_methods",
+                "label": "Experimental Methods",
+                "field": "title",
+                "terms": ["laboratory techniques", "data collection"],
+                "retrieval_terms": ["experimental methods", "clinical trials"],
+                "matching_terms": ["laboratory methods", "experimental techniques"],
+            }
+        ],
+        "alzheimers_disease": [
+            {
+                "secondary_topic_id": "parkinsons_disease",
+                "label": "Parkinson's Disease",
+                "field": "title",
+                "terms": ["Parkinson's disease", "movement disorders"],
+                "retrieval_terms": ["Parkinson's disease"],
+                "matching_terms": ["movement disorders"],
+            }
+        ],
+        "learning_impact": contract["topic_structure"]["secondary_topics"][
+            "learning_impact"
+        ],
+    }
+
+    issues = generated_topic_structure_quality_issues(contract)
+
+    assert any("disease is the non-replaceable title anchor" in issue for issue in issues)
+    assert any("tau pathology" in issue for issue in issues)
+    assert any("data collection" in issue for issue in issues)
+    assert any("movement disorders" in issue for issue in issues)
+    with pytest.raises(ValueError, match="disease_research_anchor_expected"):
+        validate_generated_topic_structure_quality(contract)
+
+
 def test_generated_topic_structure_flags_bare_domain_terms_in_method_topic() -> None:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/ai_in_education.yaml"))
     contract["topic_structure"]["main_topics"][1] = {

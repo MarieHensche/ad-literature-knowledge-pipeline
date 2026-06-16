@@ -39,6 +39,10 @@ Rules:
 - Rebuild or keep `topic_structure` based on the review full-text evidence:
   - `anchor_topic_id` is the mandatory core concept for title screening. A
     paper title must show this topic to enter the collection.
+  - For disease-specific method/tool topics such as computational biology
+    methods for Alzheimer's disease research, choose the disease as the anchor.
+    The disease is non-replaceable; method components can have adjacent method
+    secondaries.
   - The anchor should be broad enough to catch synonyms, abbreviations, and
     close wording, but not so broad that unrelated papers enter.
   - For questions like "Could X be used to..." or "Use of X in/for...", choose
@@ -156,6 +160,11 @@ Rules:
     preclinical disease, dementia, or dementia-related cognitive impairment
     when relevant. Use secondary topics for neighboring disease/application
     directions, not for variants that belong inside the parent disease family.
+  - For disease or condition main topics, do not put pathology, mechanism,
+    biomarker, symptom, or process terms in the topic term lists. For
+    Alzheimer's disease, terms such as tau pathology, amyloid plaques,
+    neurodegeneration, or memory loss are not disease-family names; keep them
+    for scope, screening, or later tagging categories.
   - Include commonly used surface forms explicitly when they matter:
     abbreviations and full forms such as `AI` and `artificial intelligence`,
     spelling or punctuation variants such as `A.I.` when common in the

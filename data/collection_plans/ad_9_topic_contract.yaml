@@ -1,0 +1,199 @@
+topic_id: computational_biology_methods_alzheimers
+research_topic:
+  title: Computational Biology Methods for Alzheimer's Disease Research
+  description: Exploring computational biology approaches and methodologies aimed
+    at Alzheimer's disease research, focusing on techniques to analyze, model, and
+    interpret biological data in the context of this neurodegenerative disorder.
+topic_structure:
+  anchor_topic_id: alzheimers_disease
+  anchor_reason: Alzheimer's disease is the central focus for screening papers relevant
+    to this research topic.
+  main_topics:
+  - topic_id: alzheimers_disease
+    label: Alzheimer's Disease
+    field: title
+    terms:
+    - Alzheimer's disease
+    - Alzheimer's
+    - AD
+    - senile dementia
+    - Alzheimer disease
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+    retrieval_terms:
+    - Alzheimer's disease
+    - AD
+    - Alzheimer's
+    - Alzheimer disease
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+    matching_terms:
+    - Alzheimer's disease
+    - Alzheimer's
+    - AD
+    - neuronal degeneration
+    - cognitive dysfunction
+    - Alzheimer disease
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+  - topic_id: computational_methods
+    label: Computational Biology Methods
+    field: title
+    terms:
+    - computational biology
+    - bioinformatics
+    - genomic analysis
+    - data mining
+    - machine learning techniques
+    - ML
+    - machine learning
+    - artificial intelligence
+    - AI
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - statistical modeling
+    - network analysis
+    - systems biology
+    - predictive modeling
+    retrieval_terms:
+    - computational biology
+    - bioinformatics
+    - ML
+    - machine learning
+    - artificial intelligence
+    - AI
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - statistical modeling
+    - network analysis
+    - systems biology
+    matching_terms:
+    - computational biology
+    - bioinformatics
+    - computational analysis
+    - data science
+    - machine learning
+    - ML
+    - artificial intelligence
+    - AI
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - statistical modeling
+    - network analysis
+    - systems biology
+    - predictive modeling
+  secondary_topics:
+    alzheimers_disease:
+    - secondary_topic_id: related_dementia
+      label: Related Dementias
+      field: title
+      terms:
+      - vascular dementia
+      - frontotemporal dementia
+      - Lewy body dementia
+      retrieval_terms:
+      - vascular dementia
+      - frontotemporal dementia
+      - Lewy body dementia
+      matching_terms:
+      - vascular dementia
+      - frontotemporal degeneration
+      - Lewy body disease
+    computational_methods:
+    - secondary_topic_id: experimental_methods
+      label: Experimental methods
+      field: title
+      terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      retrieval_terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      matching_terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      - wet lab methods
+scope:
+  include_criteria:
+  - Papers directly studying Alzheimer's disease using computational biology.
+  - Research that applies computational methods to Alzheimer's disease.
+  - Review articles and meta-analyses related to computational biology and Alzheimer's
+    disease.
+  exclude_criteria:
+  - Papers with no relevance to computational biology or Alzheimer's disease.
+  boundary_rules:
+  - Include borderline papers that discuss computational techniques relevant to Alzheimer's
+    even if they are not the primary focus.
+  - Exclude papers when both title and abstract demonstrate no relation to Alzheimer's
+    disease or computational biology.
+rule_based_screening:
+  include_terms:
+  - Alzheimer's disease
+  - computational biology
+  - machine learning
+  - bioinformatics
+  - genomic analysis
+  exclude_terms: []
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for
+    primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of
+    the topic
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ''
+  categories:
+    computational_methods:
+      required: true
+      values:
+      - bioinformatics
+      - genomic_analysis
+      - machine_learning
+      - computational_oncology
+      description: Tags papers focusing on computational biology methods in Alzheimer's
+        disease research.
+      selection: single
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: computational biology for Alzheimer's disease
+    reason: Direct inquiry into computational methods in Alzheimer's research.
+  - query: bioinformatics techniques in Alzheimer's disease
+    reason: Exploring bioinformatics as a relevant computational method.
+  - query: machine learning applications in Alzheimer's research
+    reason: Investigating the role of machine learning in Alzheimer's studies.
+  - query: Alzheimer's disease computational analysis
+    reason: Focusing on computational analysis in Alzheimer's context.
+  - query: genomic research Alzheimer's
+    reason: Understanding the intersection of genomics and Alzheimer's disease.

@@ -5,9 +5,9 @@ research_topic:
     in Alzheimer's disease research, encompassing various workflows and analytical
     approaches.
 topic_structure:
-  anchor_topic_id: computational_methods
-  anchor_reason: Computational methods are crucial for analyzing biological data in
-    Alzheimer's research.
+  anchor_topic_id: alzheimers_disease
+  anchor_reason: Alzheimer's disease is the non-replaceable disease focus for this
+    disease-specific computational methods topic.
   main_topics:
   - topic_id: computational_methods
     label: Computational Methods
@@ -66,49 +66,65 @@ topic_structure:
     - Alzheimer's disease
     - AD
     - cognitive decline
-    - tau pathology
-    - amyloid plaques
-    - neurodegeneration
+    - Alzheimer disease
+    - dementia
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
     retrieval_terms:
     - Alzheimer's disease
     - AD
     - cognitive decline
-    matching_terms:
-    - Alzheimer's
-    - neurodegeneration
+    - Alzheimer disease
     - dementia
-    - memory loss
-    - tau pathology
+    - mild cognitive impairment
+    - MCI
+    matching_terms:
+    - Alzheimer's disease
+    - Alzheimer disease
+    - AD
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
   secondary_topics:
     computational_methods:
     - secondary_topic_id: experimental_methods
       label: Experimental Methods
       field: title
       terms:
-      - laboratory techniques
-      - experimental designs
-      - clinical trials
-      - data collection
+      - experimental methods
+      - laboratory methods
+      - clinical methods
       retrieval_terms:
       - experimental methods
-      - clinical trials
-      matching_terms:
       - laboratory methods
-      - experimental techniques
+      - clinical methods
+      matching_terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      - wet lab methods
     alzheimers_disease:
     - secondary_topic_id: parkinsons_disease
       label: Parkinson's Disease
       field: title
       terms:
       - Parkinson's disease
+      - Parkinson disease
       - PD
-      - movement disorders
       retrieval_terms:
       - Parkinson's disease
-      - PD
+      - Parkinson disease
       matching_terms:
-      - Parkinson's
-      - movement disorders
+      - Parkinson's disease
+      - Parkinson disease
+      - PD
+      - parkinsonism
 scope:
   include_criteria:
   - Papers directly studying computational biology methods relevant to Alzheimer's

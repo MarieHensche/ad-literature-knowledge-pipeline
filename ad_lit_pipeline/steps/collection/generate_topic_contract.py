@@ -131,6 +131,10 @@ def prompt_with_validation_feedback(
         "sibling secondary-topic groups. For disease parents, adjacent "
         "disease/application directions such as Parkinson's disease, cancer, "
         "or named non-parent diseases may be appropriate when relevant.\n"
+        "- For disease-specific method/tool topics such as computational "
+        "biology methods for Alzheimer's disease research, choose the disease "
+        "as the anchor. The disease is non-replaceable; method components can "
+        "have adjacent method secondaries.\n"
         "- For computational-method parents, use adjacent non-computational "
         "method families such as experimental methods, laboratory methods, or "
         "clinical methods as secondary topics when a secondary is missing. Do "
@@ -172,6 +176,11 @@ def prompt_with_validation_feedback(
         "cognitive impairment, prodromal disease, preclinical disease, or "
         "dementia-related impairment for Alzheimer's disease. Do not put "
         "those parent-family variants into secondary topics.\n"
+        "- For disease or condition main topics, do not put pathology, "
+        "mechanism, biomarker, symptom, or process terms in the topic term "
+        "lists. For Alzheimer's disease, terms such as tau pathology, amyloid "
+        "plaques, neurodegeneration, or memory loss are not disease-family "
+        "names; keep them for scope, screening, or later tagging categories.\n"
         "- If the user asks about replacing or substituting a concrete thing "
         "or applying something in a concrete use case, do not use broad "
         "criteria such as sustainability or environmental impact as required "
@@ -379,6 +388,7 @@ def append_unique_term(values: list[Any], term: str) -> None:
 def clean_topic_terms(topic: dict[str, Any], topic_id: str) -> None:
     """Apply deterministic term cleanup for generated topic structures."""
     method_topic = is_method_topic(topic_id, topic)
+    alzheimer_topic = is_alzheimer_disease_topic(topic_id, topic)
     for key in ("terms", "retrieval_terms", "matching_terms"):
         values = topic.get(key)
         if not isinstance(values, list):
@@ -396,6 +406,8 @@ def clean_topic_terms(topic: dict[str, Any], topic_id: str) -> None:
                 and normalized
                 in (BROAD_UMBRELLA_TOPIC_STRUCTURE_TERMS | METHOD_TOPIC_BARE_DOMAIN_TERMS)
             ):
+                continue
+            if alzheimer_topic and alzheimer_disease_non_family_term_matches(term):
                 continue
             cleaned_values.append(term)
             seen.add(normalized)
@@ -426,6 +438,18 @@ COMPUTATIONAL_METHOD_CORE_TERMS = [
     "network analysis",
     "systems biology",
     "predictive modeling",
+]
+ALZHEIMER_DISEASE_CORE_TERMS = [
+    "Alzheimer's disease",
+    "Alzheimer disease",
+    "AD",
+    "dementia",
+    "cognitive decline",
+    "mild cognitive impairment",
+    "MCI",
+    "prodromal Alzheimer's disease",
+    "preclinical Alzheimer's disease",
+    "dementia-related cognitive impairment",
 ]
 
 ALZHEIMER_ADJACENT_DISEASE_GROUPS = [
@@ -481,6 +505,23 @@ def complete_computational_method_terms(topic: dict[str, Any], topic_id: str) ->
     retrieval_terms = topic.setdefault("retrieval_terms", [])
     if isinstance(retrieval_terms, list):
         for term in COMPUTATIONAL_METHOD_CORE_TERMS:
+            if len(retrieval_terms) >= RETRIEVAL_TERMS_LIMIT:
+                break
+            append_unique_term(retrieval_terms, term)
+
+
+def complete_alzheimer_disease_terms(topic: dict[str, Any], topic_id: str) -> None:
+    """Keep Alzheimer topics focused on disease-family surface forms."""
+    if not is_alzheimer_disease_topic(topic_id, topic):
+        return
+    for key in ("terms", "matching_terms"):
+        values = topic.setdefault(key, [])
+        if isinstance(values, list):
+            for term in ALZHEIMER_DISEASE_CORE_TERMS:
+                append_unique_term(values, term)
+    retrieval_terms = topic.setdefault("retrieval_terms", [])
+    if isinstance(retrieval_terms, list):
+        for term in ALZHEIMER_DISEASE_CORE_TERMS:
             if len(retrieval_terms) >= RETRIEVAL_TERMS_LIMIT:
                 break
             append_unique_term(retrieval_terms, term)
@@ -683,6 +724,16 @@ def alzheimer_adjacent_disease_groups() -> list[dict[str, Any]]:
     return [deepcopy(group) for group in ALZHEIMER_ADJACENT_DISEASE_GROUPS]
 
 
+def canonical_secondary_group(group: dict[str, Any]) -> dict[str, Any]:
+    group_id = normalize_tagging_label(str(group.get("secondary_topic_id") or ""))
+    if group_id == "experimental_methods":
+        return computational_method_secondary_group()
+    for candidate in ALZHEIMER_ADJACENT_DISEASE_GROUPS:
+        if group_id == candidate["secondary_topic_id"]:
+            return deepcopy(candidate)
+    return group
+
+
 def remove_disease_family_terms(
     parent_topic_id: str,
     parent_topic: dict[str, Any],
@@ -733,6 +784,7 @@ def move_terms_to_parent_topic(
     clean_topic_terms(parent_topic, parent_topic_id)
     complete_common_surface_forms(parent_topic)
     complete_computational_method_terms(parent_topic, parent_topic_id)
+    complete_alzheimer_disease_terms(parent_topic, parent_topic_id)
     update_parent_terms_index(parent_topic, parent_topic_id, parent_terms_by_topic_id)
 
 
@@ -774,6 +826,7 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
             clean_topic_terms(topic, normalized_topic_id)
             complete_common_surface_forms(topic)
             complete_computational_method_terms(topic, normalized_topic_id)
+            complete_alzheimer_disease_terms(topic, normalized_topic_id)
             topic_by_id[normalized_topic_id] = topic
             update_parent_terms_index(
                 topic,
@@ -785,6 +838,18 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
         raw_anchor_topic_id,
         normalize_tagging_label(raw_anchor_topic_id),
     )
+    anchor_topic = topic_by_id.get(anchor_topic_id)
+    alzheimer_topic_ids = [
+        topic_id
+        for topic_id, topic in topic_by_id.items()
+        if is_alzheimer_disease_topic(topic_id, topic)
+    ]
+    if (
+        alzheimer_topic_ids
+        and anchor_topic is not None
+        and is_method_topic(anchor_topic_id, anchor_topic)
+    ):
+        anchor_topic_id = alzheimer_topic_ids[0]
     if anchor_topic_id:
         topic_structure["anchor_topic_id"] = anchor_topic_id
 
@@ -927,6 +992,7 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
         for group in groups:
             if not isinstance(group, dict):
                 continue
+            group = canonical_secondary_group(group)
             parent_topic = topic_by_id.get(main_topic_id)
             if (
                 parent_topic is not None
