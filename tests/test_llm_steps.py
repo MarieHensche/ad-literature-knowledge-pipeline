@@ -42,6 +42,7 @@ from ad_lit_pipeline.steps.tagging.tag_papers import (
     run as run_tag_papers,
     validate_tagged_row,
 )
+from ad_lit_pipeline.steps.review.config import normalize_review_config
 from ad_lit_pipeline.topics.contract import load_topic_contract
 
 
@@ -4866,6 +4867,147 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert "model improved early detection" in client.requests[0][
         "prompt"
     ]
+
+
+def test_tag_papers_can_write_review_labels_in_same_llm_call(
+    tmp_path: Path,
+) -> None:
+    papers_path = tmp_path / "scope.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "filled.csv"
+    review_config_path = tmp_path / "review_config.json"
+    review_output_path = tmp_path / "review_labels.csv"
+    full_text_path = tmp_path / "p1_full_text.txt"
+    full_text_path.write_text(
+        (
+            "Methods\nThe authors used MRI classification.\n\n"
+            "Results\nThe model improved early detection.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "MCI screening",
+                "year": "2024",
+                "doi": "10.123/example",
+                "abstract": "Screening for MCI.",
+                "authors": "A. Author",
+                "venue": "Journal",
+                "source": "test",
+                "full_text_text_path": str(full_text_path),
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "authors",
+            "venue",
+            "source",
+            "full_text_text_path",
+            "scope_decision",
+        ],
+    )
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "review_status",
+                "required": True,
+                "allowed_values": [{"value": "ai_tagged"}],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "review_status",
+                "selection": "single",
+                "required": True,
+                "fallback_value": "ai_tagged",
+                "reason": "Required.",
+            }
+        ]
+    }
+    contract = deepcopy(load_topic_contract(TOPIC_CONTRACT))
+    contract["review"] = {
+        "labels": {
+            "main_topic": {
+                "description": "Best topic-structure main topic.",
+                "value_mode": "controlled_fixed",
+                "selection": "single",
+                "values_from": "topic_structure.main_topics",
+                "evidence_sections": ["title", "abstract"],
+            },
+            "methodology": {
+                "description": "Methods used in the paper.",
+                "value_mode": "controlled_auto",
+                "selection": "multi",
+                "values": "auto",
+                "evidence_sections": ["methods"],
+            },
+        }
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    rules_path.write_text(json.dumps(rules), encoding="utf-8")
+    review_config_path.write_text(
+        json.dumps(normalize_review_config(contract)),
+        encoding="utf-8",
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "knowledge_tags": {
+                    "paper_id": "p1",
+                    "main_knowledge_claim": "The paper screens for MCI.",
+                    "review_status": ["ai_tagged"],
+                },
+                "review_labels": {
+                    "paper_id": "p1",
+                    "labels": {
+                        "main_topic": ["early_detection"],
+                        "methodology": ["MRI Classification"],
+                    },
+                    "evidence_sections_used": ["methods"],
+                    "extraction_notes": [],
+                },
+            }
+        ]
+    )
+
+    result = run_tag_papers(
+        papers_path,
+        config_path,
+        rules_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+        review_config_path=review_config_path,
+        review_output_path=review_output_path,
+    )
+
+    knowledge_rows = list(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    review_rows = list(
+        csv.DictReader(review_output_path.open(newline="", encoding="utf-8"))
+    )
+    assert result.row_counts["tagged_papers"] == 1
+    assert result.row_counts["review_labeled_papers"] == 1
+    assert knowledge_rows[0]["main_knowledge_claim"] == "The paper screens for MCI."
+    assert review_rows[0]["main_topic"] == "early_detection"
+    assert review_rows[0]["methodology"] == "mri_classification"
+    assert len(client.requests) == 1
+    assert client.requests[0]["schema_name"] == "paper_tags_with_review"
+    assert "Section-focused review evidence" in client.requests[0]["prompt"]
 
 
 def test_validate_tagged_row_allows_optional_and_clears_inapplicable_values() -> None:

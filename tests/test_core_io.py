@@ -25,6 +25,12 @@ def test_artifact_paths_match_existing_conventions() -> None:
         "data/processed/example_papers_normalized.csv"
     )
     assert main.mantis_ready_csv == Path("data/processed/example_mantis_ready.csv")
+    assert main.review_config_normalized_json == Path(
+        "data/processed/example_review_config_normalized.json"
+    )
+    assert main.literature_review_md == Path(
+        "data/processed/example_literature_review.md"
+    )
     assert collection.plan_json == Path("data/collection_plans/example_plan.json")
     assert collection.calibration_papers_csv == Path(
         "data/raw/example_calibration_papers.csv"

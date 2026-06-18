@@ -430,6 +430,67 @@ def test_prepare_full_text_uses_local_text_and_writes_manifest(
     assert int(manifest_rows[0]["full_text_chars"]) >= 1000
 
 
+def test_prepare_full_text_reuses_existing_text_path(tmp_path: Path) -> None:
+    full_text = tmp_path / "prepared_full_text.txt"
+    full_text.write_text(
+        (
+            "Introduction\nThis prepared text was already extracted.\n\n"
+            "Results\nThe paper reports useful evidence for review generation.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
+    input_path = tmp_path / "scope_screened.csv"
+    output_path = tmp_path / "scope_screened_full_text.csv"
+    manifest_path = tmp_path / "full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Prepared paper",
+                "year": "2024",
+                "doi": "10.123/prepared",
+                "abstract": "Prepared evidence.",
+                "full_text_path": "",
+                "full_text_text_path": str(full_text),
+                "full_text_status": "local_text_extracted",
+                "full_text_source": "collection_workflow",
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "full_text_path",
+            "full_text_text_path",
+            "full_text_status",
+            "full_text_source",
+            "scope_decision",
+        ],
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    rows = read_csv(output_path)
+    manifest_rows = read_csv(manifest_path)
+    assert result.row_counts["local_texts"] == 1
+    assert rows[0]["full_text_status"] == "local_text_extracted"
+    assert rows[0]["full_text_source"] == "collection_workflow"
+    assert rows[0]["full_text_text_path"] == str(full_text)
+    assert int(rows[0]["full_text_chars"]) >= 1000
+    assert manifest_rows[0]["full_text_text_path"] == str(full_text)
+
+
 def test_prepare_full_text_continues_after_invalid_pdf_response(
     tmp_path: Path,
     monkeypatch,

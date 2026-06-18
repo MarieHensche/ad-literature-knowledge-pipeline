@@ -671,6 +671,163 @@ def paper_tags_schema(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def review_labels_schema(config: dict[str, Any]) -> dict[str, Any]:
+    """Build the strict paper-level review-label extraction schema."""
+    labels = config.get("review", {}).get("labels")
+    if not isinstance(labels, list):
+        raise ValueError("Normalized review config must contain review.labels list.")
+
+    label_properties: dict[str, Any] = {}
+    required_labels = []
+    for label in labels:
+        if not isinstance(label, dict):
+            raise ValueError("Normalized review labels must contain objects.")
+        label_id = str(label.get("label_id") or "")
+        if not label_id:
+            raise ValueError("Normalized review labels must contain label_id.")
+
+        value_mode = str(label.get("value_mode") or "")
+        if value_mode in {"controlled_fixed", "controlled_auto"}:
+            items: dict[str, Any] = {"type": "string"}
+            allowed_values = [
+                str(value.get("value"))
+                for value in label.get("allowed_values", [])
+                if isinstance(value, dict) and value.get("value")
+            ]
+            if allowed_values:
+                items["enum"] = allowed_values
+            property_schema: dict[str, Any] = {"type": "array", "items": items}
+            max_values = label.get("max_values_per_paper")
+            if isinstance(max_values, int) and max_values > 0:
+                property_schema["maxItems"] = max_values
+            label_properties[label_id] = property_schema
+        elif value_mode == "evidence_quote":
+            label_properties[label_id] = {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "quote": {"type": "string"},
+                        "section": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["quote", "section", "reason"],
+                    "additionalProperties": False,
+                },
+            }
+        else:
+            label_properties[label_id] = {"type": "string"}
+        required_labels.append(label_id)
+
+    return {
+        "type": "object",
+        "properties": {
+            "paper_id": {"type": "string"},
+            "labels": {
+                "type": "object",
+                "properties": label_properties,
+                "required": required_labels,
+                "additionalProperties": False,
+            },
+            "evidence_sections_used": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "extraction_notes": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": [
+            "paper_id",
+            "labels",
+            "evidence_sections_used",
+            "extraction_notes",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def paper_tags_with_review_schema(
+    config: dict[str, Any],
+    review_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Build one response schema for knowledge tags plus review labels."""
+    return {
+        "type": "object",
+        "properties": {
+            "knowledge_tags": paper_tags_schema(config),
+            "review_labels": review_labels_schema(review_config),
+        },
+        "required": ["knowledge_tags", "review_labels"],
+        "additionalProperties": False,
+    }
+
+
+def review_section_schema() -> dict[str, Any]:
+    """Build the strict schema for one drafted literature-review section."""
+    citation_schema = {
+        "type": "object",
+        "properties": {
+            "paper_id": {"type": "string"},
+            "claim": {"type": "string"},
+        },
+        "required": ["paper_id", "claim"],
+        "additionalProperties": False,
+    }
+    quote_schema = {
+        "type": "object",
+        "properties": {
+            "paper_id": {"type": "string"},
+            "quote": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+        "required": ["paper_id", "quote", "reason"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "section_id": {"type": "string"},
+            "title": {"type": "string"},
+            "summary": {"type": "string"},
+            "body_markdown": {"type": "string"},
+            "key_points": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "methodological_patterns": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "limitations_or_gaps": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "citation_support": {
+                "type": "array",
+                "items": citation_schema,
+            },
+            "quote_uses": {
+                "type": "array",
+                "items": quote_schema,
+            },
+        },
+        "required": [
+            "section_id",
+            "title",
+            "summary",
+            "body_markdown",
+            "key_points",
+            "methodological_patterns",
+            "limitations_or_gaps",
+            "citation_support",
+            "quote_uses",
+        ],
+        "additionalProperties": False,
+    }
+
+
 def json_schema_format(name: str, schema: dict[str, Any]) -> dict[str, Any]:
     """Return the OpenAI Responses API strict JSON-schema format payload."""
     return {

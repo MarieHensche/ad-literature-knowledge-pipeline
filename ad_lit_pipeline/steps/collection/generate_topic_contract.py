@@ -1084,7 +1084,10 @@ def call_topic_structure_repair(
     prompt = render_repair_topic_structure_prompt(
         topic_description=topic_description,
         topic_structure=failed_contract.get("topic_structure", {}),
-        validation_issues=[asdict(issue) for issue in issues],
+        validation_issues=[
+            asdict(issue) if not isinstance(issue, dict) else issue
+            for issue in issues
+        ],
     )
     result = client.create_json(
         model=model,
@@ -1106,6 +1109,54 @@ def call_topic_structure_repair(
         topic_description=topic_description,
     )
     return repaired_contract, trace_paths
+
+
+def raw_topic_structure_crucial_issues(
+    contract: dict[str, Any],
+    topic_description: str,
+) -> list[Any]:
+    try:
+        return generated_topic_structure_crucial_issue_records(
+            contract,
+            topic_description=topic_description,
+        )
+    except ValueError as error:
+        return [
+            {
+                "code": "invalid_topic_structure",
+                "topic_id": None,
+                "value": "",
+                "message": str(error),
+            }
+        ]
+
+
+def shape_valid_review_contract(contract: dict[str, Any]) -> dict[str, Any]:
+    """Return a minimally shape-valid contract for human topic-structure review."""
+    fallback = deepcopy(contract)
+    topic_structure = fallback.get("topic_structure")
+    if not isinstance(topic_structure, dict):
+        return fallback
+
+    main_topics = topic_structure.get("main_topics")
+    if not isinstance(main_topics, list):
+        return fallback
+
+    main_topic_ids = {
+        str(topic.get("topic_id") or "").strip()
+        for topic in main_topics
+        if isinstance(topic, dict) and str(topic.get("topic_id") or "").strip()
+    }
+    secondary_topics = topic_structure.get("secondary_topics")
+    if isinstance(secondary_topics, dict):
+        topic_structure["secondary_topics"] = {
+            topic_id: groups
+            for topic_id, groups in secondary_topics.items()
+            if topic_id in main_topic_ids
+        }
+
+    validate_topic_contract(fallback)
+    return fallback
 
 
 def topic_structure_review_warning(issues: list[Any]) -> str:
@@ -1174,8 +1225,21 @@ def call_llm(
 
         try:
             contract: dict[str, Any] | None = None
+            raw_issues = raw_topic_structure_crucial_issues(
+                result.parsed,
+                topic_description,
+            )
             contract = contract_from_model_payload(result.parsed)
             validate_topic_contract(contract)
+            if raw_issues:
+                issue_messages = "\n- ".join(
+                    str(getattr(issue, "message", "") or issue)
+                    for issue in raw_issues
+                )
+                raise ValueError(
+                    "Generated topic contract has weak raw topic_structure:\n- "
+                    + issue_messages
+                )
             validate_generated_topic_structure_quality(
                 contract,
                 topic_description=topic_description,
@@ -1189,12 +1253,15 @@ def call_llm(
                 best_error_score = score
                 if contract is not None:
                     best_contract = contract
+
             if attempt == MAX_CONTRACT_VALIDATION_ATTEMPTS:
                 if contract is not None:
                     issues = generated_topic_structure_crucial_issue_records(
                         contract,
                         topic_description=topic_description,
                     )
+                    if not issues and "raw_issues" in locals():
+                        issues = raw_issues
                     if issues:
                         try:
                             repaired_contract, repair_trace_paths = (
@@ -1212,7 +1279,8 @@ def call_llm(
                             return repaired_contract, trace_paths, []
                         except ValueError:
                             pass
-                        return contract, trace_paths, [
+                        warning_contract = shape_valid_review_contract(contract)
+                        return warning_contract, trace_paths, [
                             topic_structure_review_warning(issues)
                         ]
                 raise ValueError(

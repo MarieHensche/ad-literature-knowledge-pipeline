@@ -33,7 +33,10 @@ def test_run_pipeline_explain_lists_steps() -> None:
     assert "normalize_metadata" in result.stdout
     assert "calibrate_topic_contract" in result.stdout
     assert "export_mantis" in result.stdout
+    assert "normalize_review_config" in result.stdout
+    assert "assemble_literature_review" in result.stdout
     assert "example_mantis_ready.csv" in result.stdout
+    assert "example_literature_review.md" in result.stdout
 
 
 def test_run_pipeline_dry_run_selects_only_step() -> None:
@@ -75,6 +78,8 @@ def test_run_pipeline_dry_run_skips_calibration_by_default() -> None:
     assert "Would run step: prepare_full_text" in result.stdout
     assert "Would run step: calibrate_topic_contract" not in result.stdout
     assert "Would run step: normalize_tagging_config" in result.stdout
+    assert "Would run step: normalize_review_config" not in result.stdout
+    assert "Would run step: assemble_literature_review" not in result.stdout
 
 
 def test_run_pipeline_dry_run_can_opt_into_calibration() -> None:
@@ -138,6 +143,100 @@ def test_run_pipeline_dry_run_can_start_at_tag_review() -> None:
 
     assert "Would run step: review_tagging_categories" in result.stdout
     assert "Would run step: normalize_tagging_config" in result.stdout
+
+
+def test_run_pipeline_dry_run_can_extract_review_labels_only() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--extract-review-labels",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-review-labels-dry-run",
+    )
+
+    assert "Would run step: export_mantis" in result.stdout
+    assert "Would run step: filter_review_papers" in result.stdout
+    assert "Would run step: normalize_review_config" in result.stdout
+    assert "Would run step: extract_review_labels" not in result.stdout
+    assert "Would run step: normalize_review_label_values" not in result.stdout
+    assert "Would run step: assemble_literature_review" not in result.stdout
+    assert result.stdout.index("prepare_full_text") < result.stdout.index(
+        "filter_review_papers"
+    )
+    assert result.stdout.index("filter_review_papers") < result.stdout.index(
+        "normalize_review_config"
+    )
+    assert result.stdout.index("normalize_review_config") < result.stdout.index(
+        "tag_papers"
+    )
+
+
+def test_run_pipeline_dry_run_can_generate_literature_review() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--generate-review",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-generate-review-dry-run",
+    )
+
+    assert "Would run step: export_mantis" in result.stdout
+    assert "Would run step: filter_review_papers" in result.stdout
+    assert "Would run step: normalize_review_config" in result.stdout
+    assert "Would run step: extract_review_labels" not in result.stdout
+    assert "Would run step: normalize_review_label_values" in result.stdout
+    assert "Would run step: build_review_evidence_map" in result.stdout
+    assert "Would run step: assemble_literature_review" in result.stdout
+    assert result.stdout.index("prepare_full_text") < result.stdout.index(
+        "filter_review_papers"
+    )
+    assert result.stdout.index("filter_review_papers") < result.stdout.index(
+        "normalize_review_config"
+    )
+    assert result.stdout.index("normalize_review_config") < result.stdout.index(
+        "tag_papers"
+    )
+
+
+def test_run_pipeline_dry_run_can_pause_for_review_label_values() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--generate-review",
+        "--review-review-label-values",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-review-label-values-dry-run",
+    )
+
+    assert "Would run step: normalize_review_label_values" in result.stdout
+    assert "Would run step: review_review_label_values" in result.stdout
+    assert result.stdout.index("normalize_review_label_values") < result.stdout.index(
+        "review_review_label_values"
+    )
+    assert result.stdout.index("review_review_label_values") < result.stdout.index(
+        "validate_review_labels"
+    )
 
 
 def test_run_pipeline_prepares_supported_non_csv_papers(tmp_path: Path) -> None:
