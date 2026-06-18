@@ -808,6 +808,10 @@ def review_section_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": citation_schema,
             },
+            "cited_paper_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
             "quote_uses": {
                 "type": "array",
                 "items": quote_schema,
@@ -822,8 +826,24 @@ def review_section_schema() -> dict[str, Any]:
             "methodological_patterns",
             "limitations_or_gaps",
             "citation_support",
+            "cited_paper_ids",
             "quote_uses",
         ],
+        "additionalProperties": False,
+    }
+
+
+def review_sections_schema() -> dict[str, Any]:
+    """Build the strict schema for edited literature-review sections."""
+    return {
+        "type": "object",
+        "properties": {
+            "sections": {
+                "type": "array",
+                "items": review_section_schema(),
+            },
+        },
+        "required": ["sections"],
         "additionalProperties": False,
     }
 

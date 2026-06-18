@@ -1,0 +1,85 @@
+{
+  "source_review_eligible_papers": "data/processed/lr_5_review_eligible_papers.csv",
+  "source_labels": "data/processed/lr_5_review_labels_raw.csv",
+  "source_label_values": "data/processed/lr_5_review_label_values.json",
+  "source_quality_report": "data/processed/lr_5_review_quality_report.csv",
+  "source_review_filter_report": "data/processed/lr_5_review_filter_report.json",
+  "status": "warning",
+  "counts": {
+    "review_eligible_papers": 18,
+    "review_labeled_papers": 18,
+    "review_usable_papers": 18,
+    "papers_with_useful_evidence": 18,
+    "citation_eligible_papers": 18,
+    "excluded_papers": 0
+  },
+  "citation_target": {
+    "minimum_cited_papers": 18,
+    "target_cited_papers": 18,
+    "maximum_cited_papers": 18
+  },
+  "label_coverage": [
+    {
+      "label_id": "methodology",
+      "value_mode": "controlled_auto",
+      "papers_with_usable_value": 18,
+      "total_labeled_papers": 18
+    },
+    {
+      "label_id": "study_design",
+      "value_mode": "controlled_fixed",
+      "papers_with_usable_value": 18,
+      "total_labeled_papers": 18
+    },
+    {
+      "label_id": "dataset_or_sample",
+      "value_mode": "free_text",
+      "papers_with_usable_value": 13,
+      "total_labeled_papers": 18
+    },
+    {
+      "label_id": "key_finding",
+      "value_mode": "free_text",
+      "papers_with_usable_value": 13,
+      "total_labeled_papers": 18
+    },
+    {
+      "label_id": "paper_limitation",
+      "value_mode": "free_text",
+      "papers_with_usable_value": 11,
+      "total_labeled_papers": 18
+    },
+    {
+      "label_id": "direct_quote",
+      "value_mode": "evidence_quote",
+      "papers_with_usable_value": 8,
+      "total_labeled_papers": 18
+    },
+    {
+      "label_id": "future_work_or_gap",
+      "value_mode": "free_text",
+      "papers_with_usable_value": 8,
+      "total_labeled_papers": 18
+    }
+  ],
+  "quality_issue_counts": {
+    "recommended_metadata_missing": 1,
+    "review_value_dropped": 5,
+    "review_value_mapped": 5
+  },
+  "review_filter": {
+    "counts": {
+      "included_papers": 20,
+      "review_eligible_papers": 18,
+      "excluded_likely_review_papers": 2,
+      "retained_primary_or_unclear_papers": 18,
+      "retained_suspected_review_papers": 0
+    },
+    "retention_rule": "Papers identified as likely review articles by available metadata are excluded from literature-review evidence synthesis. Retained papers should be described as primary or unclear, not as fully verified original studies."
+  },
+  "excluded_paper_ids": [],
+  "warnings": [
+    "5 usable papers lack a key finding."
+  ],
+  "critical_issues": []
+}

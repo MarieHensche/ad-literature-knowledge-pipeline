@@ -21,13 +21,17 @@ class MainPipelineArtifacts:
     mantis_ready_csv: Path
     review_config_normalized_json: Path
     review_eligible_papers_csv: Path
+    review_filter_report_json: Path
     review_labels_raw_csv: Path
     review_label_values_json: Path
     review_label_values_review_yaml: Path
     review_quality_report_csv: Path
+    review_coverage_report_json: Path
     review_evidence_map_json: Path
     review_sections_json: Path
+    review_edited_sections_json: Path
     literature_review_md: Path
+    literature_review_latex_dir: Path
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,9 @@ def main_pipeline_artifacts(
         review_eligible_papers_csv=processed_path(
             collection, "review_eligible_papers.csv", base_dir
         ),
+        review_filter_report_json=processed_path(
+            collection, "review_filter_report.json", base_dir
+        ),
         review_labels_raw_csv=processed_path(
             collection, "review_labels_raw.csv", base_dir
         ),
@@ -112,14 +119,23 @@ def main_pipeline_artifacts(
         review_quality_report_csv=processed_path(
             collection, "review_quality_report.csv", base_dir
         ),
+        review_coverage_report_json=processed_path(
+            collection, "review_coverage_report.json", base_dir
+        ),
         review_evidence_map_json=processed_path(
             collection, "review_evidence_map.json", base_dir
         ),
         review_sections_json=processed_path(
             collection, "review_sections.json", base_dir
         ),
+        review_edited_sections_json=processed_path(
+            collection, "review_sections_edited.json", base_dir
+        ),
         literature_review_md=processed_path(
             collection, "literature_review.md", base_dir
+        ),
+        literature_review_latex_dir=processed_path(
+            collection, "literature_review_latex", base_dir
         ),
     )
 

@@ -30,7 +30,8 @@ VALID_VALUE_MODES = {
 }
 VALID_SELECTIONS = {"single", "multi"}
 DEFAULT_OUTPUT_FORMATS = ["markdown"]
-DEFAULT_CITATION_STYLE = "apa"
+DEFAULT_CITATION_STYLE = "harvard"
+DEFAULT_REVIEW_TYPE = "narrative"
 DEFAULT_MAX_QUOTE_WORDS = 40
 DEFAULT_EVIDENCE_SECTIONS = ["abstract", "results", "discussion", "conclusion"]
 DEFAULT_STUDY_DESIGN_VALUES = [
@@ -459,9 +460,70 @@ def normalize_output(raw_output: object) -> dict[str, Any]:
     }
 
 
+def normalize_review_type(value: object) -> str:
+    review_type = normalize_tagging_label(str(value or DEFAULT_REVIEW_TYPE))
+    return review_type or DEFAULT_REVIEW_TYPE
+
+
+def collection_context(topic_contract: dict[str, Any]) -> dict[str, Any]:
+    collection = topic_contract.get("collection")
+    if not isinstance(collection, dict):
+        return {}
+
+    search_queries = []
+    raw_queries = collection.get("search_queries", [])
+    if isinstance(raw_queries, list):
+        for item in raw_queries:
+            if not isinstance(item, dict):
+                continue
+            query = clean_text(item.get("query"))
+            if not query:
+                continue
+            search_queries.append(
+                {
+                    "query": query,
+                    "reason": clean_text(item.get("reason")),
+                }
+            )
+
+    allowed_providers = collection.get("allowed_providers", [])
+    if not isinstance(allowed_providers, list):
+        allowed_providers = []
+
+    return {
+        "allowed_providers": [
+            clean_text(provider)
+            for provider in allowed_providers
+            if clean_text(provider)
+        ],
+        "preferred_provider": clean_text(collection.get("preferred_provider")),
+        "max_results_default": collection.get("max_results_default"),
+        "exclude_openalex_review_type": bool(
+            collection.get("exclude_openalex_review_type", False)
+        ),
+        "search_queries": search_queries,
+    }
+
+
+def scope_context(topic_contract: dict[str, Any]) -> dict[str, Any]:
+    scope = topic_contract.get("scope")
+    if not isinstance(scope, dict):
+        return {}
+
+    context = {}
+    for key in ["include_criteria", "exclude_criteria", "boundary_rules"]:
+        values = scope.get(key, [])
+        if isinstance(values, list):
+            context[key] = [clean_text(value) for value in values if clean_text(value)]
+        else:
+            context[key] = []
+    return context
+
+
 def default_review_config() -> dict[str, Any]:
     return {
         "enabled": True,
+        "review_type": DEFAULT_REVIEW_TYPE,
         "output": {
             "formats": DEFAULT_OUTPUT_FORMATS,
             "citation_style": DEFAULT_CITATION_STYLE,
@@ -480,6 +542,7 @@ def review_config_from_contract(topic_contract: dict[str, Any]) -> dict[str, Any
 
     config = default_review_config()
     config["enabled"] = bool(raw_review.get("enabled", config["enabled"]))
+    config["review_type"] = raw_review.get("review_type", config["review_type"])
     if "output" in raw_review:
         config["output"] = raw_review["output"]
     if "labels" in raw_review:
@@ -509,6 +572,8 @@ def normalize_review_config(topic_contract: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "research_topic": topic_contract["research_topic"],
+        "scope": scope_context(topic_contract),
+        "collection": collection_context(topic_contract),
         "topic_structure": {
             "anchor_topic_id": topic_contract["topic_structure"].get(
                 "anchor_topic_id",
@@ -519,6 +584,7 @@ def normalize_review_config(topic_contract: dict[str, Any]) -> dict[str, Any]:
         },
         "review": {
             "enabled": bool(review_config.get("enabled", False)),
+            "review_type": normalize_review_type(review_config.get("review_type")),
             "output": normalize_output(review_config.get("output")),
             "label_count": len(normalized_labels),
             "labels": normalized_labels,

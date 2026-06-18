@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from difflib import get_close_matches
 import os
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
 from ad_lit_pipeline.llm.schemas import review_section_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
 from ad_lit_pipeline.prompts.render import render_synthesize_review_section_prompt
+from ad_lit_pipeline.steps.review.citations import enrich_paper_citations
 
 
 STEP = StepSpec(
@@ -42,6 +44,19 @@ def allowed_paper_ids(section: dict[str, Any]) -> set[str]:
     return {str(paper_id) for paper_id in paper_ids if str(paper_id).strip()}
 
 
+def resolve_paper_id(paper_id: object, known_paper_ids: set[str]) -> str:
+    raw_id = str(paper_id or "").strip()
+    if raw_id in known_paper_ids:
+        return raw_id
+    if not raw_id:
+        return ""
+
+    matches = get_close_matches(raw_id, sorted(known_paper_ids), n=2, cutoff=0.94)
+    if len(matches) == 1:
+        return matches[0]
+    return raw_id
+
+
 def validate_section_response(
     section: dict[str, Any],
     response: dict[str, Any],
@@ -54,6 +69,21 @@ def validate_section_response(
         )
 
     known_paper_ids = allowed_paper_ids(section)
+    cited_paper_ids = response.get("cited_paper_ids")
+    if not isinstance(cited_paper_ids, list):
+        raise ValueError("cited_paper_ids must be a list.")
+    repaired_cited_ids = []
+    for paper_id in cited_paper_ids:
+        resolved_id = resolve_paper_id(paper_id, known_paper_ids)
+        if resolved_id not in known_paper_ids:
+            raise ValueError(
+                f"cited_paper_ids references paper_id {paper_id!r}, which is "
+                f"not present in section {section_id!r}."
+            )
+        if resolved_id not in repaired_cited_ids:
+            repaired_cited_ids.append(resolved_id)
+    response["cited_paper_ids"] = repaired_cited_ids
+
     for group_name in ["citation_support", "quote_uses"]:
         group = response.get(group_name)
         if not isinstance(group, list):
@@ -62,11 +92,15 @@ def validate_section_response(
             if not isinstance(item, dict):
                 raise ValueError(f"{group_name} items must be objects.")
             paper_id = str(item.get("paper_id") or "")
-            if not paper_id or paper_id not in known_paper_ids:
+            resolved_id = resolve_paper_id(paper_id, known_paper_ids)
+            if not resolved_id or resolved_id not in known_paper_ids:
                 raise ValueError(
                     f"{group_name} references paper_id {paper_id!r}, which is "
                     f"not present in section {section_id!r}."
                 )
+            item["paper_id"] = resolved_id
+            if resolved_id not in response["cited_paper_ids"]:
+                response["cited_paper_ids"].append(resolved_id)
 
     return response
 
@@ -78,7 +112,10 @@ def call_llm(
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, Any], list[Path]]:
-    prompt = render_synthesize_review_section_prompt(evidence_map, section)
+    prompt = render_synthesize_review_section_prompt(
+        evidence_map_with_citations(evidence_map),
+        section_with_citations(evidence_map, section),
+    )
     section_id = str(section.get("section_id") or "section")
     result = client.create_json(
         model=model,
@@ -92,6 +129,37 @@ def call_llm(
     )
     trace_paths = result.trace_paths.as_list() if result.trace_paths else []
     return validate_section_response(section, result.parsed), trace_paths
+
+
+def paper_lookup(evidence_map: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    papers = evidence_map.get("papers", [])
+    if not isinstance(papers, list):
+        return {}
+    return {
+        str(paper.get("paper_id")): enrich_paper_citations(paper)
+        for paper in papers
+        if isinstance(paper, dict) and paper.get("paper_id")
+    }
+
+
+def evidence_map_with_citations(evidence_map: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(evidence_map)
+    enriched["papers"] = list(paper_lookup(evidence_map).values())
+    return enriched
+
+
+def section_with_citations(
+    evidence_map: dict[str, Any],
+    section: dict[str, Any],
+) -> dict[str, Any]:
+    lookup = paper_lookup(evidence_map)
+    enriched = dict(section)
+    enriched["citation_papers"] = [
+        lookup[paper_id]
+        for paper_id in section.get("paper_ids", [])
+        if paper_id in lookup and lookup[paper_id].get("citation_metadata_complete")
+    ]
+    return enriched
 
 
 def synthesize_review_sections(
@@ -141,9 +209,13 @@ def run(
         {
             "source_evidence_map": str(evidence_map_path),
             "research_topic": evidence_map.get("research_topic", {}),
+            "scope": evidence_map.get("scope", {}),
+            "collection": evidence_map.get("collection", {}),
+            "topic_structure": evidence_map.get("topic_structure", {}),
             "overview": evidence_map.get("overview", {}),
+            "quality": evidence_map.get("quality", {}),
             "sections": sections,
-            "papers": evidence_map.get("papers", []),
+            "papers": list(paper_lookup(evidence_map).values()),
         },
     )
     return StepResult(

@@ -1,0 +1,14 @@
+{
+  "source_config": "data/processed/lr_4_tagging_config_normalized.json",
+  "model": "gpt-4o-mini",
+  "rules_count": 1,
+  "rules": [
+    {
+      "category_id": "computational_methods_detail",
+      "selection": "multi",
+      "required": true,
+      "fallback_value": null,
+      "reason": "This category is required and allows multiple values, but no fallback value is specified."
+    }
+  ]
+}

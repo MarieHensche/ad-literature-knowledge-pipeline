@@ -3,12 +3,16 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.json_io import read_json_object, write_json
+from ad_lit_pipeline.steps.review.citations import (
+    enrich_paper_citations,
+    harvard_narrative,
+)
 from ad_lit_pipeline.steps.review.label_values import split_multi_value
 
 
@@ -28,10 +32,80 @@ METADATA_COLUMNS = ["paper_id", "title", "year", "doi", "authors", "venue", "sou
 PRIMARY_SECTION_LABEL = "main_topic"
 PREFERRED_SECTION_LABELS = ["methodology", "main_topic"]
 DEFAULT_SECTION_ID = "unassigned"
+STABLE_COMPARATIVE_SECTIONS = [
+    {
+        "section_id": "comparative_methods_and_evidence",
+        "label": "Comparative Methods And Evidence",
+        "section_type": "comparative_methods",
+        "purpose": (
+            "Compare computational, analytical, experimental, or conceptual "
+            "approaches across the included papers. Avoid repeating individual "
+            "method sections."
+        ),
+    },
+    {
+        "section_id": "datasets_and_study_designs",
+        "label": "Datasets And Study Designs",
+        "section_type": "datasets_study_designs",
+        "purpose": (
+            "Compare datasets, samples, cohorts, data sources, study designs, "
+            "and validation patterns across papers."
+        ),
+    },
+    {
+        "section_id": "limitations_gaps_and_future_work",
+        "label": "Limitations, Gaps, And Future Directions",
+        "section_type": "limitations_gaps",
+        "purpose": (
+            "Synthesize paper-reported limitations, explicitly stated gaps, and "
+            "future work. Do not invent gaps."
+        ),
+    },
+    {
+        "section_id": "conclusion",
+        "label": "Conclusion",
+        "section_type": "conclusion",
+        "purpose": (
+            "Conclude by integrating the main evidence, strengths, limitations, "
+            "and implications of the included literature."
+        ),
+    },
+]
 TEXT_EVIDENCE_LABELS = {
     "key_finding",
     "paper_limitation",
     "future_work_or_gap",
+}
+METHOD_PARENT_HINTS = {
+    "artificial_intelligence": {
+        "machine_learning",
+        "deep_learning",
+        "neural_network",
+        "convolutional_neural_network",
+        "transformer",
+    },
+    "machine_learning": {
+        "deep_learning",
+        "support_vector_machine",
+        "random_forest",
+        "decision_tree",
+        "gradient_boosting",
+        "neural_network",
+        "convolutional_neural_network",
+        "pattern_recognition",
+    },
+    "deep_learning": {
+        "convolutional_neural_network",
+        "recurrent_neural_network",
+        "transformer",
+        "autoencoder",
+    },
+    "network_analysis": {
+        "graph_analysis",
+        "graph_theory",
+        "large_scale_network_analysis",
+        "functional_connectivity_analysis",
+    },
 }
 MAX_TEXT_ITEMS_PER_SECTION = 50
 MAX_QUOTES_PER_SECTION = 20
@@ -68,30 +142,60 @@ def value_labels(label: dict[str, Any]) -> dict[str, str]:
     return labels
 
 
+def allowed_values(label: dict[str, Any]) -> set[str]:
+    return {
+        str(value.get("value"))
+        for value in label.get("values", [])
+        if isinstance(value, dict) and value.get("value")
+    }
+
+
+def value_mappings(label: dict[str, Any]) -> dict[str, str]:
+    mappings = {}
+    for item in label.get("value_mappings", []):
+        if not isinstance(item, dict):
+            continue
+        source = clean_text(item.get("from"))
+        target = clean_text(item.get("to"))
+        if source and target:
+            mappings[source] = target
+    return mappings
+
+
+def dropped_values(label: dict[str, Any]) -> set[str]:
+    return {
+        clean_text(value)
+        for value in label.get("dropped_values", [])
+        if clean_text(value)
+    }
+
+
 def paper_citation(row: dict[str, str]) -> str:
-    authors = clean_text(row.get("authors"))
-    year = clean_text(row.get("year"))
-    title = clean_text(row.get("title"))
-    lead_author = authors.split(";")[0].split(",")[0].strip() if authors else ""
-    if lead_author and year:
-        return f"{lead_author} ({year})"
-    if title and year:
-        return f"{title} ({year})"
-    return title or clean_text(row.get("paper_id"))
+    return harvard_narrative(row) or clean_text(row.get("paper_id"))
 
 
 def paper_record(row: dict[str, str]) -> dict[str, str]:
     record = {column: clean_text(row.get(column)) for column in METADATA_COLUMNS}
     record["citation_key"] = paper_citation(row)
-    return record
+    return enrich_paper_citations(record)
 
 
-def problematic_paper_ids(quality_rows: list[dict[str, str]]) -> set[str]:
-    return {
-        clean_text(row.get("paper_id"))
-        for row in quality_rows
-        if clean_text(row.get("paper_id")) and row.get("severity") == "error"
-    }
+def problematic_paper_ids(
+    quality_rows: list[dict[str, str]],
+    labels: dict[str, dict[str, Any]] | None = None,
+) -> set[str]:
+    excluded = set()
+    label_map = labels or {}
+    for row in quality_rows:
+        paper_id = clean_text(row.get("paper_id"))
+        if not paper_id or row.get("severity") != "error":
+            continue
+        if row.get("issue") == "invalid_review_value":
+            label = label_map.get(clean_text(row.get("field")), {})
+            if str(label.get("value_mode") or "") == "controlled_auto":
+                continue
+        excluded.add(paper_id)
+    return excluded
 
 
 def issue_counts(quality_rows: list[dict[str, str]]) -> dict[str, int]:
@@ -130,7 +234,9 @@ def count_controlled_values(
     for label_id in controlled_label_ids(labels):
         counts: Counter[str] = Counter()
         for row in rows:
-            counts.update(split_multi_value(row.get(label_id, "")))
+            counts.update(
+                clean_controlled_values(row.get(label_id, ""), labels[label_id])
+            )
         names = value_labels(labels[label_id])
         distributions[label_id] = [
             {
@@ -141,6 +247,57 @@ def count_controlled_values(
             for value, count in counts.most_common()
         ]
     return distributions
+
+
+def label_coverage(
+    rows: list[dict[str, str]],
+    labels: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    coverage = []
+    for label_id, label in labels.items():
+        non_empty = 0
+        for row in rows:
+            value = clean_text(row.get(label_id))
+            if value and value not in {"[]", "unclear"}:
+                non_empty += 1
+        coverage.append(
+            {
+                "label_id": label_id,
+                "label": clean_text(label.get("label")) or label_id,
+                "value_mode": clean_text(label.get("value_mode")),
+                "papers_with_value": non_empty,
+                "paper_count": len(rows),
+                "coverage_ratio": round(non_empty / len(rows), 4) if rows else 0,
+            }
+        )
+    return coverage
+
+
+def method_hierarchy_hints(
+    controlled_counts: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, str]]:
+    methodology_counts = controlled_counts.get("methodology", [])
+    present = {
+        clean_text(item.get("value"))
+        for item in methodology_counts
+        if isinstance(item, dict) and clean_text(item.get("value"))
+    }
+    hints = []
+    for parent, children in METHOD_PARENT_HINTS.items():
+        if parent not in present:
+            continue
+        for child in sorted(children & present):
+            hints.append(
+                {
+                    "parent_value": parent,
+                    "child_value": child,
+                    "use": (
+                        "Treat the child as a more specific instance of the "
+                        "parent when synthesizing methods."
+                    ),
+                }
+            )
+    return hints
 
 
 def section_label_id(
@@ -155,8 +312,37 @@ def section_label_id(
     return PRIMARY_SECTION_LABEL
 
 
-def section_ids(row: dict[str, str], label_id: str) -> list[str]:
-    values = split_multi_value(row.get(label_id, ""))
+def clean_controlled_values(raw_value: str, label: dict[str, Any]) -> list[str]:
+    values = split_multi_value(raw_value)
+    if str(label.get("value_mode") or "") not in {
+        "controlled_fixed",
+        "controlled_auto",
+    }:
+        return values
+
+    allowed = allowed_values(label)
+    mappings = value_mappings(label)
+    drops = dropped_values(label)
+    cleaned = []
+    seen = set()
+    for value in values:
+        mapped = mappings.get(value, value)
+        if mapped in drops or value in drops:
+            continue
+        if allowed and mapped not in allowed:
+            continue
+        if mapped and mapped not in seen:
+            cleaned.append(mapped)
+            seen.add(mapped)
+    return cleaned
+
+
+def cleaned_section_ids(
+    row: dict[str, str],
+    label_id: str,
+    labels: dict[str, dict[str, Any]],
+) -> list[str]:
+    values = clean_controlled_values(row.get(label_id, ""), labels.get(label_id, {}))
     return values or [DEFAULT_SECTION_ID]
 
 
@@ -247,14 +433,22 @@ def build_section(
     rows: list[dict[str, str]],
     labels: dict[str, dict[str, Any]],
     section_label_id_value: str,
+    label: str | None = None,
+    section_type: str | None = None,
+    purpose: str | None = None,
+    topic_focus: dict[str, Any] | None = None,
+    section_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    section_label = value_labels(labels.get(section_label_id_value, {})).get(
-        section_id,
-        section_id.replace("_", " "),
+    section_label = label or value_labels(labels.get(section_label_id_value, {})).get(
+        section_id, section_id.replace("_", " ")
     )
     return {
         "section_id": section_id,
         "label": section_label,
+        "section_type": section_type or "evidence_group",
+        "purpose": purpose or "",
+        "topic_focus": topic_focus or {},
+        "section_context": section_context or {},
         "source_label": section_label_id_value,
         "paper_count": len(rows),
         "paper_ids": [clean_text(row.get("paper_id")) for row in rows],
@@ -264,44 +458,231 @@ def build_section(
     }
 
 
+def main_topics_from_label_values(label_values: dict[str, Any]) -> list[dict[str, Any]]:
+    topic_structure = label_values.get("topic_structure")
+    if not isinstance(topic_structure, dict):
+        return []
+    main_topics = topic_structure.get("main_topics")
+    if not isinstance(main_topics, list):
+        return []
+    return [topic for topic in main_topics if isinstance(topic, dict)]
+
+
+def topic_section_id(topic: dict[str, Any]) -> str:
+    topic_id = clean_text(topic.get("value") or topic.get("topic_id"))
+    return f"main_topic_{topic_id}" if topic_id else "main_topic"
+
+
+def topic_section_label(topic: dict[str, Any]) -> str:
+    label = clean_text(topic.get("label") or topic.get("value") or topic.get("topic_id"))
+    return f"{label} In The Included Literature" if label else "Main Topic"
+
+
+def topic_focus(topic: dict[str, Any], label_values: dict[str, Any]) -> dict[str, Any]:
+    topic_id = clean_text(topic.get("value") or topic.get("topic_id"))
+    focus = dict(topic)
+    topic_structure = label_values.get("topic_structure")
+    if isinstance(topic_structure, dict):
+        hints = topic_structure.get("term_hints")
+        if isinstance(hints, list):
+            for hint in hints:
+                if isinstance(hint, dict) and hint.get("topic_id") == topic_id:
+                    focus["term_hints"] = hint.get("terms", [])
+                    focus["is_anchor"] = bool(hint.get("is_anchor", False))
+                    break
+    return focus
+
+
+def build_planned_sections(
+    usable_rows: list[dict[str, str]],
+    labels: dict[str, dict[str, Any]],
+    label_values: dict[str, Any],
+    review_methodology: dict[str, Any],
+) -> list[dict[str, Any]]:
+    sections = [
+        build_section(
+            "review_methodology",
+            usable_rows,
+            labels,
+            "review_plan",
+            label="Review Methodology",
+            section_type="review_methodology",
+            purpose=(
+                "Describe how the review evidence was assembled from the "
+                "pipeline artifacts, including paper counts, review-paper "
+                "exclusion, label coverage, and citation eligibility. Do not "
+                "invent search details not present in the overview or quality "
+                "metadata."
+            ),
+            section_context=review_methodology,
+        )
+    ]
+
+    for topic in main_topics_from_label_values(label_values):
+        sections.append(
+            build_section(
+                topic_section_id(topic),
+                usable_rows,
+                labels,
+                "topic_structure.main_topics",
+                label=topic_section_label(topic),
+                section_type="main_topic_lens",
+                purpose=(
+                    "Discuss this topic-contract main concept as a focused "
+                    "lens across the included literature. Explain how the "
+                    "papers frame, study, measure, apply, or limit this concept."
+                ),
+                topic_focus=topic_focus(topic, label_values),
+            )
+        )
+
+    for section in STABLE_COMPARATIVE_SECTIONS:
+        sections.append(
+            build_section(
+                section["section_id"],
+                usable_rows,
+                labels,
+                "review_plan",
+                label=section["label"],
+                section_type=section["section_type"],
+                purpose=section["purpose"],
+            )
+        )
+
+    return sections
+
+
+def review_type_from_label_values(label_values: dict[str, Any]) -> str:
+    review = label_values.get("review")
+    if isinstance(review, dict):
+        review_type = clean_text(review.get("review_type"))
+        if review_type:
+            return review_type
+    return "narrative"
+
+
+def review_methodology_context(
+    label_values: dict[str, Any],
+    review_rows: list[dict[str, str]],
+    usable_rows: list[dict[str, str]],
+    labels: dict[str, dict[str, Any]],
+    quality_rows: list[dict[str, str]],
+    controlled_counts: dict[str, list[dict[str, Any]]],
+    filter_report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    collection = label_values.get("collection")
+    scope = label_values.get("scope")
+    filter_counts = {}
+    retention_rule = ""
+    if isinstance(filter_report, dict):
+        counts = filter_report.get("counts")
+        if isinstance(counts, dict):
+            filter_counts = counts
+        retention_rule = clean_text(filter_report.get("retention_rule"))
+    citation_ready = sum(
+        1 for row in usable_rows if paper_record(row).get("citation_metadata_complete")
+    )
+    collection_context_value = collection if isinstance(collection, dict) else {}
+    return {
+        "review_type": review_type_from_label_values(label_values),
+        "selection_summary": {
+            "review_labeled_papers": len(review_rows),
+            "usable_papers_after_quality_checks": len(usable_rows),
+            "excluded_by_quality_checks": len(review_rows) - len(usable_rows),
+            "citation_metadata_complete_papers": citation_ready,
+            "year_range": year_range(usable_rows),
+            "review_paper_filter": (
+                "Review-type papers are removed before literature-review "
+                "evidence synthesis when the pipeline can identify them. "
+                "Retained papers should not be described as verified original "
+                "studies unless the source metadata proves that status."
+            ),
+            "review_filter_counts": filter_counts,
+        },
+        "collection_context": collection_context_value,
+        "search_strategy": {
+            "providers": collection_context_value.get("allowed_providers", []),
+            "preferred_provider": collection_context_value.get(
+                "preferred_provider",
+                "",
+            ),
+            "search_queries": collection_context_value.get("search_queries", []),
+            "filters": {
+                "full_text_required": True,
+                "review_type_filter": retention_rule,
+                "max_results_default": collection_context_value.get(
+                    "max_results_default",
+                    "",
+                ),
+            },
+            "reproducibility_note": (
+                "Use exact configured queries and available filter settings in "
+                "the review method. If provider-side retrieved/screened counts "
+                "are unavailable, state only the available included and labeled "
+                "counts."
+            ),
+        },
+        "scope_context": scope if isinstance(scope, dict) else {},
+        "label_coverage": label_coverage(usable_rows, labels),
+        "method_hierarchy_hints": method_hierarchy_hints(controlled_counts),
+        "quality_issue_counts": issue_counts(quality_rows),
+        "comparison_guidance": (
+            "Do not directly rank or compare performance metrics across papers "
+            "unless the papers use comparable data, tasks, outcomes, and "
+            "validation settings. Otherwise compare trends qualitatively."
+        ),
+    }
+
+
 def build_review_evidence_map(
     review_rows: list[dict[str, str]],
     label_values: dict[str, Any],
     quality_rows: list[dict[str, str]],
+    filter_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     labels = labels_by_id(label_values)
-    excluded_ids = problematic_paper_ids(quality_rows)
+    excluded_ids = problematic_paper_ids(quality_rows, labels)
     usable_rows = []
     for row in review_rows:
         paper_id = clean_text(row.get("paper_id"))
         if paper_id and paper_id not in excluded_ids:
             usable_rows.append(row)
 
-    rows_by_section: dict[str, list[dict[str, str]]] = defaultdict(list)
     selected_section_label = section_label_id(usable_rows, labels)
-    for row in usable_rows:
-        for section_id in section_ids(row, selected_section_label):
-            rows_by_section[section_id].append(row)
-
-    sections = [
-        build_section(
-            section_id,
-            rows_by_section[section_id],
-            labels,
-            selected_section_label,
-        )
-        for section_id in sorted(rows_by_section)
-    ]
+    controlled_counts = count_controlled_values(usable_rows, labels)
+    review_methodology = review_methodology_context(
+        label_values,
+        review_rows,
+        usable_rows,
+        labels,
+        quality_rows,
+        controlled_counts,
+        filter_report,
+    )
+    sections = build_planned_sections(
+        usable_rows,
+        labels,
+        label_values,
+        review_methodology,
+    )
 
     return {
         "research_topic": label_values.get("research_topic", {}),
+        "scope": label_values.get("scope", {}),
+        "collection": label_values.get("collection", {}),
+        "topic_structure": label_values.get("topic_structure", {}),
         "overview": {
+            "review_type": review_type_from_label_values(label_values),
             "paper_count": len(review_rows),
             "usable_paper_count": len(usable_rows),
             "excluded_paper_count": len(review_rows) - len(usable_rows),
             "year_range": year_range(usable_rows),
             "section_label": selected_section_label,
-            "controlled_value_counts": count_controlled_values(usable_rows, labels),
+            "section_plan": "stable_skeleton_with_main_topic_sections",
+            "controlled_value_counts": controlled_counts,
+            "label_coverage": label_coverage(usable_rows, labels),
+            "method_hierarchy_hints": method_hierarchy_hints(controlled_counts),
+            "review_methodology": review_methodology,
         },
         "quality": {
             "issue_count": len(quality_rows),
@@ -318,14 +699,21 @@ def run(
     review_label_values_path: Path,
     review_quality_report_path: Path,
     output_path: Path,
+    review_filter_report_path: Path | None = None,
 ) -> StepResult:
     review_rows = read_csv_rows(review_labels_path)
     label_values = read_json_object(review_label_values_path)
     quality_rows = read_csv_rows(review_quality_report_path)
+    filter_report = (
+        read_json_object(review_filter_report_path)
+        if review_filter_report_path is not None and review_filter_report_path.exists()
+        else None
+    )
     evidence_map = build_review_evidence_map(
         review_rows,
         label_values,
         quality_rows,
+        filter_report,
     )
     write_json(
         output_path,
@@ -333,6 +721,9 @@ def run(
             "source_labels": str(review_labels_path),
             "source_label_values": str(review_label_values_path),
             "source_quality_report": str(review_quality_report_path),
+            "source_review_filter_report": (
+                str(review_filter_report_path) if review_filter_report_path else ""
+            ),
             **evidence_map,
         },
     )
@@ -342,6 +733,7 @@ def run(
             "review_labels_raw_csv": review_labels_path,
             "review_label_values_json": review_label_values_path,
             "review_quality_report_csv": review_quality_report_path,
+            "review_filter_report_json": review_filter_report_path,
         },
         outputs={"review_evidence_map_json": output_path},
         row_counts={
@@ -370,6 +762,11 @@ def main() -> None:
         required=True,
         help="Review quality report CSV.",
     )
+    parser.add_argument(
+        "--review-filter-report",
+        default=None,
+        help="Optional JSON report from review-paper filtering.",
+    )
     parser.add_argument("--output", required=True, help="Evidence map JSON.")
     args = parser.parse_args()
 
@@ -378,6 +775,7 @@ def main() -> None:
         Path(args.label_values),
         Path(args.quality_report),
         Path(args.output),
+        Path(args.review_filter_report) if args.review_filter_report else None,
     )
 
 

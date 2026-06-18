@@ -200,6 +200,7 @@ def test_run_pipeline_dry_run_can_generate_literature_review() -> None:
     assert "Would run step: extract_review_labels" not in result.stdout
     assert "Would run step: normalize_review_label_values" in result.stdout
     assert "Would run step: build_review_evidence_map" in result.stdout
+    assert "Would run step: edit_review_sections" in result.stdout
     assert "Would run step: assemble_literature_review" in result.stdout
     assert result.stdout.index("prepare_full_text") < result.stdout.index(
         "filter_review_papers"

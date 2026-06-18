@@ -38,16 +38,26 @@ def review_payload(label_values: dict[str, Any], source_path: Path) -> dict[str,
             if isinstance(value, dict) and value.get("value")
         ]
         value_details = []
+        merge_values: dict[str, str] = {}
         for value in label.get("values", []):
             if not isinstance(value, dict) or not value.get("value"):
                 continue
+            value_id = str(value.get("value"))
             detail = {
-                "value": str(value.get("value")),
+                "value": value_id,
                 "paper_count": int(value.get("paper_count") or 0),
                 "surface_forms": value.get("surface_forms", []),
             }
             if value.get("canonicalized_from"):
                 detail["canonicalized_from"] = value["canonicalized_from"]
+                for source in value["canonicalized_from"]:
+                    if not isinstance(source, dict):
+                        continue
+                    source_value = normalize_tagging_label(
+                        str(source.get("value") or "")
+                    )
+                    if source_value and source_value != value_id:
+                        merge_values[source_value] = value_id
             value_details.append(detail)
 
         labels[label_id] = {
@@ -55,6 +65,8 @@ def review_payload(label_values: dict[str, Any], source_path: Path) -> dict[str,
             "value_mode": str(label.get("value_mode") or ""),
             "selection": str(label.get("selection") or ""),
             "values": values,
+            "merge_values": merge_values,
+            "drop_values": [],
             "value_details": value_details,
         }
 
@@ -64,6 +76,8 @@ def review_payload(label_values: dict[str, Any], source_path: Path) -> dict[str,
         "instructions": [
             "Edit values for controlled review labels only.",
             "Use value_details as read-only context for counts and surface forms.",
+            "Use merge_values to map extracted synonyms to approved values.",
+            "Use drop_values to remove extracted values without dropping papers.",
             "Delete a value to remove it from later review aggregation.",
             "Add a lowercase snake_case value to keep a user-approved new value.",
             "Set status to approved when the values are ready to merge.",
@@ -92,6 +106,22 @@ def reviewed_values(raw_values: object, label_id: str) -> list[str]:
     return values
 
 
+def reviewed_mapping(raw_mapping: object, label_id: str) -> dict[str, str]:
+    if raw_mapping in (None, ""):
+        return {}
+    if not isinstance(raw_mapping, dict):
+        raise ValueError(f"labels.{label_id}.merge_values must be a mapping.")
+
+    mapping = {}
+    for raw_source, raw_target in raw_mapping.items():
+        source = normalize_tagging_label(str(raw_source or ""))
+        target = normalize_tagging_label(str(raw_target or ""))
+        if not source or not target or source == target:
+            continue
+        mapping[source] = target
+    return mapping
+
+
 def value_record_by_id(label: dict[str, Any]) -> dict[str, dict[str, Any]]:
     records = {}
     for value in label.get("values", []):
@@ -118,6 +148,13 @@ def merge_reviewed_values(
         if not isinstance(payload, dict):
             continue
         values = reviewed_values(payload.get("values"), label_id)
+        explicit_drop_values = set(
+            reviewed_values(payload.get("drop_values", []), label_id)
+        )
+        merge_values = reviewed_mapping(payload.get("merge_values", {}), label_id)
+        for target in merge_values.values():
+            if target not in values:
+                values.append(target)
         existing = value_record_by_id(label)
         next_records = []
         for value in values:
@@ -132,6 +169,16 @@ def merge_reviewed_values(
                         "surface_forms": [],
                     }
                 )
+        removed_existing = {
+            value
+            for value in existing
+            if value not in values and value not in merge_values
+        }
+        label["dropped_values"] = sorted(explicit_drop_values | removed_existing)
+        label["value_mappings"] = [
+            {"from": source, "to": target}
+            for source, target in sorted(merge_values.items())
+        ]
         if [record.get("value") for record in label.get("values", [])] != values:
             changed += 1
         label["values"] = next_records

@@ -1,0 +1,186 @@
+\begin{thebibliography}{18}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Celone et~al.(2006)Celone, Calhoun, Dickerson, Atri, Chua, Miller,
+  DePeau, Rentz, Selkoe, Blacker, Albert, and
+  Sperling]{ref_10_1523_jneurosci_2250_06_2006}
+K.~Celone, V.~D. Calhoun, B.~C. Dickerson, A.~Atri, E.~F. Chua, S.~L. Miller,
+  K.~M. DePeau, D.~Rentz, D.~J. Selkoe, D.~Blacker, M.~Albert, and R.~A.
+  Sperling.
+\newblock Alterations in memory networks in mild cognitive impairment and
+  alzheimer's disease: An independent component analysis.
+\newblock \emph{Journal of Neuroscience}, 2006.
+\newblock \doi{10.1523/jneurosci.2250-06.2006}.
+\newblock URL \url{https://doi.org/10.1523/jneurosci.2250-06.2006}.
+
+\bibitem[Chen et~al.(2011)Chen, Ward, Xie, Li, Wu, Jones, Franczak, Antuono,
+  and Li]{ref_10_1148_radiol_10100734}
+G.~Chen, B.~D. Ward, C.~Xie, W.~Li, Z.~Wu, J.~Jones, M.~Franczak, P.~Antuono,
+  and S.-J. Li.
+\newblock Classification of alzheimer disease, mild cognitive impairment, and
+  normal cognitive status with large-scale network analysis based on
+  resting-state functional mr imaging.
+\newblock \emph{Radiology}, 2011.
+\newblock \doi{10.1148/radiol.10100734}.
+\newblock URL \url{https://doi.org/10.1148/radiol.10100734}.
+
+\bibitem[Collij et~al.(2016)Collij, Heeman, Kuijer, Ossenkoppele, Benedictus,
+  Möller, Verfaillie, Sanz‐Arigita, van Berckel, van~der Flier, Scheltens,
+  Barkhof, and Wink]{ref_10_1148_radiol_2016152703}
+L.~E. Collij, F.~Heeman, J.~P. Kuijer, R.~Ossenkoppele, M.~R. Benedictus,
+  C.~Möller, S.~C. Verfaillie, E.~Sanz‐Arigita, B.~N. van Berckel, W.~M.
+  van~der Flier, P.~Scheltens, F.~Barkhof, and A.~M. Wink.
+\newblock Application of machine learning to arterial spin labeling in mild
+  cognitive impairment and alzheimer disease.
+\newblock \emph{Radiology}, 2016.
+\newblock \doi{10.1148/radiol.2016152703}.
+\newblock URL \url{https://doi.org/10.1148/radiol.2016152703}.
+
+\bibitem[de~Haan et~al.(2009)de~Haan, Pijnenburg, Strijers, van~der Made,
+  van~der Flier, Scheltens, and Stam]{ref_10_1186_1471_2202_10_101}
+W.~de~Haan, Y.~A. Pijnenburg, R.~Strijers, Y.~van~der Made, W.~M. van~der
+  Flier, P.~Scheltens, and C.~J. Stam.
+\newblock Functional neural network analysis in frontotemporal dementia and
+  alzheimer's disease using eeg and graph theory.
+\newblock \emph{BMC Neuroscience}, 2009.
+\newblock \doi{10.1186/1471-2202-10-101}.
+\newblock URL \url{https://doi.org/10.1186/1471-2202-10-101}.
+
+\bibitem[Ding et~al.(2018)Ding, Sohn, Kawczynski, Trivedi, Harnish, Jenkins,
+  Lituiev, Copeland, Aboian, Aparici, Behr, Flavell, Huang, Zalocusky, Nardo,
+  Seo, Hawkins, Pampaloni, Hadley, and Franc]{ref_10_1148_radiol_2018180958}
+Y.~Ding, J.~H. Sohn, M.~Kawczynski, H.~Trivedi, R.~Harnish, N.~W. Jenkins,
+  D.~Lituiev, T.~P. Copeland, M.~Aboian, C.~M. Aparici, S.~C. Behr, R.~R.
+  Flavell, S.-Y. Huang, K.~A. Zalocusky, L.~Nardo, Y.~Seo, R.~A. Hawkins, M.~H.
+  Pampaloni, D.~Hadley, and B.~L. Franc.
+\newblock A deep learning model to predict a diagnosis of alzheimer disease by
+  using <sup>18</sup>f-fdg pet of the brain.
+\newblock \emph{Radiology}, 2018.
+\newblock \doi{10.1148/radiol.2018180958}.
+\newblock URL \url{https://doi.org/10.1148/radiol.2018180958}.
+
+\bibitem[Dyrba et~al.(2015)Dyrba, Barkhof, Fellgiebel, Filippi, Hausner,
+  Hauenstein, Kirste, Teipel, and the EDSD~study group]{ref_10_1111_jon_12214}
+M.~Dyrba, F.~Barkhof, A.~Fellgiebel, M.~Filippi, L.~Hausner, K.~Hauenstein,
+  T.~Kirste, S.~Teipel, and the EDSD~study group.
+\newblock Predicting prodromal alzheimer's disease in subjects with mild
+  cognitive impairment using machine learning classification of multimodal
+  multicenter diffusion‐tensor and magnetic resonance imaging data.
+\newblock \emph{Journal of Neuroimaging}, 2015.
+\newblock \doi{10.1111/jon.12214}.
+\newblock URL \url{https://doi.org/10.1111/jon.12214}.
+
+\bibitem[Jo et~al.(2019)Jo, Nho, and Saykin]{ref_10_3389_fnagi_2019_00220}
+T.~Jo, K.~Nho, and A.~J. Saykin.
+\newblock Deep learning in alzheimer's disease: Diagnostic classification and
+  prognostic prediction using neuroimaging data.
+\newblock \emph{Frontiers in Aging Neuroscience}, 2019.
+\newblock \doi{10.3389/fnagi.2019.00220}.
+\newblock URL \url{https://doi.org/10.3389/fnagi.2019.00220}.
+
+\bibitem[Kavitha et~al.(2022)Kavitha, Mani, Srividhya, Khalaf, and
+  Romero]{ref_10_3389_fpubh_2022_853294}
+C.~Kavitha, V.~Mani, S.~Srividhya, O.~I. Khalaf, and C.~A.~T. Romero.
+\newblock Early-stage alzheimer's disease prediction using machine learning
+  models.
+\newblock \emph{Frontiers in Public Health}, 2022.
+\newblock \doi{10.3389/fpubh.2022.853294}.
+\newblock URL \url{https://doi.org/10.3389/fpubh.2022.853294}.
+
+\bibitem[Li et~al.(2019)Li, Habes, Wolk, Fan, Initiative, the Australian
+  Imaging~Biomarkers, and of~Aging]{ref_10_1016_j_jalz_2019_02_007}
+H.~Li, M.~Habes, D.~A. Wolk, Y.~Fan, A.~D.~N. Initiative, the Australian
+  Imaging~Biomarkers, and L.~S. of~Aging.
+\newblock A deep learning model for early prediction of alzheimer's disease
+  dementia based on hippocampal magnetic resonance imaging data.
+\newblock \emph{Alzheimer s \& Dementia}, 2019.
+\newblock \doi{10.1016/j.jalz.2019.02.007}.
+\newblock URL \url{https://doi.org/10.1016/j.jalz.2019.02.007}.
+
+\bibitem[Liu et~al.(2014)Liu, Liu, Cai, Pujol, Kikinis, and
+  Feng]{ref_10_1109_isbi_2014_6868045}
+S.~Liu, S.~Liu, W.~Cai, S.~Pujol, R.~Kikinis, and D.~Feng.
+\newblock Early diagnosis of alzheimer's disease with deep learning.
+\newblock 2014.
+\newblock \doi{10.1109/isbi.2014.6868045}.
+\newblock URL \url{https://doi.org/10.1109/isbi.2014.6868045}.
+
+\bibitem[Mirzaei and Adeli(2021)]{ref_10_1016_j_bspc_2021_103293}
+G.~Mirzaei and H.~Adeli.
+\newblock Machine learning techniques for diagnosis of alzheimer disease, mild
+  cognitive disorder, and other types of dementia.
+\newblock \emph{Biomedical Signal Processing and Control}, 2021.
+\newblock \doi{10.1016/j.bspc.2021.103293}.
+\newblock URL \url{https://doi.org/10.1016/j.bspc.2021.103293}.
+
+\bibitem[Moradi et~al.(2014)Moradi, Pepe, Gaser, Huttunen, and
+  Tohka]{ref_10_1016_j_neuroimage_2014_10_002}
+E.~Moradi, A.~Pepe, C.~Gaser, H.~Huttunen, and J.~Tohka.
+\newblock Machine learning framework for early mri-based alzheimer's conversion
+  prediction in mci subjects.
+\newblock \emph{NeuroImage}, 2014.
+\newblock \doi{10.1016/j.neuroimage.2014.10.002}.
+\newblock URL \url{https://doi.org/10.1016/j.neuroimage.2014.10.002}.
+
+\bibitem[Murugan et~al.(2021)Murugan, Venkatesan, Sumithra, Gao, Elakkiya,
+  Akila, and Manoharan]{ref_10_1109_access_2021_3090474}
+S.~Murugan, C.~Venkatesan, M.~G. Sumithra, X.~Gao, B.~Elakkiya, M.~Akila, and
+  S.~Manoharan.
+\newblock Demnet: A deep learning model for early diagnosis of alzheimer
+  diseases and dementia from mr images.
+\newblock \emph{IEEE Access}, 2021.
+\newblock \doi{10.1109/access.2021.3090474}.
+\newblock URL \url{https://doi.org/10.1109/access.2021.3090474}.
+
+\bibitem[Spasov et~al.(2019)Spasov, Passamonti, Duggento, Lió, and
+  Toschi]{ref_10_1016_j_neuroimage_2019_01_031}
+S.~Spasov, L.~Passamonti, A.~Duggento, P.~Lió, and N.~Toschi.
+\newblock A parameter-efficient deep learning approach to predict conversion
+  from mild cognitive impairment to alzheimer's disease.
+\newblock \emph{NeuroImage}, 2019.
+\newblock \doi{10.1016/j.neuroimage.2019.01.031}.
+\newblock URL \url{https://doi.org/10.1016/j.neuroimage.2019.01.031}.
+
+\bibitem[Suk and Shen(2013)]{ref_10_1007_978_3_642_40763_5_72}
+H.~Suk and D.~Shen.
+\newblock Deep learning-based feature representation for ad/mci classification.
+\newblock \emph{Lecture notes in computer science}, 2013.
+\newblock \doi{10.1007/978-3-642-40763-5_72}.
+\newblock URL \url{https://doi.org/10.1007/978-3-642-40763-5_72}.
+
+\bibitem[Suk et~al.(2014)Suk, Lee, and
+  Shen]{ref_10_1016_j_neuroimage_2014_06_077}
+H.~Suk, S.~Lee, and D.~Shen.
+\newblock Hierarchical feature representation and multimodal fusion with deep
+  learning for ad/mci diagnosis.
+\newblock \emph{NeuroImage}, 2014.
+\newblock \doi{10.1016/j.neuroimage.2014.06.077}.
+\newblock URL \url{https://doi.org/10.1016/j.neuroimage.2014.06.077}.
+
+\bibitem[Supekar et~al.(2008)Supekar, Menon, Rubin, Musen, and
+  Greicius]{ref_10_1371_journal_pcbi_1000100}
+K.~Supekar, V.~Menon, D.~J. Rubin, M.~A. Musen, and M.~D. Greicius.
+\newblock Network analysis of intrinsic functional brain connectivity in
+  alzheimer's disease.
+\newblock \emph{PLoS Computational Biology}, 2008.
+\newblock \doi{10.1371/journal.pcbi.1000100}.
+\newblock URL \url{https://doi.org/10.1371/journal.pcbi.1000100}.
+
+\bibitem[Winchester et~al.(2023)Winchester, Harshfield, Liu, Badhwar, Khleifat,
+  Clarke, Dehsarvi, Lengyel, Lourida, Madan, Marzi, Proitsi, Rajkumar, Rittman,
+  Silajdžić, Tamburin, Ranson, and Llewellyn]{ref_10_1002_alz_13390}
+L.~Winchester, E.~L. Harshfield, S.~Liu, A.~Badhwar, A.~A. Khleifat, N.~Clarke,
+  A.~Dehsarvi, I.~Lengyel, I.~Lourida, C.~R. Madan, S.~J. Marzi, P.~Proitsi,
+  A.~P. Rajkumar, T.~Rittman, E.~Silajdžić, S.~Tamburin, J.~M. Ranson, and
+  D.~J. Llewellyn.
+\newblock Artificial intelligence for biomarker discovery in alzheimer's
+  disease and dementia.
+\newblock \emph{Alzheimer s \& Dementia}, 2023.
+\newblock \doi{10.1002/alz.13390}.
+\newblock URL \url{https://doi.org/10.1002/alz.13390}.
+
+\end{thebibliography}

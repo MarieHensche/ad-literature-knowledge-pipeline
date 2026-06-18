@@ -1,0 +1,599 @@
+{
+  "source_labels": "data/processed/lr_4_review_labels_raw.csv",
+  "source_config": "data/processed/lr_4_review_config_normalized.json",
+  "research_topic": {
+    "title": "Computational Biology Methods for Alzheimer's Disease Research",
+    "description": "This research topic explores various computational biology methods used in the study of Alzheimer's disease to enhance understanding, diagnosis, and treatment strategies."
+  },
+  "scope": {
+    "include_criteria": [
+      "Papers directly studying Alzheimer's disease using computational methods",
+      "Papers that examine methodologies, tools, and approaches in computational biology related to Alzheimer's",
+      "Reviews, meta-analyses, and empirical studies that help map the topic."
+    ],
+    "exclude_criteria": [
+      "Papers focusing on unrelated neurological disorders that do not pertain to Alzheimer's disease."
+    ],
+    "boundary_rules": [
+      "Include borderline or tangentially relevant papers when they address one meaningful aspect of computational biology methods in Alzheimer's research.",
+      "Exclude papers only when the title and abstract clearly indicate a lack of relevance to Alzheimer's disease or computational biology."
+    ]
+  },
+  "collection": {
+    "allowed_providers": [
+      "openalex"
+    ],
+    "preferred_provider": "openalex",
+    "max_results_default": 50,
+    "exclude_openalex_review_type": false,
+    "search_queries": [
+      {
+        "query": "computational methods Alzheimer's disease",
+        "reason": "To capture research specifically linking computational strategies to Alzheimer's."
+      },
+      {
+        "query": "bioinformatics approaches in Alzheimer's research",
+        "reason": "Focus on bioinformatics contributions to understanding Alzheimer's."
+      },
+      {
+        "query": "machine learning applications Alzheimer research",
+        "reason": "Highlight machine learning and AI methodologies in the domain."
+      },
+      {
+        "query": "statistical modeling for Alzheimer's analysis",
+        "reason": "Gather studies employing statistical analysis techniques on Alzheimer's data."
+      },
+      {
+        "query": "Alzheimer's disease diagnosis computational biology",
+        "reason": "To find research on using computational biology for diagnosing Alzheimer's."
+      },
+      {
+        "query": "reviews computational biology Alzheimer's disease",
+        "reason": "To compile review articles on computational methodologies in the context of Alzheimer's research."
+      }
+    ]
+  },
+  "topic_structure": {
+    "anchor_topic_id": "alzheimers_disease",
+    "main_topics": [
+      {
+        "value": "alzheimers_disease",
+        "label": "Alzheimer's Disease"
+      },
+      {
+        "value": "computational_methods",
+        "label": "Computational Biology Methods"
+      }
+    ],
+    "term_hints": [
+      {
+        "topic_id": "alzheimers_disease",
+        "label": "Alzheimer's Disease",
+        "is_anchor": true,
+        "terms": [
+          {
+            "value": "alzheimer_s_disease",
+            "label": "Alzheimer's disease"
+          },
+          {
+            "value": "ad",
+            "label": "AD"
+          },
+          {
+            "value": "alzheimer_disease",
+            "label": "Alzheimer disease"
+          },
+          {
+            "value": "alzheimers",
+            "label": "Alzheimers"
+          },
+          {
+            "value": "alzheimer_s",
+            "label": "Alzheimer's"
+          },
+          {
+            "value": "dementia",
+            "label": "dementia"
+          },
+          {
+            "value": "cognitive_decline",
+            "label": "cognitive decline"
+          },
+          {
+            "value": "mild_cognitive_impairment",
+            "label": "mild cognitive impairment"
+          },
+          {
+            "value": "mci",
+            "label": "MCI"
+          },
+          {
+            "value": "prodromal_alzheimer_s_disease",
+            "label": "prodromal Alzheimer's disease"
+          },
+          {
+            "value": "preclinical_alzheimer_s_disease",
+            "label": "preclinical Alzheimer's disease"
+          },
+          {
+            "value": "dementia_related_cognitive_impairment",
+            "label": "dementia-related cognitive impairment"
+          }
+        ]
+      },
+      {
+        "topic_id": "computational_methods",
+        "label": "Computational Biology Methods",
+        "is_anchor": false,
+        "terms": [
+          {
+            "value": "computational_biology",
+            "label": "computational biology"
+          },
+          {
+            "value": "bioinformatics",
+            "label": "bioinformatics"
+          },
+          {
+            "value": "computational_genomics",
+            "label": "computational genomics"
+          },
+          {
+            "value": "machine_learning",
+            "label": "machine learning"
+          },
+          {
+            "value": "statistical_modeling",
+            "label": "statistical modeling"
+          },
+          {
+            "value": "ml",
+            "label": "ML"
+          },
+          {
+            "value": "artificial_intelligence",
+            "label": "artificial intelligence"
+          },
+          {
+            "value": "ai",
+            "label": "AI"
+          },
+          {
+            "value": "deep_learning",
+            "label": "deep learning"
+          },
+          {
+            "value": "supervised_learning",
+            "label": "supervised learning"
+          },
+          {
+            "value": "unsupervised_learning",
+            "label": "unsupervised learning"
+          },
+          {
+            "value": "network_analysis",
+            "label": "network analysis"
+          },
+          {
+            "value": "systems_biology",
+            "label": "systems biology"
+          },
+          {
+            "value": "predictive_modeling",
+            "label": "predictive modeling"
+          },
+          {
+            "value": "data_modeling",
+            "label": "data modeling"
+          },
+          {
+            "value": "computational_methods",
+            "label": "computational methods"
+          },
+          {
+            "value": "genomic_analysis",
+            "label": "genomic analysis"
+          },
+          {
+            "value": "data_science",
+            "label": "data science"
+          },
+          {
+            "value": "big_data",
+            "label": "big data"
+          }
+        ]
+      }
+    ]
+  },
+  "review": {
+    "review_type": "narrative",
+    "output": {
+      "formats": [
+        "markdown"
+      ],
+      "citation_style": "harvard",
+      "max_quote_words": 40
+    },
+    "label_count": 7,
+    "paper_count": 17,
+    "label_values": [
+      {
+        "label_id": "methodology",
+        "label": "methodology",
+        "value_mode": "controlled_auto",
+        "selection": "multi",
+        "required": false,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [
+          {
+            "value": "convolutional_neural_network",
+            "label": "convolutional_neural_network",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "convolutional_neural_network",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "decision_tree",
+            "label": "decision_tree",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "decision_tree",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "deep_learning",
+            "label": "deep_learning",
+            "paper_count": 7,
+            "surface_forms": [
+              {
+                "form": "deep_learning",
+                "count": 7
+              }
+            ]
+          },
+          {
+            "value": "independent_component_analysis",
+            "label": "independent_component_analysis",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "independent_component_analysis",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "machine_learning",
+            "label": "machine_learning",
+            "paper_count": 5,
+            "surface_forms": [
+              {
+                "form": "machine_learning",
+                "count": 5
+              }
+            ]
+          },
+          {
+            "value": "multivariate_analysis",
+            "label": "multivariate_analysis",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "multivariate_analytic_techniques",
+                "count": 1
+              }
+            ],
+            "canonicalized_from": [
+              {
+                "value": "multivariate_analytic_techniques",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "network_analysis",
+            "label": "network_analysis",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "pattern_recognition",
+            "label": "pattern_recognition",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "pattern_recognition",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "support_vector_machine",
+            "label": "support_vector_machine",
+            "paper_count": 2,
+            "surface_forms": [
+              {
+                "form": "support_vector_machine",
+                "count": 2
+              }
+            ]
+          },
+          {
+            "value": "wavelet_analysis",
+            "label": "wavelet_analysis",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "wavelet_analysis",
+                "count": 1
+              }
+            ]
+          }
+        ],
+        "invalid_values": [],
+        "dropped_values": [
+          "artificial_intelligence",
+          "eeg",
+          "neuroimaging",
+          "resting_state_functional_mr_imaging"
+        ],
+        "value_mappings": [
+          {
+            "from": "graph_analysis",
+            "to": "network_analysis"
+          },
+          {
+            "from": "graph_theory",
+            "to": "network_analysis"
+          },
+          {
+            "from": "large_scale_network_analysis",
+            "to": "network_analysis"
+          },
+          {
+            "from": "multivariate_analytic_techniques",
+            "to": "multivariate_analysis"
+          }
+        ]
+      },
+      {
+        "label_id": "study_design",
+        "label": "study design",
+        "value_mode": "controlled_fixed",
+        "selection": "single",
+        "required": false,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [
+          {
+            "value": "benchmark_study",
+            "label": "benchmark_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "case_control_study",
+            "label": "case_control_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "case_study",
+            "label": "case_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "cohort_study",
+            "label": "cohort_study",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "cohort_study",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "cross_sectional_study",
+            "label": "cross_sectional_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "experimental_study",
+            "label": "experimental_study",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "experimental_study",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "longitudinal_study",
+            "label": "longitudinal_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "mixed_methods_study",
+            "label": "mixed_methods_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "model_development_study",
+            "label": "model_development_study",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "model_development_study",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "observational_study",
+            "label": "observational_study",
+            "paper_count": 7,
+            "surface_forms": [
+              {
+                "form": "observational_study",
+                "count": 7
+              }
+            ]
+          },
+          {
+            "value": "qualitative_study",
+            "label": "qualitative_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "quasi_experimental_study",
+            "label": "quasi_experimental_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "randomized_controlled_trial",
+            "label": "randomized_controlled_trial",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "secondary_data_analysis",
+            "label": "secondary_data_analysis",
+            "paper_count": 1,
+            "surface_forms": [
+              {
+                "form": "secondary_data_analysis",
+                "count": 1
+              }
+            ]
+          },
+          {
+            "value": "simulation_study",
+            "label": "simulation_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "survey_study",
+            "label": "survey_study",
+            "paper_count": 0,
+            "surface_forms": []
+          },
+          {
+            "value": "unclear",
+            "label": "unclear",
+            "paper_count": 4,
+            "surface_forms": [
+              {
+                "form": "unclear",
+                "count": 4
+              }
+            ]
+          },
+          {
+            "value": "validation_study",
+            "label": "validation_study",
+            "paper_count": 2,
+            "surface_forms": [
+              {
+                "form": "validation_study",
+                "count": 2
+              }
+            ]
+          }
+        ],
+        "invalid_values": [],
+        "dropped_values": [],
+        "value_mappings": []
+      },
+      {
+        "label_id": "dataset_or_sample",
+        "label": "dataset or sample",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": false,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [],
+        "invalid_values": [],
+        "dropped_values": [],
+        "value_mappings": []
+      },
+      {
+        "label_id": "key_finding",
+        "label": "key finding",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": true,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [],
+        "invalid_values": [],
+        "dropped_values": [],
+        "value_mappings": []
+      },
+      {
+        "label_id": "paper_limitation",
+        "label": "paper limitation",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": false,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [],
+        "invalid_values": [],
+        "dropped_values": [],
+        "value_mappings": []
+      },
+      {
+        "label_id": "direct_quote",
+        "label": "direct quote",
+        "value_mode": "evidence_quote",
+        "selection": "",
+        "required": false,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [],
+        "invalid_values": [],
+        "dropped_values": [],
+        "value_mappings": []
+      },
+      {
+        "label_id": "future_work_or_gap",
+        "label": "future work or gap",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": false,
+        "total_rows": 17,
+        "empty_count": 0,
+        "non_empty_count": 17,
+        "values": [],
+        "invalid_values": [],
+        "dropped_values": [],
+        "value_mappings": []
+      }
+    ]
+  }
+}

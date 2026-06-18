@@ -314,6 +314,23 @@ def render_synthesize_review_section_prompt(
     )
 
 
+def render_edit_review_sections_prompt(
+    evidence_map: dict[str, Any],
+    review_sections: dict[str, Any],
+) -> str:
+    return render_template(
+        "edit_review_sections.md",
+        {
+            "research_topic_json": json_block(evidence_map.get("research_topic", {})),
+            "overview_json": json_block(evidence_map.get("overview", {})),
+            "quality_json": json_block(evidence_map.get("quality", {})),
+            "papers_json": json_block(evidence_map.get("papers", [])),
+            "evidence_sections_json": json_block(evidence_map.get("sections", [])),
+            "draft_sections_json": json_block(review_sections.get("sections", [])),
+        },
+    )
+
+
 def render_tag_paper_prompt(
     paper: dict[str, str],
     config: dict[str, object],

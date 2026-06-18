@@ -95,6 +95,11 @@ def test_normalize_review_label_values_counts_fixed_and_auto_values(
         for label in payload["review"]["label_values"]
     }
 
+    assert "main_topics" in payload["topic_structure"]
+    assert payload["review"]["review_type"] == "narrative"
+    assert payload["review"]["output"]["citation_style"] == "harvard"
+    assert "include_criteria" in payload["scope"]
+    assert "search_queries" in payload["collection"]
     assert result.row_counts["review_label_rows"] == 4
     assert labels["main_topic"]["invalid_values"] == [
         {"value": "not_a_topic", "count": 1}

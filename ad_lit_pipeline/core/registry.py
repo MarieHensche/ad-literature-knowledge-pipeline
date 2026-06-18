@@ -30,8 +30,10 @@ REVIEW_PIPELINE = [
     "extract_review_labels",
     "normalize_review_label_values",
     "validate_review_labels",
+    "build_review_coverage_report",
     "build_review_evidence_map",
     "synthesize_review_sections",
+    "edit_review_sections",
     "assemble_literature_review",
 ]
 

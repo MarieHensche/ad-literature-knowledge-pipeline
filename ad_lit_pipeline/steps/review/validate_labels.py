@@ -79,6 +79,26 @@ def allowed_values(label: dict[str, Any]) -> set[str]:
     }
 
 
+def value_mappings(label: dict[str, Any]) -> dict[str, str]:
+    mappings = {}
+    for item in label.get("value_mappings", []):
+        if not isinstance(item, dict):
+            continue
+        source = normalize_tagging_label(str(item.get("from") or ""))
+        target = normalize_tagging_label(str(item.get("to") or ""))
+        if source and target:
+            mappings[source] = target
+    return mappings
+
+
+def dropped_values(label: dict[str, Any]) -> set[str]:
+    return {
+        normalize_tagging_label(str(value or ""))
+        for value in label.get("dropped_values", [])
+        if normalize_tagging_label(str(value or ""))
+    }
+
+
 def validate_quote_value(
     paper_id: str,
     field: str,
@@ -155,8 +175,27 @@ def validate_row(
 
         if mode in {"controlled_fixed", "controlled_auto"}:
             allowed = allowed_values(label)
+            mappings = value_mappings(label)
+            drops = dropped_values(label)
             invalid = [value for value in values if allowed and value not in allowed]
             for value in invalid:
+                if mode == "controlled_auto":
+                    if value in mappings:
+                        severity = "warning"
+                        issue_type = "review_value_mapped"
+                        detail = f"mapped_to={mappings[value]}"
+                    elif value in drops:
+                        severity = "warning"
+                        issue_type = "review_value_dropped"
+                        detail = "dropped_by_review"
+                    else:
+                        severity = "warning"
+                        issue_type = "invalid_review_value"
+                        detail = "ignored_for_controlled_auto_label"
+                    issues.append(
+                        issue(paper_id, label_id, value, issue_type, severity, detail)
+                    )
+                    continue
                 issues.append(
                     issue(paper_id, label_id, value, "invalid_review_value", "error")
                 )
@@ -187,13 +226,18 @@ def missingness_issues(
             for invalid in invalid_values:
                 if not isinstance(invalid, dict):
                     continue
+                severity = (
+                    "warning"
+                    if str(label.get("value_mode") or "") == "controlled_auto"
+                    else "error"
+                )
                 issues.append(
                     issue(
                         "",
                         label_id,
                         str(invalid.get("value") or ""),
                         "observed_invalid_value_summary",
-                        "error",
+                        severity,
                         f"count={invalid.get('count', 0)}",
                     )
                 )

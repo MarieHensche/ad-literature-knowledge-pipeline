@@ -138,6 +138,10 @@ def test_validate_review_labels_reports_quality_issues(tmp_path: Path) -> None:
     assert "quote_missing_section" in issue_types
     assert "duplicate_paper_id" in issue_types
     assert "observed_invalid_value_summary" in issue_types
+    methodology_issues = [
+        row for row in issues if row["field"] == "methodology"
+    ]
+    assert {row["severity"] for row in methodology_issues} == {"warning"}
 
 
 def test_validate_review_labels_allows_valid_rows(tmp_path: Path) -> None:

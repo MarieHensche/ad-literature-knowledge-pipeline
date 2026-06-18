@@ -214,7 +214,12 @@ def normalize_review_label_values(
 
     return {
         "research_topic": config.get("research_topic", {}),
+        "scope": config.get("scope", {}),
+        "collection": config.get("collection", {}),
+        "topic_structure": config.get("topic_structure", {}),
         "review": {
+            "review_type": config.get("review", {}).get("review_type", "narrative"),
+            "output": config.get("review", {}).get("output", {}),
             "label_count": len(summaries),
             "paper_count": len(rows),
             "label_values": summaries,

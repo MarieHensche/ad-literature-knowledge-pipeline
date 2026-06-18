@@ -1,0 +1,31 @@
+{
+  "counts": {
+    "included_papers": 20,
+    "review_eligible_papers": 18,
+    "excluded_likely_review_papers": 2,
+    "retained_primary_or_unclear_papers": 18,
+    "retained_suspected_review_papers": 0
+  },
+  "retention_rule": "Papers identified as likely review articles by available metadata are excluded from literature-review evidence synthesis. Retained papers should be described as primary or unclear, not as fully verified original studies.",
+  "excluded_likely_review_papers": [
+    {
+      "paper_id": "10_1186_s13195_021_00900_w",
+      "title": "Machine learning methods for predicting progression from mild cognitive impairment to Alzheimer’s disease dementia: a systematic review",
+      "year": "2021",
+      "doi": "10.1186/s13195-021-00900-w",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1016_j_cmpb_2019_105242",
+      "title": "Deep learning to detect Alzheimer's disease from neuroimaging: A systematic literature review",
+      "year": "2019",
+      "doi": "10.1016/j.cmpb.2019.105242",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    }
+  ],
+  "retained_suspected_review_papers": []
+}

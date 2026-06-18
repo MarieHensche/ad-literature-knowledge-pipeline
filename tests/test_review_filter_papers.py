@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 from ad_lit_pipeline.steps.review.filter_papers import run
@@ -23,6 +24,7 @@ def test_filter_review_papers_excludes_reviews_and_preserves_columns(
 ) -> None:
     papers_path = tmp_path / "papers.csv"
     output_path = tmp_path / "review_eligible.csv"
+    report_path = tmp_path / "review_filter_report.json"
     fieldnames = [
         "paper_id",
         "title",
@@ -70,12 +72,15 @@ def test_filter_review_papers_excludes_reviews_and_preserves_columns(
         fieldnames,
     )
 
-    result = run(papers_path, output_path)
+    result = run(papers_path, output_path, report_path)
 
     rows = read_csv(output_path)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert result.row_counts["included_papers"] == 3
     assert result.row_counts["review_eligible_papers"] == 1
     assert result.row_counts["excluded_review_papers"] == 2
+    assert report["counts"]["excluded_likely_review_papers"] == 2
+    assert "verified original studies" in report["retention_rule"]
     assert rows == [
         {
             "paper_id": "p1",
@@ -84,5 +89,7 @@ def test_filter_review_papers_excludes_reviews_and_preserves_columns(
             "publication_type": "article",
             "scope_decision": "include",
             "full_text_text_path": "/tmp/p1.txt",
+            "review_type_status": "primary_or_unclear",
+            "review_filter_decision": "retain",
         }
     ]

@@ -21,6 +21,8 @@ from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
 from ad_lit_pipeline.steps.metadata import normalize
 from ad_lit_pipeline.steps.review import assemble_review as review_assemble
 from ad_lit_pipeline.steps.review import config as review_config
+from ad_lit_pipeline.steps.review import coverage_report as review_coverage_report
+from ad_lit_pipeline.steps.review import edit_sections as review_edit_sections
 from ad_lit_pipeline.steps.review import evidence_map as review_evidence_map
 from ad_lit_pipeline.steps.review import extract_labels as review_extract_labels
 from ad_lit_pipeline.steps.review import filter_papers as review_filter_papers
@@ -192,8 +194,10 @@ def pipeline_with_review_generation(
     review_pipeline = [
         "normalize_review_label_values",
         "validate_review_labels",
+        "build_review_coverage_report",
         "build_review_evidence_map",
         "synthesize_review_sections",
+        "edit_review_sections",
         "assemble_literature_review",
     ]
 
@@ -304,6 +308,7 @@ def build_step_functions(
         "filter_review_papers": lambda: review_filter_papers.run(
             artifacts.scope_screened_full_text_csv,
             artifacts.review_eligible_papers_csv,
+            artifacts.review_filter_report_json,
         ),
         "extract_review_labels": lambda: review_extract_labels.run(
             artifacts.review_eligible_papers_csv,
@@ -327,11 +332,20 @@ def build_step_functions(
             artifacts.review_label_values_json,
             artifacts.review_quality_report_csv,
         ),
+        "build_review_coverage_report": lambda: review_coverage_report.run(
+            artifacts.review_eligible_papers_csv,
+            artifacts.review_labels_raw_csv,
+            artifacts.review_label_values_json,
+            artifacts.review_quality_report_csv,
+            artifacts.review_coverage_report_json,
+            artifacts.review_filter_report_json,
+        ),
         "build_review_evidence_map": lambda: review_evidence_map.run(
             artifacts.review_labels_raw_csv,
             artifacts.review_label_values_json,
             artifacts.review_quality_report_csv,
             artifacts.review_evidence_map_json,
+            artifacts.review_filter_report_json,
         ),
         "synthesize_review_sections": lambda: review_synthesize.run(
             artifacts.review_evidence_map_json,
@@ -339,9 +353,21 @@ def build_step_functions(
             model,
             trace_dir=trace_dir,
         ),
-        "assemble_literature_review": lambda: review_assemble.run(
+        "edit_review_sections": lambda: review_edit_sections.run(
+            artifacts.review_evidence_map_json,
             artifacts.review_sections_json,
+            artifacts.review_edited_sections_json,
+            model,
+            trace_dir=trace_dir,
+        ),
+        "assemble_literature_review": lambda: review_assemble.run(
+            (
+                artifacts.review_edited_sections_json
+                if artifacts.review_edited_sections_json.exists()
+                else artifacts.review_sections_json
+            ),
             artifacts.literature_review_md,
+            artifacts.literature_review_latex_dir,
         ),
     }
 
@@ -381,12 +407,22 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
     status = run_selected_steps(selected, step_functions, manifest, args.dry_run)
     if status == "paused":
         artifacts = main_pipeline_artifacts(args.collection)
+        paused_step = None
+        if manifest.payload.get("steps"):
+            paused_step = manifest.payload["steps"][-1].get("step_name")
         print()
-        if "review_review_label_values" in selected:
+        if paused_step == "review_review_label_values":
             print("Pipeline paused for review label-value review.")
             print(f"Run id: {manifest.run_id}")
             print(f"Manifest: {manifest.manifest_path}")
             print(f"Review file: {artifacts.review_label_values_review_yaml}")
+            return
+
+        if paused_step == "build_review_coverage_report":
+            print("Pipeline paused for critical literature-review coverage.")
+            print(f"Run id: {manifest.run_id}")
+            print(f"Manifest: {manifest.manifest_path}")
+            print(f"Coverage report: {artifacts.review_coverage_report_json}")
             return
 
         print("Pipeline paused for tagging category review.")
@@ -404,6 +440,7 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
     print(f"Audit file: {artifacts.extraction_audit_csv}")
     if args.generate_review:
         print(f"Literature review Markdown: {artifacts.literature_review_md}")
+        print(f"Literature review LaTeX: {artifacts.literature_review_latex_dir}")
     elif args.extract_review_labels:
         print(f"Review labels CSV: {artifacts.review_labels_raw_csv}")
 

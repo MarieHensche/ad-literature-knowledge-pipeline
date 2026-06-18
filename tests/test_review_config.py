@@ -20,7 +20,11 @@ def test_default_review_config_uses_focused_review_labels() -> None:
     normalized = normalize_review_config(contract)
 
     assert normalized["review"]["enabled"] is True
+    assert normalized["review"]["review_type"] == "narrative"
     assert normalized["review"]["output"]["formats"] == ["markdown"]
+    assert normalized["review"]["output"]["citation_style"] == "harvard"
+    assert "include_criteria" in normalized["scope"]
+    assert "search_queries" in normalized["collection"]
     label_ids = [label["label_id"] for label in normalized["review"]["labels"]]
     assert label_ids == [
         "methodology",
@@ -134,6 +138,7 @@ def test_review_config_accepts_custom_review_section(tmp_path: Path) -> None:
     contract = deepcopy(load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml"))
     contract["review"] = {
         "enabled": True,
+        "review_type": "rapid_narrative",
         "output": {
             "formats": ["markdown"],
             "citation_style": "vancouver",
@@ -164,6 +169,7 @@ def test_review_config_accepts_custom_review_section(tmp_path: Path) -> None:
     assert result.row_counts["review_labels"] == 2
     assert payload["source_type"] == "topic_contract"
     assert payload["review"]["enabled"] is True
+    assert payload["review"]["review_type"] == "rapid_narrative"
     assert payload["review"]["output"]["citation_style"] == "vancouver"
     assert payload["review"]["output"]["max_quote_words"] == 30
     assert [label["label_id"] for label in payload["review"]["labels"]] == [
