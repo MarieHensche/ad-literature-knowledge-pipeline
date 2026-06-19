@@ -1,0 +1,306 @@
+{
+  "source_config": "data/collection_plans/demo1_topic_contract.yaml",
+  "research_topic": {
+    "title": "Artificial Intelligence in Alzheimer's Disease Research",
+    "description": "Applications of artificial intelligence to understanding, detecting, diagnosing, predicting, monitoring, and treating Alzheimer's disease. The collection is restricted to papers published from January 1, 2020 through June 19, 2026."
+  },
+  "category_count": 7,
+  "categories": [
+    {
+      "category_id": "research_application",
+      "label": "research application",
+      "description": "The Alzheimer's research or clinical task addressed by AI.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "early_detection",
+          "label": "early_detection"
+        },
+        {
+          "value": "diagnosis",
+          "label": "diagnosis"
+        },
+        {
+          "value": "disease_classification",
+          "label": "disease_classification"
+        },
+        {
+          "value": "progression_prediction",
+          "label": "progression_prediction"
+        },
+        {
+          "value": "risk_prediction",
+          "label": "risk_prediction"
+        },
+        {
+          "value": "patient_monitoring",
+          "label": "patient_monitoring"
+        },
+        {
+          "value": "treatment_response_prediction",
+          "label": "treatment_response_prediction"
+        },
+        {
+          "value": "clinical_decision_support",
+          "label": "clinical_decision_support"
+        },
+        {
+          "value": "drug_discovery",
+          "label": "drug_discovery"
+        }
+      ],
+      "selection": "multi"
+    },
+    {
+      "category_id": "ai_method_family",
+      "label": "ai method family",
+      "description": "The family of artificial-intelligence methods used in the study.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "classical_machine_learning",
+          "label": "classical_machine_learning"
+        },
+        {
+          "value": "deep_learning",
+          "label": "deep_learning"
+        },
+        {
+          "value": "convolutional_neural_network",
+          "label": "convolutional_neural_network"
+        },
+        {
+          "value": "recurrent_neural_network",
+          "label": "recurrent_neural_network"
+        },
+        {
+          "value": "transformer",
+          "label": "transformer"
+        },
+        {
+          "value": "natural_language_processing",
+          "label": "natural_language_processing"
+        },
+        {
+          "value": "graph_neural_network",
+          "label": "graph_neural_network"
+        },
+        {
+          "value": "ensemble_learning",
+          "label": "ensemble_learning"
+        },
+        {
+          "value": "generative_ai",
+          "label": "generative_ai"
+        },
+        {
+          "value": "reinforcement_learning",
+          "label": "reinforcement_learning"
+        }
+      ],
+      "selection": "multi"
+    },
+    {
+      "category_id": "data_modality",
+      "label": "data modality",
+      "description": "The patient, clinical, or biological data analyzed by AI.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "structural_mri",
+          "label": "structural_mri"
+        },
+        {
+          "value": "functional_mri",
+          "label": "functional_mri"
+        },
+        {
+          "value": "pet",
+          "label": "pet"
+        },
+        {
+          "value": "eeg",
+          "label": "eeg"
+        },
+        {
+          "value": "clinical_assessment",
+          "label": "clinical_assessment"
+        },
+        {
+          "value": "cognitive_tests",
+          "label": "cognitive_tests"
+        },
+        {
+          "value": "electronic_health_records",
+          "label": "electronic_health_records"
+        },
+        {
+          "value": "genomic_data",
+          "label": "genomic_data"
+        },
+        {
+          "value": "fluid_biomarkers",
+          "label": "fluid_biomarkers"
+        },
+        {
+          "value": "speech_language",
+          "label": "speech_language"
+        },
+        {
+          "value": "wearable_sensor_data",
+          "label": "wearable_sensor_data"
+        },
+        {
+          "value": "multimodal_data",
+          "label": "multimodal_data"
+        }
+      ],
+      "selection": "multi"
+    },
+    {
+      "category_id": "disease_stage_or_population",
+      "label": "disease stage or population",
+      "description": "The Alzheimer's disease stage or study population analyzed.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "cognitively_normal",
+          "label": "cognitively_normal"
+        },
+        {
+          "value": "subjective_cognitive_decline",
+          "label": "subjective_cognitive_decline"
+        },
+        {
+          "value": "mild_cognitive_impairment",
+          "label": "mild_cognitive_impairment"
+        },
+        {
+          "value": "prodromal_alzheimers",
+          "label": "prodromal_alzheimers"
+        },
+        {
+          "value": "alzheimers_disease",
+          "label": "alzheimers_disease"
+        },
+        {
+          "value": "advanced_alzheimers",
+          "label": "advanced_alzheimers"
+        },
+        {
+          "value": "mixed_dementia_population",
+          "label": "mixed_dementia_population"
+        }
+      ],
+      "selection": "multi"
+    },
+    {
+      "category_id": "validation_design",
+      "label": "validation design",
+      "description": "The design used to test model performance or generalizability.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "cross_validation",
+          "label": "cross_validation"
+        },
+        {
+          "value": "internal_holdout",
+          "label": "internal_holdout"
+        },
+        {
+          "value": "external_validation",
+          "label": "external_validation"
+        },
+        {
+          "value": "independent_cohort",
+          "label": "independent_cohort"
+        },
+        {
+          "value": "prospective_validation",
+          "label": "prospective_validation"
+        },
+        {
+          "value": "real_world_validation",
+          "label": "real_world_validation"
+        }
+      ],
+      "selection": "multi"
+    },
+    {
+      "category_id": "evaluation_focus",
+      "label": "evaluation focus",
+      "description": "The model property or translational outcome evaluated.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "discrimination_performance",
+          "label": "discrimination_performance"
+        },
+        {
+          "value": "calibration",
+          "label": "calibration"
+        },
+        {
+          "value": "generalizability",
+          "label": "generalizability"
+        },
+        {
+          "value": "interpretability",
+          "label": "interpretability"
+        },
+        {
+          "value": "clinical_utility",
+          "label": "clinical_utility"
+        },
+        {
+          "value": "fairness",
+          "label": "fairness"
+        },
+        {
+          "value": "robustness",
+          "label": "robustness"
+        }
+      ],
+      "selection": "multi"
+    },
+    {
+      "category_id": "study_contribution",
+      "label": "study contribution",
+      "description": "The principal research contribution made by the paper.",
+      "required": false,
+      "allowed_values": [
+        {
+          "value": "model_development",
+          "label": "model_development"
+        },
+        {
+          "value": "model_validation",
+          "label": "model_validation"
+        },
+        {
+          "value": "comparative_benchmark",
+          "label": "comparative_benchmark"
+        },
+        {
+          "value": "dataset_or_resource",
+          "label": "dataset_or_resource"
+        },
+        {
+          "value": "methodological_framework",
+          "label": "methodological_framework"
+        },
+        {
+          "value": "clinical_application",
+          "label": "clinical_application"
+        },
+        {
+          "value": "review_or_synthesis",
+          "label": "review_or_synthesis"
+        }
+      ],
+      "selection": "multi"
+    }
+  ],
+  "source_type": "topic_contract"
+}

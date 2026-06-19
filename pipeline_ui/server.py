@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import mimetypes
 import os
@@ -22,11 +23,13 @@ import yaml
 
 from ad_lit_pipeline.cli.run_collection import generated_topic_contract_path
 from ad_lit_pipeline.cli.run_pipeline import SUPPORTED_PAPERS_FORMATS
+from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
 from ad_lit_pipeline.core.registry import (
     COLLECTION_PIPELINE,
     COLLECTION_WITH_CONTRACT_PIPELINE,
     CONTRACT_BOOTSTRAP_PIPELINE,
     MAIN_PIPELINE,
+    REVIEW_PIPELINE,
 )
 
 
@@ -193,15 +196,47 @@ def collection_step_names(
     return COLLECTION_PIPELINE
 
 
-def main_step_names(review_tagging_categories: bool = False) -> list[str]:
-    if not review_tagging_categories:
-        return MAIN_PIPELINE
-    insertion_index = MAIN_PIPELINE.index("normalize_tagging_config")
-    return [
-        *MAIN_PIPELINE[:insertion_index],
-        "review_tagging_categories",
-        *MAIN_PIPELINE[insertion_index:],
-    ]
+def main_step_names(
+    review_tagging_categories: bool = False,
+    generate_review: bool = False,
+    review_review_label_values: bool = False,
+) -> list[str]:
+    pipeline = list(MAIN_PIPELINE)
+    if review_tagging_categories:
+        insertion_index = pipeline.index("normalize_tagging_config")
+        pipeline = [
+            *pipeline[:insertion_index],
+            "review_tagging_categories",
+            *pipeline[insertion_index:],
+        ]
+    if generate_review:
+        insertion_index = pipeline.index("prepare_full_text") + 1
+        pipeline = [
+            *pipeline[:insertion_index],
+            "filter_review_papers",
+            *pipeline[insertion_index:],
+        ]
+        insertion_index = pipeline.index("tag_papers")
+        pipeline = [
+            *pipeline[:insertion_index],
+            "normalize_review_config",
+            *pipeline[insertion_index:],
+            "normalize_review_label_values",
+            "validate_review_labels",
+            "build_review_coverage_report",
+            "build_review_evidence_map",
+            "synthesize_review_sections",
+            "edit_review_sections",
+            "assemble_literature_review",
+        ]
+        if review_review_label_values:
+            insertion_index = pipeline.index("validate_review_labels")
+            pipeline = [
+                *pipeline[:insertion_index],
+                "review_review_label_values",
+                *pipeline[insertion_index:],
+            ]
+    return pipeline
 
 
 def with_valid_collection_step_options(
@@ -248,6 +283,14 @@ def build_main_command(payload: dict[str, Any], root: Path = ROOT) -> CommandSpe
         command.extend(["--model", model])
     if payload.get("reviewTaggingCategories"):
         command.append("--review-tagging-categories")
+    if payload.get("generateReview"):
+        command.append("--generate-review")
+    if payload.get("reviewReviewLabelValues"):
+        command.append("--review-review-label-values")
+    if optional_text(payload, "reviewMaxPapers"):
+        command.extend(
+            ["--review-max-papers", str(optional_int(payload, "reviewMaxPapers", 1))]
+        )
     add_step_options(command, payload)
     return CommandSpec(
         label="Tag papers",
@@ -390,6 +433,178 @@ def list_matching_files(root: Path, patterns: list[str]) -> list[dict[str, Any]]
     return [path_summary(path, root) for _, path in sorted(files.items())]
 
 
+def humanize_identifier(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"[_-]+", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text[:1].upper() + text[1:]
+
+
+def first_present(row: dict[str, str], names: tuple[str, ...]) -> str:
+    for name in names:
+        value = row.get(name)
+        if value:
+            return value
+    return ""
+
+
+def paper_list(
+    relative_path: str,
+    root: Path = ROOT,
+    limit: int = 80,
+) -> dict[str, Any]:
+    path = resolve_workspace_path(relative_path, root)
+    if not path.exists() or not path.is_file():
+        raise UiError(f"Paper file does not exist: {relative_path}")
+
+    papers = []
+    total = 0
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            total += 1
+            if len(papers) >= limit:
+                continue
+            papers.append(
+                {
+                    "paperId": first_present(row, ("paper_id", "id", "doi")),
+                    "title": first_present(row, ("title", "paper_title")),
+                    "year": first_present(row, ("year", "publication_year")),
+                    "authors": first_present(row, ("authors", "author", "creators")),
+                }
+            )
+    return {"path": relative_to_root(path, root), "total": total, "papers": papers}
+
+
+def unique_terms(topic: dict[str, Any]) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for key in ("terms", "retrieval_terms", "matching_terms"):
+        values = topic.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            text = str(value).strip()
+            marker = text.lower()
+            if text and marker not in seen:
+                terms.append(text)
+                seen.add(marker)
+    return terms
+
+
+def topic_item(payload: dict[str, Any]) -> dict[str, Any]:
+    topic_id = payload.get("topic_id") or payload.get("secondary_topic_id") or ""
+    return {
+        "id": str(topic_id),
+        "label": str(payload.get("label") or humanize_identifier(topic_id)),
+        "field": humanize_identifier(payload.get("field")),
+        "terms": unique_terms(payload),
+    }
+
+
+def category_values(values: Any) -> list[dict[str, str]]:
+    normalized = []
+    if not isinstance(values, list):
+        return normalized
+    for item in values:
+        if isinstance(item, dict):
+            raw_value = item.get("value") or item.get("id") or item.get("label")
+            label = item.get("label") or humanize_identifier(raw_value)
+        else:
+            raw_value = item
+            label = humanize_identifier(item)
+        if raw_value:
+            normalized.append({"value": str(raw_value), "label": str(label)})
+    return normalized
+
+
+def contract_overview(relative_path: str, root: Path = ROOT) -> dict[str, Any]:
+    path = resolve_workspace_path(relative_path, root)
+    if not path.exists() or not path.is_file():
+        raise UiError(f"Contract file does not exist: {relative_path}")
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise UiError("Contract YAML must contain an object.")
+
+    research_topic = payload.get("research_topic") or {}
+    if not isinstance(research_topic, dict):
+        research_topic = {}
+    structure = payload.get("topic_structure") or {}
+    if not isinstance(structure, dict):
+        structure = {}
+
+    main_topics = [
+        topic_item(item)
+        for item in structure.get("main_topics", [])
+        if isinstance(item, dict)
+    ]
+    secondary_topics = []
+    groups = structure.get("secondary_topics") or {}
+    if isinstance(groups, dict):
+        for parent_id, items in groups.items():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if isinstance(item, dict):
+                    rendered = topic_item(item)
+                    rendered["parentLabel"] = humanize_identifier(parent_id)
+                    secondary_topics.append(rendered)
+
+    categories = []
+    tagging = payload.get("tagging") or {}
+    raw_categories = tagging.get("categories") if isinstance(tagging, dict) else {}
+    if isinstance(raw_categories, dict):
+        category_items = raw_categories.items()
+    elif isinstance(raw_categories, list):
+        category_items = (
+            (item.get("category_id") or item.get("id") or item.get("label"), item)
+            for item in raw_categories
+            if isinstance(item, dict)
+        )
+    else:
+        category_items = []
+    for category_id, category in category_items:
+        if not category_id or not isinstance(category, dict):
+            continue
+        categories.append(
+            {
+                "id": str(category_id),
+                "label": str(category.get("label") or humanize_identifier(category_id)),
+                "description": str(category.get("description") or ""),
+                "required": bool(category.get("required")),
+                "selection": humanize_identifier(category.get("selection")),
+                "values": category_values(
+                    category.get("values") or category.get("allowed_values")
+                ),
+            }
+        )
+
+    return {
+        "path": relative_to_root(path, root),
+        "title": (
+            research_topic.get("title") or humanize_identifier(payload.get("topic_id"))
+        ),
+        "description": research_topic.get("description") or "",
+        "mainTopics": main_topics,
+        "secondaryTopics": secondary_topics,
+        "categories": categories,
+    }
+
+
+def review_outputs(collection: str, root: Path = ROOT) -> dict[str, Any]:
+    collection = validate_collection(collection)
+    artifacts = main_pipeline_artifacts(collection, root)
+    pdf_path = artifacts.literature_review_latex_dir / "main.pdf"
+    return {
+        "collection": collection,
+        "markdown": path_summary(artifacts.literature_review_md, root),
+        "latexDir": path_summary(artifacts.literature_review_latex_dir, root),
+        "pdf": path_summary(pdf_path, root),
+    }
+
+
 def manifest_summary(path: Path, root: Path = ROOT) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -442,6 +657,13 @@ def app_config(root: Path = ROOT) -> dict[str, Any]:
         "steps": {
             "main": MAIN_PIPELINE,
             "mainWithReview": main_step_names(review_tagging_categories=True),
+            "mainWithLiteratureReview": main_step_names(generate_review=True),
+            "mainWithTaggingAndLiteratureReview": main_step_names(
+                review_tagging_categories=True,
+                generate_review=True,
+                review_review_label_values=True,
+            ),
+            "review": REVIEW_PIPELINE,
             "collection": COLLECTION_PIPELINE,
             "collectionWithContract": COLLECTION_WITH_CONTRACT_PIPELINE,
         },
@@ -633,6 +855,26 @@ class PipelineUiHandler(BaseHTTPRequestHandler):
             self.send_json(read_text_file(target))
             return
 
+        if path == "/api/workspace-file":
+            target = first_query_value(query, "path")
+            self.serve_workspace_file(target)
+            return
+
+        if path == "/api/papers":
+            target = first_query_value(query, "path")
+            self.send_json(paper_list(target))
+            return
+
+        if path == "/api/contracts/overview":
+            target = first_query_value(query, "path")
+            self.send_json(contract_overview(target))
+            return
+
+        if path == "/api/review-outputs":
+            collection = first_query_value(query, "collection")
+            self.send_json(review_outputs(collection))
+            return
+
         if path == "/api/manifests":
             self.send_json({"manifests": list_manifests()})
             return
@@ -666,6 +908,18 @@ class PipelineUiHandler(BaseHTTPRequestHandler):
             return
 
         self.send_error_json("Not found.", HTTPStatus.NOT_FOUND)
+
+    def serve_workspace_file(self, relative_path: str) -> None:
+        path = resolve_workspace_path(relative_path)
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(relative_path)
+        content = path.read_bytes()
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
 
     def serve_static(self, request_path: str) -> None:
         if request_path in {"", "/"}:

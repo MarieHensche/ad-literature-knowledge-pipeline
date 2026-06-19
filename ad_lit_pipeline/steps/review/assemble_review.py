@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,7 @@ LATEX_SPECIAL_CHARS = {
     "^": r"\textasciicircum{}",
 }
 LATEX_CITATION_PLACEHOLDER = "§CITPH{}§"
+CSAIL_LOGO_ASSET = Path(__file__).with_name("assets") / "CSAIL_Primary_Regular_RGB.png"
 MIT_CSAIL_CLASS = r"""%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% CSAIL-style literature review class.
 %% Adapted from the MIT CSAIL template shared under CC BY-SA 4.0.
@@ -186,11 +188,30 @@ def section_heading_level(section: dict[str, Any]) -> int:
     return level if isinstance(level, int) and level in {1, 2} else 1
 
 
+def is_introduction_section(section: dict[str, Any]) -> bool:
+    section_id = clean_text(section.get("section_id")).lower()
+    title = clean_text(section.get("title")).lower()
+    return section_id == "introduction" or title == "introduction"
+
+
+def sentence_limited_summary(section: dict[str, Any], max_sentences: int = 3) -> str:
+    if is_introduction_section(section):
+        return ""
+    summary = clean_text(section.get("summary"))
+    if not summary:
+        return ""
+    sentences = re.findall(r".*?(?:[.!?](?=\s|$)|$)", summary)
+    sentences = [clean_text(sentence) for sentence in sentences if clean_text(sentence)]
+    if not sentences:
+        return summary
+    return " ".join(sentences[:max_sentences])
+
+
 def render_section(section: dict[str, Any]) -> list[str]:
     section_id = clean_text(section.get("section_id")) or "section"
     title = normalize_heading(section.get("title"), section_id.replace("_", " "))
     body = strip_internal_citation_markers(clean_text(section.get("body_markdown")))
-    summary = clean_text(section.get("summary"))
+    summary = sentence_limited_summary(section)
 
     markdown_level = section_heading_level(section) + 1
     lines = [f"{'#' * markdown_level} {title}", ""]
@@ -220,6 +241,85 @@ def referenced_paper_ids(sections: list[dict[str, Any]]) -> set[str]:
                     if paper_id:
                         paper_ids.add(paper_id)
     return paper_ids
+
+
+def referenced_paper_ids_in_order(sections: list[dict[str, Any]]) -> list[str]:
+    paper_ids = []
+    seen = set()
+    for section in sections:
+        candidates = []
+        cited_paper_ids = section.get("cited_paper_ids")
+        if isinstance(cited_paper_ids, list):
+            candidates.extend(cited_paper_ids)
+        for group_name in ["citation_support", "quote_uses"]:
+            group = section.get(group_name)
+            if not isinstance(group, list):
+                continue
+            for item in group:
+                if isinstance(item, dict):
+                    candidates.append(item.get("paper_id"))
+        for paper_id in candidates:
+            paper_id = clean_text(paper_id)
+            if paper_id and paper_id not in seen:
+                paper_ids.append(paper_id)
+                seen.add(paper_id)
+    return paper_ids
+
+
+def trim_section_references(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    sections = payload.get("sections", [])
+    if not isinstance(sections, list):
+        raise ValueError("review_sections JSON must contain sections list.")
+
+    section_list = [section for section in sections if isinstance(section, dict)]
+    eligible_ids = citation_eligible_paper_ids(payload)
+    target = citation_target(len(eligible_ids))
+    cited_ids = referenced_paper_ids(section_list)
+    cited_eligible_count = len(cited_ids & eligible_ids)
+    if cited_eligible_count <= target["maximum"]:
+        return payload, {}, []
+
+    keep_ids_list = [
+        paper_id
+        for paper_id in referenced_paper_ids_in_order(section_list)
+        if paper_id in eligible_ids
+    ][: target["maximum"]]
+    keep_ids = set(keep_ids_list)
+    trimmed = deepcopy(payload)
+    trimmed_sections = trimmed.get("sections", [])
+    if not isinstance(trimmed_sections, list):
+        raise ValueError("review_sections JSON must contain sections list.")
+    for section in trimmed_sections:
+        if not isinstance(section, dict):
+            continue
+        cited = section.get("cited_paper_ids")
+        if isinstance(cited, list):
+            section["cited_paper_ids"] = [
+                paper_id for paper_id in cited if clean_text(paper_id) in keep_ids
+            ]
+        for group_name in ["citation_support", "quote_uses"]:
+            group = section.get(group_name)
+            if isinstance(group, list):
+                section[group_name] = [
+                    item
+                    for item in group
+                    if isinstance(item, dict)
+                    and clean_text(item.get("paper_id")) in keep_ids
+                ]
+
+    metadata = {
+        "citation_references_trimmed": cited_eligible_count - len(keep_ids),
+        "citation_references_before_trim": cited_eligible_count,
+        "citation_references_after_trim": len(keep_ids),
+    }
+    warnings = [
+        "Trimmed literature-review citation metadata from "
+        f"{cited_eligible_count} to {len(keep_ids)} citation-eligible papers "
+        "to satisfy the configured citation coverage maximum."
+    ]
+    return trimmed, metadata, warnings
 
 
 def ordered_reference_papers(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -395,7 +495,7 @@ def latex_section_lines(
     section_id = clean_text(section.get("section_id")) or "section"
     title = normalize_heading(section.get("title"), section_id.replace("_", " "))
     body = strip_internal_markers_preserve_blocks(section.get("body_markdown"))
-    summary = clean_text(section.get("summary"))
+    summary = sentence_limited_summary(section)
     heading_level = section_heading_level(section)
     heading_command = "section" if heading_level == 1 else "subsection"
     lines = [rf"\{heading_command}{{{latex_escape(title)}}}", ""]
@@ -500,6 +600,10 @@ def write_latex_package(
     references: list[dict[str, Any]],
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    if CSAIL_LOGO_ASSET.exists():
+        images_dir = output_dir / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(CSAIL_LOGO_ASSET, images_dir / CSAIL_LOGO_ASSET.name)
     (output_dir / "MITcsail.cls").write_text(MIT_CSAIL_CLASS + "\n", encoding="utf-8")
     (output_dir / "main.tex").write_text(
         render_latex_main(payload, references),
@@ -787,6 +891,7 @@ def run(
     latex_dir: Path | None = None,
 ) -> StepResult:
     payload = read_json_object(review_sections_path)
+    payload, trim_metadata, warnings = trim_section_references(payload)
     coverage = validate_citation_coverage(payload)
     markdown = assemble_markdown(payload)
     markdown = repair_harvard_citations(markdown, payload)
@@ -815,6 +920,8 @@ def run(
             "literature_review_chars": len(markdown),
             "latex_files": 3 if latex_dir is not None else 0,
         },
+        warnings=warnings,
+        metadata=trim_metadata,
     )
 
 

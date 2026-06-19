@@ -72,6 +72,26 @@ def test_build_main_command_can_enable_tag_review(tmp_path: Path) -> None:
     assert "--review-tagging-categories" in command
 
 
+def test_build_main_command_can_generate_literature_review(tmp_path: Path) -> None:
+    command = server.build_main_command(
+        {
+            "collection": "example",
+            "papers": "data/raw/example_papers.csv",
+            "topicContract": "configs/topics/early_detection_ad.yaml",
+            "runId": "ui-test-main-review-generation",
+            "generateReview": True,
+            "reviewReviewLabelValues": True,
+            "reviewMaxPapers": "12",
+        },
+        tmp_path,
+    ).command
+
+    assert "--generate-review" in command
+    assert "--review-review-label-values" in command
+    max_papers_index = command.index("--review-max-papers")
+    assert command[max_papers_index + 1] == "12"
+
+
 def test_ui_has_main_contract_dropdown() -> None:
     html = (Path(__file__).resolve().parents[1] / "pipeline_ui/static/index.html").read_text(
         encoding="utf-8"
@@ -80,6 +100,73 @@ def test_ui_has_main_contract_dropdown() -> None:
     assert 'id="paperInputSelect"' in html
     assert 'id="mainContractSelect"' in html
     assert 'id="mainContractPath"' in html
+    assert 'id="paperOverview"' in html
+    assert 'id="topicOverview"' in html
+    assert 'id="categoryOverview"' in html
+    assert 'id="mainGenerateReview"' in html
+    assert 'id="reviewOutput"' in html
+
+
+def test_paper_list_summarizes_collected_papers(tmp_path: Path) -> None:
+    paper_path = tmp_path / "data" / "raw" / "example_papers.csv"
+    paper_path.parent.mkdir(parents=True)
+    paper_path.write_text(
+        "paper_id,title,year,authors\n"
+        "p1,First paper,2024,Smith; Jones\n"
+        "p2,Second paper,2023,Doe\n",
+        encoding="utf-8",
+    )
+
+    result = server.paper_list("data/raw/example_papers.csv", tmp_path)
+
+    assert result["total"] == 2
+    assert result["papers"][0] == {
+        "paperId": "p1",
+        "title": "First paper",
+        "year": "2024",
+        "authors": "Smith; Jones",
+    }
+
+
+def test_contract_overview_humanizes_topics_and_categories(tmp_path: Path) -> None:
+    contract_path = tmp_path / "configs" / "topics" / "example.yaml"
+    contract_path.parent.mkdir(parents=True)
+    contract_path.write_text(
+        """
+topic_id: ad_methods
+research_topic:
+  title: AD methods
+  description: Example topic.
+topic_structure:
+  main_topics:
+    - topic_id: machine_learning
+      terms: [machine learning, ML]
+      matching_terms: [machine learning, neural networks]
+tagging:
+  categories:
+    evidence_modality_family:
+      required: true
+      values:
+        - neuroimaging
+        - speech_language
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = server.contract_overview("configs/topics/example.yaml", tmp_path)
+
+    assert result["title"] == "AD methods"
+    assert result["mainTopics"][0]["label"] == "Machine learning"
+    assert result["mainTopics"][0]["terms"] == [
+        "machine learning",
+        "ML",
+        "neural networks",
+    ]
+    assert result["categories"][0]["label"] == "Evidence modality family"
+    assert result["categories"][0]["values"] == [
+        {"value": "neuroimaging", "label": "Neuroimaging"},
+        {"value": "speech_language", "label": "Speech language"},
+    ]
 
 
 def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> None:

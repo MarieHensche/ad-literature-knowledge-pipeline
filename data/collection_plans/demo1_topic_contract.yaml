@@ -1,0 +1,263 @@
+topic_id: ai_alzheimers_research
+research_topic:
+  title: Artificial Intelligence in Alzheimer's Disease Research
+  description: Applications of artificial intelligence to understanding, detecting,
+    diagnosing, predicting, monitoring, and treating Alzheimer's disease. The
+    collection is restricted to papers published from January 1, 2020 through
+    June 19, 2026.
+topic_structure:
+  anchor_topic_id: alzheimers_disease
+  anchor_reason: Alzheimer's disease is the non-replaceable research focus and must be
+    represented explicitly in the title.
+  main_topics:
+  - topic_id: alzheimers_disease
+    label: Alzheimer's Disease
+    field: title
+    terms:
+    - Alzheimer's disease
+    - Alzheimer's
+    - AD
+    - Alzheimer disease
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia due to Alzheimer's disease
+    retrieval_terms:
+    - Alzheimer's disease
+    - Alzheimer's
+    - Alzheimer disease
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia due to Alzheimer's disease
+    matching_terms:
+    - Alzheimer disease
+    - Alzheimer
+    - A.D.
+    - dementia due to Alzheimer's
+    - Alzheimer's disease
+    - AD
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia due to Alzheimer's disease
+  - topic_id: artificial_intelligence
+    label: Artificial Intelligence
+    field: title
+    terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - deep learning
+    - neural networks
+    - data analytics
+    - computational intelligence
+    retrieval_terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - deep learning
+    - neural network
+    - natural language processing
+    - computer vision
+    - computational intelligence
+    matching_terms:
+    - ML
+    - deep learning
+    - neural network
+    - AI algorithms
+    - AI methods
+    - natural language processing
+    - computer vision
+    - transformer
+    - graph neural network
+  secondary_topics:
+    alzheimers_disease:
+    - secondary_topic_id: dementia_differential_context
+      label: Dementia Differential Context
+      field: title
+      terms:
+      - dementia differential diagnosis
+      - differential diagnosis of dementia
+      - mixed dementia
+      - dementia subtype classification
+      retrieval_terms:
+      - dementia differential diagnosis
+      - mixed dementia
+      - dementia subtype classification
+      matching_terms:
+      - differential dementia diagnosis
+      - dementia differential
+      - mixed dementia
+      - dementia subtype classification
+    artificial_intelligence:
+    - secondary_topic_id: computational_methods
+      label: Computational Methods
+      field: title
+      terms:
+      - computational methods
+      - algorithmic approaches
+      - statistical modeling
+      - bioinformatics methods
+      retrieval_terms:
+      - computational methods
+      - bioinformatics
+      matching_terms:
+      - statistical analysis
+      - modeling techniques
+      - data mining
+scope:
+  include_criteria:
+  - Papers directly studying the application of AI in Alzheimer's disease research
+  - Papers investigating related technologies, methodologies, and frameworks that
+    apply to AI and Alzheimer's
+  - Review articles that summarize and synthesize existing research in this area
+  - Empirical studies that provide evidence of AI effectiveness in Alzheimer's diagnosis
+    or treatment
+  - Papers published from January 1, 2020 through June 19, 2026
+  exclude_criteria:
+  - Papers lacking a substantive connection to AI in Alzheimer's disease
+  - Papers focused only on other neurological diseases without an explicit Alzheimer's
+    disease analysis
+  - Papers published before 2020 or after June 19, 2026
+  boundary_rules:
+  - Include borderline papers that discuss AI technologies relevant to the field of
+    Alzheimer's
+  - Exclude papers whose titles and abstracts clearly indicate they are unrelated
+rule_based_screening:
+  include_terms:
+  - artificial intelligence
+  - Alzheimer's disease
+  - machine learning
+  - neural networks
+  - deep learning
+  exclude_terms:
+  - 'retracted article:'
+  exclude_wins: true
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for
+    primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of
+    the topic
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ''
+  categories:
+    research_application:
+      description: The Alzheimer's research or clinical task addressed by AI.
+      required: false
+      selection: multi
+      values:
+      - early_detection
+      - diagnosis
+      - disease_classification
+      - progression_prediction
+      - risk_prediction
+      - patient_monitoring
+      - treatment_response_prediction
+      - clinical_decision_support
+      - drug_discovery
+    ai_method_family:
+      description: The family of artificial-intelligence methods used in the study.
+      required: false
+      selection: multi
+      values:
+      - classical_machine_learning
+      - deep_learning
+      - convolutional_neural_network
+      - recurrent_neural_network
+      - transformer
+      - natural_language_processing
+      - graph_neural_network
+      - ensemble_learning
+      - generative_ai
+      - reinforcement_learning
+    data_modality:
+      description: The patient, clinical, or biological data analyzed by AI.
+      required: false
+      selection: multi
+      values:
+      - structural_mri
+      - functional_mri
+      - pet
+      - eeg
+      - clinical_assessment
+      - cognitive_tests
+      - electronic_health_records
+      - genomic_data
+      - fluid_biomarkers
+      - speech_language
+      - wearable_sensor_data
+      - multimodal_data
+    disease_stage_or_population:
+      description: The Alzheimer's disease stage or study population analyzed.
+      required: false
+      selection: multi
+      values:
+      - cognitively_normal
+      - subjective_cognitive_decline
+      - mild_cognitive_impairment
+      - prodromal_alzheimers
+      - alzheimers_disease
+      - advanced_alzheimers
+      - mixed_dementia_population
+    validation_design:
+      description: The design used to test model performance or generalizability.
+      required: false
+      selection: multi
+      values:
+      - cross_validation
+      - internal_holdout
+      - external_validation
+      - independent_cohort
+      - prospective_validation
+      - real_world_validation
+    evaluation_focus:
+      description: The model property or translational outcome evaluated.
+      required: false
+      selection: multi
+      values:
+      - discrimination_performance
+      - calibration
+      - generalizability
+      - interpretability
+      - clinical_utility
+      - fairness
+      - robustness
+    study_contribution:
+      description: The principal research contribution made by the paper.
+      required: false
+      selection: multi
+      values:
+      - model_development
+      - model_validation
+      - comparative_benchmark
+      - dataset_or_resource
+      - methodological_framework
+      - clinical_application
+      - review_or_synthesis
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: AI in Alzheimer's disease
+    reason: To capture general AI applications in Alzheimer's research.
+  - query: artificial intelligence Alzheimer's
+    reason: To ensure variations in phrasing are covered.
+  - query: machine learning Alzheimer's diagnosis
+    reason: To focus on specific AI methodologies for diagnosis.
+  - query: deep learning Alzheimer's dataset analysis
+    reason: To retrieve papers focused on deep learning analysis.
+  - query: AI technologies for dementia
+    reason: To explore related AI applications in dementia, including Alzheimer's.
+  - query: computational methods in Alzheimer's research
+    reason: To capture relevant computational methods literature.
+  - query: AI for cognitive impairment
+    reason: To expand the search to cover cognitive impairment that relates to Alzheimer's.
+  - query: review articles on AI and Alzheimer's
+    reason: To specifically search for synthesized literature reviews.

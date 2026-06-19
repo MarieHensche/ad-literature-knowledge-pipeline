@@ -50,9 +50,11 @@ def validate_edited_sections(
     evidence_map: dict[str, Any],
     draft_payload: dict[str, Any],
     response: dict[str, Any],
+    warnings: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     draft_sections = sections_by_id(draft_payload)
     evidence_sections = sections_by_id(evidence_map)
+    validation_warnings = warnings if warnings is not None else []
     edited = response.get("sections")
     if not isinstance(edited, list):
         raise ValueError("Edited review response must contain sections list.")
@@ -62,10 +64,17 @@ def validate_edited_sections(
         for section in edited
         if isinstance(section, dict)
     }
-    if set(edited_by_id) != set(draft_sections):
+    missing_section_ids = set(draft_sections) - set(edited_by_id)
+    if missing_section_ids:
         raise ValueError(
-            "Edited review response changed section ids. "
-            f"Expected {sorted(draft_sections)}, got {sorted(edited_by_id)}."
+            "Edited review response omitted expected section ids. "
+            f"Missing {sorted(missing_section_ids)}; got {sorted(edited_by_id)}."
+        )
+    extra_section_ids = set(edited_by_id) - set(draft_sections)
+    if extra_section_ids:
+        validation_warnings.append(
+            "Dropped extra edited review section ids not requested for this "
+            f"edit call: {sorted(extra_section_ids)}."
         )
 
     validated = []
@@ -76,7 +85,11 @@ def validate_edited_sections(
                 f"Evidence map is missing section {section_id!r} for editing."
             )
         validated.append(
-            validate_section_response(evidence_section, edited_by_id[section_id])
+            validate_section_response(
+                evidence_section,
+                edited_by_id[section_id],
+                validation_warnings,
+            )
         )
     return validated
 
@@ -98,7 +111,7 @@ def call_llm_for_section(
     model: str,
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
-) -> tuple[list[dict[str, Any]], list[Path]]:
+) -> tuple[list[dict[str, Any]], list[Path], list[str]]:
     prompt = render_edit_review_sections_prompt(
         evidence_map_with_citations(
             payload_with_one_section(evidence_map, evidence_section)
@@ -117,11 +130,13 @@ def call_llm_for_section(
         trace_writer=trace_writer,
     )
     trace_paths = result.trace_paths.as_list() if result.trace_paths else []
+    warnings: list[str] = []
     return validate_edited_sections(
         payload_with_one_section(evidence_map, evidence_section),
         payload_with_one_section(draft_payload, draft_section),
         result.parsed,
-    ), trace_paths
+        warnings,
+    ), trace_paths, warnings
 
 
 def edit_sections(
@@ -130,7 +145,7 @@ def edit_sections(
     model: str,
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
-) -> tuple[list[dict[str, Any]], list[Path]]:
+) -> tuple[list[dict[str, Any]], list[Path], list[str]]:
     evidence_sections = sections_by_id(evidence_map)
     draft_sections = draft_payload.get("sections")
     if not isinstance(draft_sections, list):
@@ -138,6 +153,7 @@ def edit_sections(
 
     edited_sections = []
     trace_paths: list[Path] = []
+    warnings: list[str] = []
     for draft_section in draft_sections:
         if not isinstance(draft_section, dict):
             continue
@@ -147,7 +163,7 @@ def edit_sections(
             raise ValueError(
                 f"Evidence map is missing section {section_id!r} for editing."
             )
-        edited, paths = call_llm_for_section(
+        edited, paths, section_warnings = call_llm_for_section(
             evidence_map,
             draft_payload,
             evidence_section,
@@ -158,7 +174,8 @@ def edit_sections(
         )
         edited_sections.extend(edited)
         trace_paths.extend(paths)
-    return edited_sections, trace_paths
+        warnings.extend(section_warnings)
+    return edited_sections, trace_paths, warnings
 
 
 def run(
@@ -173,7 +190,7 @@ def run(
     draft_payload = read_json_object(review_sections_path)
     llm_client = client or OpenAIResponsesClient()
     trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
-    sections, trace_paths = edit_sections(
+    sections, trace_paths, warnings = edit_sections(
         evidence_map,
         draft_payload,
         model,
@@ -197,6 +214,7 @@ def run(
         },
         outputs={"review_edited_sections_json": output_path},
         row_counts={"review_sections": len(sections)},
+        warnings=warnings,
         trace_paths=trace_paths,
     )
 

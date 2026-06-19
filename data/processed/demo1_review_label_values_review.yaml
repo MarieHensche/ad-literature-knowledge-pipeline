@@ -1,0 +1,546 @@
+status: approved
+source_review_label_values: data/processed/demo1_review_label_values.json
+instructions:
+- Edit values for controlled review labels only.
+- Use value_details as read-only context for counts and surface forms.
+- Use merge_values to map extracted synonyms to approved values.
+- Use drop_values to remove extracted values without dropping papers.
+- Delete a value to remove it from later review aggregation.
+- Add a lowercase snake_case value to keep a user-approved new value.
+- Set status to approved when the values are ready to merge.
+labels:
+  methodology:
+    label: methodology
+    value_mode: controlled_auto
+    selection: multi
+    values:
+    - deep_learning
+    - convolutional_neural_network
+    - machine_learning
+    - artificial_intelligence
+    - ensemble_learning
+    - transfer_learning
+    - graph_neural_network
+    - graph_theory_modeling
+    - multimodal_machine_learning
+    - multimodal_feature_fusion
+    - natural_language_processing
+    - feature_selection
+    - support_vector_machine
+    - random_forest
+    - neuroimaging_analysis
+    - data_integration
+    - explainable_artificial_intelligence
+    - federated_learning
+    - principal_component_analysis
+    - prognostic_modeling
+    merge_values:
+      3d_convolution_neural_network: convolutional_neural_network
+      3d_convolutional_neural_network: convolutional_neural_network
+      cnn: convolutional_neural_network
+      convolutional_neural_networks: convolutional_neural_network
+      deep_convolution_neural_network: convolutional_neural_network
+      deep_convolutional_neural_network: convolutional_neural_network
+      depthwise_separable_convolutional_neural_networks: convolutional_neural_network
+      vgg16_model: convolutional_neural_network
+
+      deep_ensemble: ensemble_learning
+      deep_ensemble_learning: ensemble_learning
+      ensemble_machine_learning: ensemble_learning
+
+      knn: machine_learning
+      random_forest_classifiers: random_forest
+      supervised_machine_learning: machine_learning
+      conventional_machine_learning: machine_learning
+      machine_learning_classification: machine_learning
+
+      multi_modal_graph_neural_network: graph_neural_network
+      multimodal_graph_neural_network: graph_neural_network
+
+      neuro_imaging: neuroimaging_analysis
+      prognostic_modelling: prognostic_modeling
+      ai_driven_multi_omics_approaches: data_integration
+      classification_technique: machine_learning
+      classification_techniques: machine_learning
+    drop_values:
+    - systematic_literature_review
+    value_details:
+    - value: 3d_convolution_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: 3d_convolution_neural_network
+        count: 1
+    - value: 3d_convolutional_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: 3d_convolutional_neural_network
+        count: 1
+    - value: 4d_fmri
+      paper_count: 1
+      surface_forms:
+      - form: 4d_fmri
+        count: 1
+    - value: ai_driven_innovations
+      paper_count: 1
+      surface_forms:
+      - form: ai_driven_innovations
+        count: 1
+    - value: ai_driven_multi_omics
+      paper_count: 1
+      surface_forms:
+      - form: ai_driven_multi_omics_approaches
+        count: 1
+      canonicalized_from:
+      - value: ai_driven_multi_omics_approaches
+        count: 1
+    - value: artificial_intelligence
+      paper_count: 3
+      surface_forms:
+      - form: artificial_intelligence
+        count: 3
+    - value: attention_based_spatial_temporal_graph
+      paper_count: 1
+      surface_forms:
+      - form: attention_based_spatial_temporal_graph
+        count: 1
+    - value: cascade_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: cascade_neural_network
+        count: 1
+    - value: classification
+      paper_count: 1
+      surface_forms:
+      - form: classification
+        count: 1
+    - value: classification_technique
+      paper_count: 1
+      surface_forms:
+      - form: classification_techniques
+        count: 1
+      canonicalized_from:
+      - value: classification_techniques
+        count: 1
+    - value: cnn
+      paper_count: 2
+      surface_forms:
+      - form: cnn
+        count: 2
+    - value: computer_aided_diagnosis
+      paper_count: 2
+      surface_forms:
+      - form: computer_aided_diagnosis
+        count: 2
+    - value: conventional_machine_learning
+      paper_count: 1
+      surface_forms:
+      - form: conventional_machine_learning
+        count: 1
+    - value: convolutional_neural_network
+      paper_count: 19
+      surface_forms:
+      - form: convolutional_neural_network
+        count: 19
+    - value: convolutional_neural_networks
+      paper_count: 1
+      surface_forms:
+      - form: convolutional_neural_networks
+        count: 1
+    - value: cross_modal_attention
+      paper_count: 1
+      surface_forms:
+      - form: cross_modal_attention
+        count: 1
+    - value: data_integration
+      paper_count: 1
+      surface_forms:
+      - form: data_integration
+        count: 1
+    - value: deep_convolution_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: deep_convolution_neural_network
+        count: 1
+    - value: deep_convolutional_neural_network
+      paper_count: 2
+      surface_forms:
+      - form: deep_convolutional_neural_network
+        count: 2
+    - value: deep_ensemble
+      paper_count: 1
+      surface_forms:
+      - form: deep_ensemble
+        count: 1
+    - value: deep_ensemble_learning
+      paper_count: 1
+      surface_forms:
+      - form: deep_ensemble_learning
+        count: 1
+    - value: deep_learning
+      paper_count: 33
+      surface_forms:
+      - form: deep_learning
+        count: 33
+    - value: deep_metric_learning
+      paper_count: 1
+      surface_forms:
+      - form: deep_metric_learning
+        count: 1
+    - value: depthwise_separable_convolutional_neural_networks
+      paper_count: 1
+      surface_forms:
+      - form: depthwise_separable_convolutional_neural_networks
+        count: 1
+    - value: ensemble_learning
+      paper_count: 5
+      surface_forms:
+      - form: ensemble_learning
+        count: 5
+    - value: ensemble_machine_learning
+      paper_count: 1
+      surface_forms:
+      - form: ensemble_machine_learning
+        count: 1
+    - value: explainable_artificial_intelligence
+      paper_count: 1
+      surface_forms:
+      - form: explainable_artificial_intelligence
+        count: 1
+    - value: feature_selection
+      paper_count: 1
+      surface_forms:
+      - form: feature_selection
+        count: 1
+    - value: federated_learning
+      paper_count: 1
+      surface_forms:
+      - form: federated_learning
+        count: 1
+    - value: fuzzy_deep_learning
+      paper_count: 1
+      surface_forms:
+      - form: fuzzy_deep_learning
+        count: 1
+    - value: graph_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: graph_neural_network
+        count: 1
+    - value: graph_theory_modeling
+      paper_count: 1
+      surface_forms:
+      - form: graph_theory_modeling
+        count: 1
+    - value: hybrid_models
+      paper_count: 1
+      surface_forms:
+      - form: hybrid_models
+        count: 1
+    - value: hyperparameter_optimization
+      paper_count: 1
+      surface_forms:
+      - form: hyperparameter_optimization
+        count: 1
+    - value: imputation_strategies
+      paper_count: 1
+      surface_forms:
+      - form: imputation_strategies
+        count: 1
+    - value: interactive_visualization
+      paper_count: 1
+      surface_forms:
+      - form: interactive_visualization
+        count: 1
+    - value: knn
+      paper_count: 1
+      surface_forms:
+      - form: knn
+        count: 1
+    - value: laser_induced_breakdown_spectroscopy
+      paper_count: 1
+      surface_forms:
+      - form: laser_induced_breakdown_spectroscopy
+        count: 1
+    - value: layer_wise_relevance_propagation
+      paper_count: 1
+      surface_forms:
+      - form: layer_wise_relevance_propagation
+        count: 1
+    - value: machine_learning
+      paper_count: 14
+      surface_forms:
+      - form: machine_learning
+        count: 14
+    - value: machine_learning_classification
+      paper_count: 1
+      surface_forms:
+      - form: machine_learning_classification
+        count: 1
+    - value: meta_learning
+      paper_count: 1
+      surface_forms:
+      - form: meta_learning
+        count: 1
+    - value: minimal_recurrent_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: minimal_recurrent_neural_network
+        count: 1
+    - value: multi_label_classification
+      paper_count: 1
+      surface_forms:
+      - form: multi_label_classification
+        count: 1
+    - value: multi_modal_graph_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: multi_modal_graph_neural_network
+        count: 1
+    - value: multi_scale_multimodal_deep_learning
+      paper_count: 1
+      surface_forms:
+      - form: multi_scale_multimodal_deep_learning
+        count: 1
+    - value: multimodal_feature_fusion
+      paper_count: 1
+      surface_forms:
+      - form: multimodal_feature_fusion
+        count: 1
+    - value: multimodal_machine_learning
+      paper_count: 1
+      surface_forms:
+      - form: multimodal_machine_learning
+        count: 1
+    - value: natural_language_processing
+      paper_count: 2
+      surface_forms:
+      - form: natural_language_processing
+        count: 2
+    - value: neural_network_models
+      paper_count: 1
+      surface_forms:
+      - form: neural_network_models
+        count: 1
+    - value: neuro_imaging
+      paper_count: 1
+      surface_forms:
+      - form: neuro_imaging
+        count: 1
+    - value: neuroimaging_analysis
+      paper_count: 1
+      surface_forms:
+      - form: neuroimaging_analysis
+        count: 1
+    - value: principal_component_analysis
+      paper_count: 1
+      surface_forms:
+      - form: principal_component_analysis
+        count: 1
+    - value: prognostic_modelling
+      paper_count: 1
+      surface_forms:
+      - form: prognostic_modelling
+        count: 1
+    - value: qsar_modeling
+      paper_count: 1
+      surface_forms:
+      - form: qsar_modeling
+        count: 1
+    - value: random_forest_classifiers
+      paper_count: 1
+      surface_forms:
+      - form: random_forest_classifiers
+        count: 1
+    - value: rf_signals
+      paper_count: 1
+      surface_forms:
+      - form: rf_signals
+        count: 1
+    - value: rule_based_algorithm
+      paper_count: 1
+      surface_forms:
+      - form: rule_based_algorithm
+        count: 1
+    - value: supervised_machine_learning
+      paper_count: 1
+      surface_forms:
+      - form: supervised_machine_learning
+        count: 1
+    - value: support_vector_machine
+      paper_count: 1
+      surface_forms:
+      - form: support_vector_machine
+        count: 1
+    - value: support_vector_regression
+      paper_count: 1
+      surface_forms:
+      - form: support_vector_regression
+        count: 1
+    - value: synthetic_minority_oversampling
+      paper_count: 1
+      surface_forms:
+      - form: synthetic_minority_oversampling
+        count: 1
+    - value: systematic_literature_review
+      paper_count: 1
+      surface_forms:
+      - form: systematic_literature_review
+        count: 1
+    - value: transfer_learning
+      paper_count: 4
+      surface_forms:
+      - form: transfer_learning
+        count: 4
+    - value: unsupervised_domain_adaptation
+      paper_count: 1
+      surface_forms:
+      - form: unsupervised_domain_adaptation
+        count: 1
+    - value: vgg16_model
+      paper_count: 1
+      surface_forms:
+      - form: vgg16_model
+        count: 1
+    - value: wavelet_packet_transform
+      paper_count: 1
+      surface_forms:
+      - form: wavelet_packet_transform
+        count: 1
+  study_design:
+    label: study design
+    value_mode: controlled_fixed
+    selection: single
+    values:
+    - benchmark_study
+    - case_control_study
+    - case_study
+    - cohort_study
+    - cross_sectional_study
+    - experimental_study
+    - longitudinal_study
+    - mixed_methods_study
+    - model_development_study
+    - observational_study
+    - qualitative_study
+    - quasi_experimental_study
+    - randomized_controlled_trial
+    - secondary_data_analysis
+    - simulation_study
+    - survey_study
+    - unclear
+    - validation_study
+    merge_values: {}
+    drop_values: []
+    value_details:
+    - value: benchmark_study
+      paper_count: 0
+      surface_forms: []
+    - value: case_control_study
+      paper_count: 1
+      surface_forms:
+      - form: case_control_study
+        count: 1
+    - value: case_study
+      paper_count: 0
+      surface_forms: []
+    - value: cohort_study
+      paper_count: 4
+      surface_forms:
+      - form: cohort_study
+        count: 4
+    - value: cross_sectional_study
+      paper_count: 0
+      surface_forms: []
+    - value: experimental_study
+      paper_count: 2
+      surface_forms:
+      - form: experimental_study
+        count: 2
+    - value: longitudinal_study
+      paper_count: 3
+      surface_forms:
+      - form: longitudinal_study
+        count: 3
+    - value: mixed_methods_study
+      paper_count: 4
+      surface_forms:
+      - form: mixed_methods_study
+        count: 4
+    - value: model_development_study
+      paper_count: 37
+      surface_forms:
+      - form: model_development_study
+        count: 37
+    - value: observational_study
+      paper_count: 6
+      surface_forms:
+      - form: observational_study
+        count: 6
+    - value: qualitative_study
+      paper_count: 0
+      surface_forms: []
+    - value: quasi_experimental_study
+      paper_count: 0
+      surface_forms: []
+    - value: randomized_controlled_trial
+      paper_count: 0
+      surface_forms: []
+    - value: secondary_data_analysis
+      paper_count: 0
+      surface_forms: []
+    - value: simulation_study
+      paper_count: 0
+      surface_forms: []
+    - value: survey_study
+      paper_count: 0
+      surface_forms: []
+    - value: unclear
+      paper_count: 10
+      surface_forms:
+      - form: unclear
+        count: 10
+    - value: validation_study
+      paper_count: 16
+      surface_forms:
+      - form: validation_study
+        count: 16
+  dataset_or_sample:
+    label: dataset or sample
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  key_finding:
+    label: key finding
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  paper_limitation:
+    label: paper limitation
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  direct_quote:
+    label: direct quote
+    value_mode: evidence_quote
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  future_work_or_gap:
+    label: future work or gap
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []

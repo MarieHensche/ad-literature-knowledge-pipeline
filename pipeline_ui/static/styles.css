@@ -253,6 +253,10 @@ pre {
   padding-top: 14px;
 }
 
+.advanced-nested {
+  margin-top: 12px;
+}
+
 .advanced summary,
 .raw-block summary {
   color: var(--primary);
@@ -284,6 +288,118 @@ pre {
 
 .action-row.compact {
   margin-top: 12px;
+}
+
+.inline-overview {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.section-head,
+.overview-card-head,
+.artifact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-head {
+  margin-bottom: 12px;
+}
+
+.section-head h3,
+.overview-card h4,
+.paper-card h4 {
+  margin: 0;
+}
+
+.section-head h3 {
+  font-size: 17px;
+}
+
+.paper-list,
+.chip-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.paper-list {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.paper-card,
+.overview-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  background: var(--surface);
+}
+
+.paper-card h4,
+.overview-card h4 {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.paper-card p,
+.overview-card p,
+.overview-lead,
+.empty-text {
+  margin: 6px 0 0;
+  color: var(--muted-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.overview-card-head span {
+  flex: none;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted-text);
+  background: var(--surface-strong);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  font-size: 12px;
+}
+
+.artifact-row {
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 10px;
+  color: var(--muted-text);
+  background: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.pdf-frame {
+  width: 100%;
+  min-height: 620px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .primary-button,

@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from ad_lit_pipeline.llm.client import StaticJSONClient
 from ad_lit_pipeline.steps.review.edit_sections import run
 
@@ -118,6 +116,25 @@ def edited_section_payload(
     }
 
 
+def edited_section_payload_with_extra_section() -> dict[str, object]:
+    payload = edited_section_payload(section_id="review_methodology")
+    payload["sections"].append(
+        {
+            "section_id": "methodology",
+            "title": "Methodology",
+            "summary": "Unrequested section.",
+            "body_markdown": "This section was not requested.",
+            "key_points": [],
+            "methodological_patterns": [],
+            "limitations_or_gaps": [],
+            "citation_support": [],
+            "cited_paper_ids": [],
+            "quote_uses": [],
+        }
+    )
+    return payload
+
+
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -156,13 +173,47 @@ def test_edit_review_sections_writes_validated_sections(tmp_path: Path) -> None:
     assert payload["source_review_sections"] == str(sections_path)
 
 
-def test_edit_review_sections_rejects_unknown_paper_id(tmp_path: Path) -> None:
+def test_edit_review_sections_drops_unknown_paper_id(tmp_path: Path) -> None:
     evidence_path = tmp_path / "evidence.json"
     sections_path = tmp_path / "sections.json"
     output_path = tmp_path / "edited.json"
     write_json(evidence_path, evidence_map_payload())
     write_json(sections_path, draft_sections_payload())
-    client = StaticJSONClient([edited_section_payload("p2")])
+    client = StaticJSONClient(
+        [edited_section_payload("p2"), edited_section_payload(section_id="conclusion")]
+    )
 
-    with pytest.raises(ValueError, match="not present in section"):
-        run(evidence_path, sections_path, output_path, "test-model", client=client)
+    result = run(evidence_path, sections_path, output_path, "test-model", client=client)
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert payload["sections"][0]["citation_support"] == []
+    assert payload["sections"][0]["cited_paper_ids"] == []
+    assert any(
+        "Dropped citation_support item" in warning for warning in result.warnings
+    )
+
+
+def test_edit_review_sections_drops_extra_section_ids(tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    sections_path = tmp_path / "sections.json"
+    output_path = tmp_path / "edited.json"
+    write_json(evidence_path, evidence_map_payload())
+    write_json(sections_path, draft_sections_payload())
+    client = StaticJSONClient(
+        [
+            edited_section_payload_with_extra_section(),
+            edited_section_payload(section_id="conclusion"),
+        ]
+    )
+
+    result = run(evidence_path, sections_path, output_path, "test-model", client=client)
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert [section["section_id"] for section in payload["sections"]] == [
+        "review_methodology",
+        "conclusion",
+    ]
+    assert any(
+        "Dropped extra edited review section ids" in warning
+        for warning in result.warnings
+    )

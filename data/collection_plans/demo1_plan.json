@@ -1,0 +1,585 @@
+{
+  "topic_description": "Artificial Intelligence in Alzheimer's Disease Research",
+  "recommended_provider": "openalex",
+  "provider_reason": "OpenAlex provides a broad scholarly search across disciplines and is the best default provider for this topic.",
+  "search_goal": "Collect approximately 100 scholarly papers that explore the application of AI in Alzheimer's disease research from January 1, 2020, to June 19, 2026.",
+  "main_search_string": "Artificial Intelligence in Alzheimer's Disease",
+  "alternate_search_strings": [
+    "AI applications for Alzheimer's research",
+    "Machine learning techniques in Alzheimer's studies",
+    "Deep learning for dementia analysis",
+    "Computational methods in Alzheimer's disease"
+  ],
+  "search_queries": [
+    {
+      "query": "AI in Alzheimer's disease",
+      "reason": "To capture general AI applications in Alzheimer's research."
+    },
+    {
+      "query": "artificial intelligence Alzheimer's",
+      "reason": "To ensure variations in phrasing are covered."
+    },
+    {
+      "query": "machine learning Alzheimer's diagnosis",
+      "reason": "To focus on specific AI methodologies for diagnosis."
+    },
+    {
+      "query": "deep learning Alzheimer's dataset analysis",
+      "reason": "To retrieve papers focused on deep learning analysis."
+    },
+    {
+      "query": "AI technologies for dementia",
+      "reason": "To explore related AI applications in dementia, including Alzheimer's."
+    },
+    {
+      "query": "computational methods in Alzheimer's research",
+      "reason": "To capture relevant computational methods literature."
+    },
+    {
+      "query": "AI for cognitive impairment",
+      "reason": "To expand the search to cover cognitive impairment that relates to Alzheimer's."
+    },
+    {
+      "query": "review articles on AI and Alzheimer's",
+      "reason": "To specifically search for synthesized literature reviews."
+    },
+    {
+      "query": "Artificial Intelligence in Alzheimer's Disease",
+      "reason": "Provider-specific primary query."
+    },
+    {
+      "query": "AI applications for Alzheimer's research",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "Machine learning techniques in Alzheimer's studies",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "Deep learning for dementia analysis",
+      "reason": "Alternate planned search string."
+    },
+    {
+      "query": "Computational methods in Alzheimer's disease",
+      "reason": "Alternate planned search string."
+    }
+  ],
+  "filters": {
+    "year_from": 2020,
+    "year_to": 2026,
+    "publication_types": [],
+    "open_access_only": null,
+    "has_abstract": null,
+    "has_full_text": null,
+    "language": null,
+    "venue_or_source": [],
+    "field_or_domain": []
+  },
+  "provider_specific_plan": {
+    "provider": "openalex",
+    "query": "Artificial Intelligence in Alzheimer's Disease",
+    "filters": [
+      {
+        "name": "from_publication_date",
+        "value": "2020-01-01",
+        "reason": "To restrict results to publications after the start date."
+      },
+      {
+        "name": "to_publication_date",
+        "value": "2026-06-19",
+        "reason": "To restrict results to publications before the end date."
+      }
+    ],
+    "sort": null,
+    "max_results_recommendation": 100
+  },
+  "screening_notes": "Review the title and abstract to ensure relevance to AI applications in Alzheimer's disease. Prioritize empirical studies, methodologies, and review articles.",
+  "risks_or_ambiguities": [
+    "Potential for some papers to be tangentially relevant but not directly focused on both AI and Alzheimer's.",
+    "Variations in publication types may lead to inconsistent relevance."
+  ],
+  "topic_match_spec": {
+    "version": 1,
+    "source": "topic_contract.topic_structure",
+    "anchor_topic_id": "alzheimers_disease",
+    "main_topics": [
+      {
+        "topic_id": "alzheimers_disease",
+        "label": "Alzheimer's Disease",
+        "field": "title",
+        "terms": [
+          "Alzheimer disease",
+          "Alzheimer",
+          "A.D.",
+          "dementia due to Alzheimer's",
+          "Alzheimer's disease",
+          "AD",
+          "prodromal Alzheimer's disease",
+          "preclinical Alzheimer's disease",
+          "dementia due to Alzheimer's disease",
+          "Alzheimer's"
+        ]
+      },
+      {
+        "topic_id": "artificial_intelligence",
+        "label": "Artificial Intelligence",
+        "field": "title",
+        "terms": [
+          "ML",
+          "deep learning",
+          "neural network",
+          "AI algorithms",
+          "AI methods",
+          "natural language processing",
+          "computer vision",
+          "transformer",
+          "graph neural network",
+          "artificial intelligence",
+          "AI",
+          "machine learning",
+          "computational intelligence",
+          "neural networks",
+          "data analytics"
+        ]
+      }
+    ],
+    "secondary_topics": [
+      {
+        "main_topic_id": "alzheimers_disease",
+        "secondary_topic_id": "dementia_differential_context",
+        "label": "Dementia Differential Context",
+        "field": "title",
+        "terms": [
+          "differential dementia diagnosis",
+          "dementia differential",
+          "mixed dementia",
+          "dementia subtype classification",
+          "dementia differential diagnosis",
+          "differential diagnosis of dementia"
+        ],
+        "retrieval_terms": [
+          "dementia differential diagnosis",
+          "mixed dementia",
+          "dementia subtype classification"
+        ],
+        "matching_terms": [
+          "differential dementia diagnosis",
+          "dementia differential",
+          "mixed dementia",
+          "dementia subtype classification"
+        ]
+      },
+      {
+        "main_topic_id": "artificial_intelligence",
+        "secondary_topic_id": "computational_methods",
+        "label": "Computational Methods",
+        "field": "title",
+        "terms": [
+          "statistical analysis",
+          "modeling techniques",
+          "data mining",
+          "computational methods",
+          "bioinformatics",
+          "algorithmic approaches",
+          "statistical modeling",
+          "bioinformatics methods"
+        ],
+        "retrieval_terms": [
+          "computational methods",
+          "bioinformatics"
+        ],
+        "matching_terms": [
+          "statistical analysis",
+          "modeling techniques",
+          "data mining"
+        ]
+      }
+    ]
+  },
+  "retrieval_strategy": {
+    "mode": "tiered_topic_blocks",
+    "target_max_results": 100,
+    "iterations_per_group": 2,
+    "retrieval_terms_per_topic_limit": 12,
+    "query_groups": [
+      {
+        "group_id": "tier_0",
+        "tier": 0,
+        "priority": 0,
+        "goal": "Fill remaining target results with this tier before lower-priority tiers.",
+        "queries": [
+          {
+            "query_id": "tier_0_all_main",
+            "tier": 0,
+            "query": "(\"Alzheimer's disease\" OR Alzheimer's OR \"Alzheimer disease\" OR \"prodromal Alzheimer's disease\" OR \"preclinical Alzheimer's disease\" OR \"dementia due to Alzheimer's disease\") AND (\"artificial intelligence\" OR AI OR \"machine learning\" OR \"deep learning\" OR \"neural network\" OR \"natural language processing\" OR \"computer vision\" OR \"computational intelligence\")",
+            "reason": "Tier 0: anchor and all main topics.",
+            "requires_title_screening": false,
+            "retrieval_phase": "field_relaxed",
+            "blocks": [
+              {
+                "topic_id": "alzheimers_disease",
+                "kind": "main",
+                "field": "title",
+                "terms": [
+                  "Alzheimer's disease",
+                  "Alzheimer's",
+                  "Alzheimer disease",
+                  "prodromal Alzheimer's disease",
+                  "preclinical Alzheimer's disease",
+                  "dementia due to Alzheimer's disease"
+                ]
+              },
+              {
+                "topic_id": "artificial_intelligence",
+                "kind": "main",
+                "field": "title",
+                "terms": [
+                  "artificial intelligence",
+                  "AI",
+                  "machine learning",
+                  "deep learning",
+                  "neural network",
+                  "natural language processing",
+                  "computer vision",
+                  "computational intelligence"
+                ]
+              }
+            ],
+            "replaced_main_topics": [],
+            "replacement_secondary_groups": [],
+            "fallback_queries": [
+              {
+                "query_id": "tier_0_all_main_fallback_1",
+                "logical_query_id": "tier_0_all_main",
+                "query": "Alzheimer's disease artificial intelligence",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_2",
+                "logical_query_id": "tier_0_all_main",
+                "query": "Alzheimer's AI",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_3",
+                "logical_query_id": "tier_0_all_main",
+                "query": "Alzheimer disease machine learning",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_4",
+                "logical_query_id": "tier_0_all_main",
+                "query": "prodromal Alzheimer's disease deep learning",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_5",
+                "logical_query_id": "tier_0_all_main",
+                "query": "preclinical Alzheimer's disease neural network",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_6",
+                "logical_query_id": "tier_0_all_main",
+                "query": "dementia due to Alzheimer's disease natural language processing",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_7",
+                "logical_query_id": "tier_0_all_main",
+                "query": "Alzheimer's disease computer vision",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              },
+              {
+                "query_id": "tier_0_all_main_fallback_8",
+                "logical_query_id": "tier_0_all_main",
+                "query": "Alzheimer's computational intelligence",
+                "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "group_id": "tier_1",
+        "tier": 1,
+        "priority": 1,
+        "goal": "Fill remaining target results with this tier before lower-priority tiers.",
+        "queries": [
+          {
+            "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+            "tier": 1,
+            "query": "(\"Alzheimer's disease\" OR Alzheimer's OR \"Alzheimer disease\" OR \"prodromal Alzheimer's disease\" OR \"preclinical Alzheimer's disease\" OR \"dementia due to Alzheimer's disease\") AND (\"computational methods\" OR bioinformatics)",
+            "reason": "Tier 1: secondary replacement for artificial_intelligence.",
+            "requires_title_screening": true,
+            "retrieval_phase": "secondary",
+            "blocks": [
+              {
+                "topic_id": "alzheimers_disease",
+                "kind": "main",
+                "field": "title",
+                "terms": [
+                  "Alzheimer's disease",
+                  "Alzheimer's",
+                  "Alzheimer disease",
+                  "prodromal Alzheimer's disease",
+                  "preclinical Alzheimer's disease",
+                  "dementia due to Alzheimer's disease"
+                ]
+              },
+              {
+                "topic_id": "artificial_intelligence",
+                "kind": "secondary",
+                "field": "title",
+                "terms": [
+                  "computational methods",
+                  "bioinformatics"
+                ],
+                "secondary_topic_id": "computational_methods",
+                "secondary_topic_label": "Computational Methods"
+              }
+            ],
+            "replaced_main_topics": [
+              "artificial_intelligence"
+            ],
+            "replacement_secondary_groups": [
+              {
+                "main_topic_id": "artificial_intelligence",
+                "secondary_topic_id": "computational_methods",
+                "label": "Computational Methods"
+              }
+            ],
+            "fallback_queries": [
+              {
+                "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_1",
+                "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+                "query": "Alzheimer's disease computational methods",
+                "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+              },
+              {
+                "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_2",
+                "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+                "query": "Alzheimer's bioinformatics",
+                "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+              },
+              {
+                "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_3",
+                "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+                "query": "Alzheimer disease computational methods",
+                "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+              },
+              {
+                "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_4",
+                "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+                "query": "prodromal Alzheimer's disease bioinformatics",
+                "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+              },
+              {
+                "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_5",
+                "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+                "query": "preclinical Alzheimer's disease computational methods",
+                "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+              },
+              {
+                "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_6",
+                "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+                "query": "dementia due to Alzheimer's disease bioinformatics",
+                "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "query_groups": [
+    {
+      "group_id": "tier_0",
+      "tier": 0,
+      "priority": 0,
+      "goal": "Fill remaining target results with this tier before lower-priority tiers.",
+      "queries": [
+        {
+          "query_id": "tier_0_all_main",
+          "tier": 0,
+          "query": "(\"Alzheimer's disease\" OR Alzheimer's OR \"Alzheimer disease\" OR \"prodromal Alzheimer's disease\" OR \"preclinical Alzheimer's disease\" OR \"dementia due to Alzheimer's disease\") AND (\"artificial intelligence\" OR AI OR \"machine learning\" OR \"deep learning\" OR \"neural network\" OR \"natural language processing\" OR \"computer vision\" OR \"computational intelligence\")",
+          "reason": "Tier 0: anchor and all main topics.",
+          "requires_title_screening": false,
+          "retrieval_phase": "field_relaxed",
+          "blocks": [
+            {
+              "topic_id": "alzheimers_disease",
+              "kind": "main",
+              "field": "title",
+              "terms": [
+                "Alzheimer's disease",
+                "Alzheimer's",
+                "Alzheimer disease",
+                "prodromal Alzheimer's disease",
+                "preclinical Alzheimer's disease",
+                "dementia due to Alzheimer's disease"
+              ]
+            },
+            {
+              "topic_id": "artificial_intelligence",
+              "kind": "main",
+              "field": "title",
+              "terms": [
+                "artificial intelligence",
+                "AI",
+                "machine learning",
+                "deep learning",
+                "neural network",
+                "natural language processing",
+                "computer vision",
+                "computational intelligence"
+              ]
+            }
+          ],
+          "replaced_main_topics": [],
+          "replacement_secondary_groups": [],
+          "fallback_queries": [
+            {
+              "query_id": "tier_0_all_main_fallback_1",
+              "logical_query_id": "tier_0_all_main",
+              "query": "Alzheimer's disease artificial intelligence",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_2",
+              "logical_query_id": "tier_0_all_main",
+              "query": "Alzheimer's AI",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_3",
+              "logical_query_id": "tier_0_all_main",
+              "query": "Alzheimer disease machine learning",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_4",
+              "logical_query_id": "tier_0_all_main",
+              "query": "prodromal Alzheimer's disease deep learning",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_5",
+              "logical_query_id": "tier_0_all_main",
+              "query": "preclinical Alzheimer's disease neural network",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_6",
+              "logical_query_id": "tier_0_all_main",
+              "query": "dementia due to Alzheimer's disease natural language processing",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_7",
+              "logical_query_id": "tier_0_all_main",
+              "query": "Alzheimer's disease computer vision",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            },
+            {
+              "query_id": "tier_0_all_main_fallback_8",
+              "logical_query_id": "tier_0_all_main",
+              "query": "Alzheimer's computational intelligence",
+              "reason": "Provider fallback search decomposed from structured topic query tier_0_all_main."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "group_id": "tier_1",
+      "tier": 1,
+      "priority": 1,
+      "goal": "Fill remaining target results with this tier before lower-priority tiers.",
+      "queries": [
+        {
+          "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+          "tier": 1,
+          "query": "(\"Alzheimer's disease\" OR Alzheimer's OR \"Alzheimer disease\" OR \"prodromal Alzheimer's disease\" OR \"preclinical Alzheimer's disease\" OR \"dementia due to Alzheimer's disease\") AND (\"computational methods\" OR bioinformatics)",
+          "reason": "Tier 1: secondary replacement for artificial_intelligence.",
+          "requires_title_screening": true,
+          "retrieval_phase": "secondary",
+          "blocks": [
+            {
+              "topic_id": "alzheimers_disease",
+              "kind": "main",
+              "field": "title",
+              "terms": [
+                "Alzheimer's disease",
+                "Alzheimer's",
+                "Alzheimer disease",
+                "prodromal Alzheimer's disease",
+                "preclinical Alzheimer's disease",
+                "dementia due to Alzheimer's disease"
+              ]
+            },
+            {
+              "topic_id": "artificial_intelligence",
+              "kind": "secondary",
+              "field": "title",
+              "terms": [
+                "computational methods",
+                "bioinformatics"
+              ],
+              "secondary_topic_id": "computational_methods",
+              "secondary_topic_label": "Computational Methods"
+            }
+          ],
+          "replaced_main_topics": [
+            "artificial_intelligence"
+          ],
+          "replacement_secondary_groups": [
+            {
+              "main_topic_id": "artificial_intelligence",
+              "secondary_topic_id": "computational_methods",
+              "label": "Computational Methods"
+            }
+          ],
+          "fallback_queries": [
+            {
+              "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_1",
+              "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+              "query": "Alzheimer's disease computational methods",
+              "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+            },
+            {
+              "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_2",
+              "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+              "query": "Alzheimer's bioinformatics",
+              "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+            },
+            {
+              "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_3",
+              "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+              "query": "Alzheimer disease computational methods",
+              "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+            },
+            {
+              "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_4",
+              "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+              "query": "prodromal Alzheimer's disease bioinformatics",
+              "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+            },
+            {
+              "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_5",
+              "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+              "query": "preclinical Alzheimer's disease computational methods",
+              "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+            },
+            {
+              "query_id": "tier_1_replace_artificial_intelligence_with_computational_methods_fallback_6",
+              "logical_query_id": "tier_1_replace_artificial_intelligence_with_computational_methods",
+              "query": "dementia due to Alzheimer's disease bioinformatics",
+              "reason": "Provider fallback search decomposed from structured topic query tier_1_replace_artificial_intelligence_with_computational_methods."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

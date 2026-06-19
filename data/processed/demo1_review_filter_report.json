@@ -1,0 +1,94 @@
+{
+  "counts": {
+    "included_papers": 99,
+    "review_eligible_papers": 90,
+    "excluded_likely_review_papers": 9,
+    "retained_primary_or_unclear_papers": 90,
+    "retained_suspected_review_papers": 0
+  },
+  "retention_rule": "Papers identified as likely review articles by available metadata are excluded from literature-review evidence synthesis. Retained papers should be described as primary or unclear, not as fully verified original studies.",
+  "excluded_likely_review_papers": [
+    {
+      "paper_id": "10_3389_fncom_2023_1038636",
+      "title": "Conventional machine learning and deep learning in Alzheimer's disease diagnosis using neuroimaging: A review",
+      "year": "2023",
+      "doi": "10.3389/fncom.2023.1038636",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1111_jon_13063",
+      "title": "Functional magnetic resonance imaging, deep learning, and Alzheimer's disease: A systematic review",
+      "year": "2022",
+      "doi": "10.1111/jon.13063",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1186_s41983_022_00571_w",
+      "title": "Early prediction of Alzheimer's disease using convolutional neural network: a review",
+      "year": "2022",
+      "doi": "10.1186/s41983-022-00571-w",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1016_j_compbiomed_2022_105634",
+      "title": "Early diagnosis of Alzheimer's disease based on deep learning: A systematic review",
+      "year": "2022",
+      "doi": "10.1016/j.compbiomed.2022.105634",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1016_j_ijcce_2021_12_002",
+      "title": "A review of the application of deep learning in the detection of Alzheimer's disease",
+      "year": "2021",
+      "doi": "10.1016/j.ijcce.2021.12.002",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1016_j_artmed_2024_102928",
+      "title": "A systematic literature review on the significance of deep learning and machine learning in predicting Alzheimer's disease",
+      "year": "2024",
+      "doi": "10.1016/j.artmed.2024.102928",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1093_jamiaopen_ooab052",
+      "title": "Machine learning for modeling the progression of Alzheimer disease dementia using clinical data: a systematic literature review",
+      "year": "2021",
+      "doi": "10.1093/jamiaopen/ooab052",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1016_j_bspc_2024_106023",
+      "title": "A review of artificial intelligence methods for Alzheimer's disease diagnosis: Insights from neuroimaging to sensor data analysis",
+      "year": "2024",
+      "doi": "10.1016/j.bspc.2024.106023",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    },
+    {
+      "paper_id": "10_1016_j_compbiomed_2021_104947",
+      "title": "A review on omics-based biomarkers discovery for Alzheimer's disease from the bioinformatics perspectives: Statistical approach vs machine learning approach",
+      "year": "2021",
+      "doi": "10.1016/j.compbiomed.2021.104947",
+      "source": "collected:openalex",
+      "review_type_status": "likely_review",
+      "review_filter_decision": "exclude_review_evidence"
+    }
+  ],
+  "retained_suspected_review_papers": []
+}

@@ -68,6 +68,7 @@ def resolve_paper_id(paper_id: object, known_paper_ids: set[str]) -> str:
 def validate_section_response(
     section: dict[str, Any],
     response: dict[str, Any],
+    warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     section_id = str(section.get("section_id") or "")
     if response.get("section_id") != section_id:
@@ -76,6 +77,7 @@ def validate_section_response(
             f"{response.get('section_id')!r}, expected {section_id!r}."
         )
 
+    validation_warnings = warnings if warnings is not None else []
     known_paper_ids = allowed_paper_ids(section)
     cited_paper_ids = response.get("cited_paper_ids")
     if not isinstance(cited_paper_ids, list):
@@ -84,10 +86,11 @@ def validate_section_response(
     for paper_id in cited_paper_ids:
         resolved_id = resolve_paper_id(paper_id, known_paper_ids)
         if resolved_id not in known_paper_ids:
-            raise ValueError(
-                f"cited_paper_ids references paper_id {paper_id!r}, which is "
-                f"not present in section {section_id!r}."
+            validation_warnings.append(
+                f"Dropped cited_paper_ids paper_id {paper_id!r} from review "
+                f"section {section_id!r}: not present in section evidence."
             )
+            continue
         if resolved_id not in repaired_cited_ids:
             repaired_cited_ids.append(resolved_id)
     response["cited_paper_ids"] = repaired_cited_ids
@@ -96,19 +99,24 @@ def validate_section_response(
         group = response.get(group_name)
         if not isinstance(group, list):
             raise ValueError(f"{group_name} must be a list.")
+        repaired_group = []
         for item in group:
             if not isinstance(item, dict):
                 raise ValueError(f"{group_name} items must be objects.")
             paper_id = str(item.get("paper_id") or "")
             resolved_id = resolve_paper_id(paper_id, known_paper_ids)
             if not resolved_id or resolved_id not in known_paper_ids:
-                raise ValueError(
-                    f"{group_name} references paper_id {paper_id!r}, which is "
-                    f"not present in section {section_id!r}."
+                validation_warnings.append(
+                    f"Dropped {group_name} item for paper_id {paper_id!r} from "
+                    f"review section {section_id!r}: not present in section "
+                    "evidence."
                 )
+                continue
             item["paper_id"] = resolved_id
+            repaired_group.append(item)
             if resolved_id not in response["cited_paper_ids"]:
                 response["cited_paper_ids"].append(resolved_id)
+        response[group_name] = repaired_group
 
     for key in ["chapter_id", "chapter_label", "heading_level"]:
         response[key] = section.get(key, "" if key != "heading_level" else 1)
@@ -138,7 +146,7 @@ def call_llm(
     model: str,
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
-) -> tuple[dict[str, Any], list[Path]]:
+) -> tuple[dict[str, Any], list[Path], list[str]]:
     prompt = render_synthesize_review_section_prompt(
         evidence_map_with_citations(evidence_map),
         section_with_citations(evidence_map, section),
@@ -155,7 +163,8 @@ def call_llm(
         trace_writer=trace_writer,
     )
     trace_paths = result.trace_paths.as_list() if result.trace_paths else []
-    return validate_section_response(section, result.parsed), trace_paths
+    warnings: list[str] = []
+    return validate_section_response(section, result.parsed, warnings), trace_paths, warnings
 
 
 def paper_lookup(evidence_map: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -203,7 +212,7 @@ def synthesize_review_sections(
         if not allowed_paper_ids(section):
             warnings.append(f"Skipped review section {section_id!r}: no papers.")
             continue
-        drafted, paths = call_llm(
+        drafted, paths, section_warnings = call_llm(
             evidence_map,
             section,
             model,
@@ -212,6 +221,7 @@ def synthesize_review_sections(
         )
         drafted_sections.append(drafted)
         trace_paths.extend(paths)
+        warnings.extend(section_warnings)
     return drafted_sections, trace_paths, warnings
 
 

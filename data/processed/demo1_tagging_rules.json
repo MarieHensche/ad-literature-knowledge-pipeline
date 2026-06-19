@@ -1,0 +1,56 @@
+{
+  "source_config": "data/processed/demo1_tagging_config_normalized.json",
+  "model": "gpt-4o-mini",
+  "rules_count": 7,
+  "rules": [
+    {
+      "category_id": "research_application",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "Multiple applications of AI can be relevant in Alzheimer's research."
+    },
+    {
+      "category_id": "ai_method_family",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "Various AI methods can be employed depending on the specifics of the research."
+    },
+    {
+      "category_id": "data_modality",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "Multiple data modalities are used in AI applications in Alzheimer's research."
+    },
+    {
+      "category_id": "disease_stage_or_population",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "Different stages of Alzheimer's or populations may be studied."
+    },
+    {
+      "category_id": "validation_design",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "Several validation designs may apply depending on the research methodology."
+    },
+    {
+      "category_id": "evaluation_focus",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "AI models can be evaluated based on different focus areas."
+    },
+    {
+      "category_id": "study_contribution",
+      "selection": "multi",
+      "required": false,
+      "fallback_value": null,
+      "reason": "Papers may contribute in various ways to the field."
+    }
+  ]
+}

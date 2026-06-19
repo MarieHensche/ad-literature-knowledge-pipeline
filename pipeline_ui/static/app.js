@@ -102,6 +102,11 @@ function mainStepsForCurrentMode() {
   if (!state.config) {
     return [];
   }
+  if ($("mainGenerateReview").checked || $("mainReviewReviewLabelValues").checked) {
+    return $("mainReviewTaggingCategories").checked || $("mainReviewReviewLabelValues").checked
+      ? state.config.steps.mainWithTaggingAndLiteratureReview
+      : state.config.steps.mainWithLiteratureReview;
+  }
   return $("mainReviewTaggingCategories").checked
     ? state.config.steps.mainWithReview
     : state.config.steps.main;
@@ -158,6 +163,7 @@ async function loadContract(path = activeContractPath()) {
   $("contractEditor").value = file.content;
   $("generateInRun").checked = false;
   updateCollectionStepControls();
+  await loadContractOverview(file.path).catch(() => {});
   setStatus($("contractState"), "loaded");
 }
 
@@ -178,6 +184,7 @@ async function saveContract() {
   $("mainContractSelect").value = file.path;
   $("generateInRun").checked = false;
   updateCollectionStepControls();
+  await loadContractOverview(file.path).catch(() => {});
   setStatus($("contractState"), "saved");
   showToast("Contract saved.");
   await refreshManifests();
@@ -231,6 +238,9 @@ function mainPayload() {
     dryRun: $("mainDryRun").checked,
     resume: $("mainResume").checked,
     reviewTaggingCategories: $("mainReviewTaggingCategories").checked,
+    generateReview: $("mainGenerateReview").checked,
+    reviewReviewLabelValues: $("mainReviewReviewLabelValues").checked,
+    reviewMaxPapers: $("mainReviewMaxPapers").value.trim(),
     onlyStep: $("mainOnlyStep").value,
     fromStep: $("mainFromStep").value,
     traceDir: $("mainTraceDir").value.trim(),
@@ -275,6 +285,7 @@ function watchJob(jobId) {
       if (!["queued", "running"].includes(job.status)) {
         window.clearInterval(state.jobTimer);
         await refreshManifests();
+        await loadReviewOutputs().catch(() => {});
         const generatedContractPath = state.lastGeneratedContractPath;
         state.lastGeneratedContractPath = null;
         if (job.status === "succeeded" && generatedContractPath) {
@@ -307,6 +318,140 @@ async function startMain() {
   showMainJobPanel();
   const job = await startJob(mainPayload());
   showToast(`Started ${job.commands[0].runId}.`);
+}
+
+async function loadPaperOverview(path = $("paperPath").value.trim()) {
+  const container = $("paperOverview");
+  container.replaceChildren();
+  if (!path) {
+    container.innerHTML = `<p class="empty-text">Choose a paper CSV to preview collected papers.</p>`;
+    return;
+  }
+  const result = await api(`/api/papers?path=${encodeURIComponent(path)}`);
+  $("paperOverviewTitle").textContent = `${result.total} Papers`;
+  const list = document.createElement("div");
+  list.className = "paper-list";
+  for (const paper of result.papers) {
+    const item = document.createElement("article");
+    item.className = "paper-card";
+    item.innerHTML = `
+      <h4>${escapeHtml(paper.title || "Untitled paper")}</h4>
+      <p>${escapeHtml([paper.year, firstAuthorText(paper.authors)].filter(Boolean).join(" · "))}</p>
+    `;
+    list.appendChild(item);
+  }
+  if (result.total > result.papers.length) {
+    const note = document.createElement("p");
+    note.className = "empty-text";
+    note.textContent = `Showing ${result.papers.length} of ${result.total} papers.`;
+    list.appendChild(note);
+  }
+  container.replaceChildren(list);
+}
+
+async function loadContractOverview(path = selectedContractForMain()) {
+  const topicContainer = $("topicOverview");
+  const categoryContainer = $("categoryOverview");
+  topicContainer.replaceChildren();
+  categoryContainer.replaceChildren();
+  if (!path) {
+    topicContainer.innerHTML = `<p class="empty-text">Choose a topic contract to preview topics.</p>`;
+    categoryContainer.innerHTML = `<p class="empty-text">Choose a topic contract to preview categories.</p>`;
+    return;
+  }
+  const overview = await api(`/api/contracts/overview?path=${encodeURIComponent(path)}`);
+  renderTopicOverview(overview);
+  renderCategoryOverview(overview);
+}
+
+async function loadReviewOutputs() {
+  const collection = $("mainCollectionName").value.trim();
+  if (!collection) {
+    showToast("Collection is required to find review outputs.");
+    return;
+  }
+  const outputs = await api(`/api/review-outputs?collection=${encodeURIComponent(collection)}`);
+  renderReviewOutputs(outputs);
+}
+
+function renderTopicOverview(overview) {
+  $("topicOverviewTitle").textContent = overview.title || "Topic Overview";
+  const container = $("topicOverview");
+  const lead = document.createElement("p");
+  lead.className = "overview-lead";
+  lead.textContent = overview.description || "Main contract topics and matching terms.";
+  const topics = [...(overview.mainTopics || []), ...(overview.secondaryTopics || [])];
+  const list = document.createElement("div");
+  list.className = "chip-groups";
+  for (const topic of topics) {
+    const item = document.createElement("article");
+    item.className = "overview-card";
+    item.innerHTML = `
+      <div class="overview-card-head">
+        <h4>${escapeHtml(topic.label || topic.id)}</h4>
+        ${topic.parentLabel ? `<span>${escapeHtml(topic.parentLabel)}</span>` : ""}
+      </div>
+      <div class="chips">${(topic.terms || [])
+        .map((term) => `<span class="chip">${escapeHtml(term)}</span>`)
+        .join("")}</div>
+    `;
+    list.appendChild(item);
+  }
+  container.replaceChildren(lead, list);
+}
+
+function renderCategoryOverview(overview) {
+  const container = $("categoryOverview");
+  const list = document.createElement("div");
+  list.className = "chip-groups";
+  for (const category of overview.categories || []) {
+    const item = document.createElement("article");
+    item.className = "overview-card";
+    item.innerHTML = `
+      <div class="overview-card-head">
+        <h4>${escapeHtml(category.label || category.id)}</h4>
+        ${category.required ? "<span>Required</span>" : ""}
+      </div>
+      ${category.description ? `<p>${escapeHtml(category.description)}</p>` : ""}
+      <div class="chips">${(category.values || [])
+        .map((value) => `<span class="chip">${escapeHtml(value.label)}</span>`)
+        .join("")}</div>
+    `;
+    list.appendChild(item);
+  }
+  if (!list.children.length) {
+    list.innerHTML = `<p class="empty-text">No tagging categories found in this contract.</p>`;
+  }
+  container.replaceChildren(list);
+}
+
+function renderReviewOutputs(outputs) {
+  const container = $("reviewOutput");
+  const pdfPath = outputs.pdf?.path || "";
+  const pdfExists = Boolean(outputs.pdf?.exists);
+  const mdPath = outputs.markdown?.path || "";
+  container.innerHTML = `
+    <div class="artifact-row">
+      <button class="path-button" data-path="${escapeAttr(mdPath)}" type="button">${escapeHtml(mdPath)}</button>
+      <span class="badge ${outputs.markdown?.exists ? "succeeded" : ""}">${outputs.markdown?.exists ? "found" : "missing"}</span>
+    </div>
+    <div class="artifact-row">
+      <span>${escapeHtml(pdfPath)}</span>
+      <span class="badge ${pdfExists ? "succeeded" : ""}">${pdfExists ? "found" : "missing"}</span>
+    </div>
+    ${
+      pdfExists
+        ? `<iframe class="pdf-frame" title="Literature review PDF" src="/api/workspace-file?path=${encodeURIComponent(pdfPath)}"></iframe>`
+        : `<p class="empty-text">Generate the literature review to show the main PDF here.</p>`
+    }
+  `;
+}
+
+function firstAuthorText(authors) {
+  if (!authors) {
+    return "";
+  }
+  return String(authors).split(";")[0].trim();
 }
 
 function showMainJobPanel() {
@@ -536,24 +681,34 @@ function bindEvents() {
   $("contractPath").addEventListener("input", updateCollectionStepControls);
   $("generateInRun").addEventListener("change", updateCollectionStepControls);
   $("mainReviewTaggingCategories").addEventListener("change", updateMainStepControls);
+  $("mainGenerateReview").addEventListener("change", updateMainStepControls);
+  $("mainReviewReviewLabelValues").addEventListener("change", updateMainStepControls);
   $("contractSelect").addEventListener("change", (event) => {
     $("contractPath").value = event.target.value;
     $("mainContractPath").value = event.target.value;
     $("mainContractSelect").value = event.target.value;
     updateCollectionStepControls();
+    loadContractOverview(event.target.value).catch(showError);
   });
   $("mainContractSelect").addEventListener("change", (event) => {
     $("mainContractPath").value = event.target.value;
+    loadContractOverview(event.target.value).catch(showError);
   });
   $("paperInputSelect").addEventListener("change", (event) => {
     $("paperPath").value = event.target.value;
+    loadPaperOverview(event.target.value).catch(showError);
   });
+  $("paperPath").addEventListener("change", () => loadPaperOverview().catch(showError));
+  $("mainContractPath").addEventListener("change", () => loadContractOverview().catch(showError));
   $("loadContract").addEventListener("click", () => loadContract().catch(showError));
   $("saveContract").addEventListener("click", () => saveContract().catch(showError));
   $("generateContract").addEventListener("click", () => startContractGeneration().catch(showError));
   $("startCollection").addEventListener("click", () => startCollection(false).catch(showError));
   $("saveAndStartCollection").addEventListener("click", () => startCollection(true).catch(showError));
   $("startMain").addEventListener("click", () => startMain().catch(showError));
+  $("refreshPaperOverview").addEventListener("click", () => loadPaperOverview().catch(showError));
+  $("refreshContractOverview").addEventListener("click", () => loadContractOverview().catch(showError));
+  $("refreshReviewOutputs").addEventListener("click", () => loadReviewOutputs().catch(showError));
 
   $("manifestList").addEventListener("click", (event) => {
     const item = event.target.closest("[data-path]");
@@ -578,6 +733,9 @@ function showError(error) {
 bindEvents();
 loadConfig()
   .then(() => {
+    loadPaperOverview().catch(showError);
+    loadContractOverview().catch(showError);
+    loadReviewOutputs().catch(() => {});
     if (state.config.manifests[0]) {
       loadManifest(state.config.manifests[0].path).catch(showError);
     }

@@ -140,6 +140,52 @@ def test_assemble_literature_review_markdown(
     assert "images/CSAIL_Primary_Regular_RGB.png" in cls
 
 
+def test_assemble_suppresses_introduction_summary_and_limits_other_summaries(
+    tmp_path: Path,
+) -> None:
+    sections_path = tmp_path / "review_sections.json"
+    output_path = tmp_path / "literature_review.md"
+    latex_dir = tmp_path / "literature_review_latex"
+    write_sections(sections_path)
+    payload = json.loads(sections_path.read_text(encoding="utf-8"))
+    payload["sections"][0]["section_id"] = "introduction"
+    payload["sections"][0]["title"] = "Introduction"
+    payload["sections"][0]["summary"] = (
+        "This introduction summary should be hidden. It should not appear."
+    )
+    payload["sections"].append(
+        {
+            "section_id": "methods",
+            "title": "Methods",
+            "chapter_id": "background_and_related_literature",
+            "chapter_label": "Background and Related Literature",
+            "heading_level": 2,
+            "summary": "Sentence one. Sentence two. Sentence three. Sentence four.",
+            "body_markdown": "Methods body (Smith and Jones, 2024).",
+            "key_points": [],
+            "methodological_patterns": [],
+            "limitations_or_gaps": [],
+            "citation_support": [
+                {"paper_id": "p1", "claim": "Methods body."}
+            ],
+            "cited_paper_ids": ["p1"],
+            "quote_uses": [],
+        }
+    )
+    sections_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    run(sections_path, output_path, latex_dir)
+    markdown = output_path.read_text(encoding="utf-8")
+    latex = (latex_dir / "main.tex").read_text(encoding="utf-8")
+
+    assert "This introduction summary should be hidden" not in markdown
+    assert "This introduction summary should be hidden" not in latex
+    assert "_Sentence one. Sentence two. Sentence three._" in markdown
+    assert "Sentence four." not in markdown
+    assert r"\textit{Sentence one. Sentence two. Sentence three.}" in latex
+    assert "Sentence four." not in latex
+
+
 def test_assemble_uses_generated_abstract_in_both_formats(tmp_path: Path) -> None:
     sections_path = tmp_path / "review_sections.json"
     output_path = tmp_path / "literature_review.md"
@@ -313,5 +359,15 @@ def test_assemble_literature_review_caps_cited_papers_at_40(
     }
     sections_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="too many citation-eligible papers"):
-        run(sections_path, output_path)
+    result = run(sections_path, output_path)
+    markdown = output_path.read_text(encoding="utf-8")
+
+    assert result.row_counts["review_references"] == 40
+    assert result.row_counts["review_cited_papers"] == 40
+    assert result.row_counts["maximum_cited_papers"] == 40
+    assert result.metadata["citation_references_before_trim"] == 41
+    assert result.metadata["citation_references_after_trim"] == 40
+    assert result.warnings
+    assert "Paper 1" in markdown
+    assert "Paper 40" in markdown
+    assert "Paper 41" not in markdown

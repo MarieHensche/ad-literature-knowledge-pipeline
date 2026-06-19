@@ -172,7 +172,7 @@ def test_synthesize_review_sections_writes_grounded_sections(
     assert payload["papers"][0]["paper_id"] == "p1"
 
 
-def test_synthesize_review_sections_rejects_unknown_citation_paper(
+def test_synthesize_review_sections_drops_unknown_citation_paper(
     tmp_path: Path,
 ) -> None:
     evidence_path = tmp_path / "review_evidence_map.json"
@@ -180,8 +180,14 @@ def test_synthesize_review_sections_rejects_unknown_citation_paper(
     write_evidence_map(evidence_path)
     client = StaticJSONClient([section_payload("p2")])
 
-    with pytest.raises(ValueError, match="not present in section"):
-        run(evidence_path, output_path, "test-model", client=client)
+    result = run(evidence_path, output_path, "test-model", client=client)
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result.row_counts["review_sections"] == 1
+    assert payload["sections"][0]["cited_paper_ids"] == []
+    assert payload["sections"][0]["citation_support"] == []
+    assert payload["sections"][0]["quote_uses"] == []
+    assert any("Dropped citation_support item" in warning for warning in result.warnings)
 
 
 def test_synthesize_review_sections_repairs_unambiguous_paper_id_typo(

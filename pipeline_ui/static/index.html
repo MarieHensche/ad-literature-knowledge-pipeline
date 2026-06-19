@@ -186,12 +186,52 @@
                 <label><input id="mainDryRun" type="checkbox"> Dry run</label>
                 <label><input id="mainResume" type="checkbox"> Resume</label>
                 <label><input id="mainReviewTaggingCategories" type="checkbox"> Review tags before tagging</label>
+                <label><input id="mainGenerateReview" type="checkbox"> Generate literature review</label>
+                <label><input id="mainReviewReviewLabelValues" type="checkbox"> Review review labels</label>
+              </div>
+              <div class="form-grid advanced-nested">
+                <label class="field">
+                  <span>Review Max Papers</span>
+                  <input id="mainReviewMaxPapers" min="1" type="number" placeholder="all">
+                </label>
               </div>
             </details>
 
             <div class="action-row">
               <button class="primary-button" id="startMain" type="button">Start Tagging</button>
             </div>
+
+            <section class="inline-overview">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Collected Papers</p>
+                  <h3 id="paperOverviewTitle">Papers</h3>
+                </div>
+                <button class="ghost-button" id="refreshPaperOverview" type="button">Refresh</button>
+              </div>
+              <div id="paperOverview"></div>
+            </section>
+
+            <section class="inline-overview">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Topic Contract</p>
+                  <h3 id="topicOverviewTitle">Topic Overview</h3>
+                </div>
+                <button class="ghost-button" id="refreshContractOverview" type="button">Refresh</button>
+              </div>
+              <div id="topicOverview"></div>
+            </section>
+
+            <section class="inline-overview">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Tagging Categories</p>
+                  <h3>Categories And Values</h3>
+                </div>
+              </div>
+              <div id="categoryOverview"></div>
+            </section>
           </section>
 
           <section class="panel">
@@ -204,6 +244,17 @@
             </div>
             <div class="job-summary" id="jobSummary"></div>
             <pre class="log-output" id="jobLog"></pre>
+
+            <section class="inline-overview">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Literature Review</p>
+                  <h3>Main PDF</h3>
+                </div>
+                <button class="ghost-button" id="refreshReviewOutputs" type="button">Refresh</button>
+              </div>
+              <div id="reviewOutput"></div>
+            </section>
           </section>
         </div>
       </section>
