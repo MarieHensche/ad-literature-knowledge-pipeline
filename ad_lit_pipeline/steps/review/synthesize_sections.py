@@ -4,6 +4,7 @@ import argparse
 from difflib import get_close_matches
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 from ad_lit_pipeline.core.env import load_dotenv
@@ -27,6 +28,13 @@ STEP = StepSpec(
 SYSTEM_MESSAGE = (
     "You write grounded scientific literature-review sections from structured "
     "evidence packets."
+)
+ABSTRACT_INLINE_CITATION_PATTERN = re.compile(
+    r"\([^()]*[A-Za-z][^()]*,\s*(?:19|20)\d{2}[a-z]?\)"
+)
+ABSTRACT_NARRATIVE_CITATION_PATTERN = re.compile(
+    r"\b[A-Z][A-Za-z'’-]+(?: et al\.| and [A-Z][A-Za-z'’-]+)? "
+    r"\((?:19|20)\d{2}[a-z]?\)"
 )
 
 
@@ -101,6 +109,25 @@ def validate_section_response(
             item["paper_id"] = resolved_id
             if resolved_id not in response["cited_paper_ids"]:
                 response["cited_paper_ids"].append(resolved_id)
+
+    for key in ["chapter_id", "chapter_label", "heading_level"]:
+        response[key] = section.get(key, "" if key != "heading_level" else 1)
+
+    if section.get("section_type") == "abstract":
+        if response["cited_paper_ids"] or response.get("citation_support"):
+            raise ValueError("Abstract must not contain citations.")
+        if response.get("quote_uses"):
+            raise ValueError("Abstract must not contain direct quotations.")
+        body = str(response.get("body_markdown") or "")
+        if ABSTRACT_INLINE_CITATION_PATTERN.search(
+            body
+        ) or ABSTRACT_NARRATIVE_CITATION_PATTERN.search(body):
+            raise ValueError("Abstract body must not contain Harvard citations.")
+        if any(
+            re.match(r"^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s)", line)
+            for line in body.splitlines()
+        ):
+            raise ValueError("Abstract must be one paragraph without headings or lists.")
 
     return response
 

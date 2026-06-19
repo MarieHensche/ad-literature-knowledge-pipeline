@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 
 from ad_lit_pipeline.llm.client import StaticJSONClient
-from ad_lit_pipeline.steps.review.synthesize_sections import run
+from ad_lit_pipeline.steps.review.synthesize_sections import (
+    run,
+    validate_section_response,
+)
 
 
 def write_evidence_map(path: Path) -> None:
@@ -43,6 +46,9 @@ def write_evidence_map(path: Path) -> None:
                     {
                         "section_id": "early_detection",
                         "label": "Early detection",
+                        "chapter_id": "background_and_related_literature",
+                        "chapter_label": "Background and Related Literature",
+                        "heading_level": 2,
                         "paper_count": 1,
                         "paper_ids": ["p1"],
                         "controlled_value_counts": {
@@ -138,12 +144,28 @@ def test_synthesize_review_sections_writes_grounded_sections(
     assert "Do not directly compare or rank performance scores" in client.requests[0][
         "prompt"
     ]
+    assert "conventional scientific literature-review" in client.requests[0][
+        "prompt"
+    ]
+    assert "For `abstract`, write one self-contained paragraph" in client.requests[0][
+        "prompt"
+    ]
+    assert "states the review objective, scope, and conceptual boundaries" in (
+        client.requests[0]["prompt"]
+    )
     assert "method_hierarchy_hints" in client.requests[0]["prompt"]
     assert payload["source_evidence_map"] == str(evidence_path)
     assert payload["overview"]["review_type"] == "narrative"
     assert payload["collection"]["preferred_provider"] == "openalex"
     assert payload["quality"]["issue_count"] == 0
     assert payload["sections"][0]["section_id"] == "early_detection"
+    assert payload["sections"][0]["chapter_id"] == (
+        "background_and_related_literature"
+    )
+    assert payload["sections"][0]["chapter_label"] == (
+        "Background and Related Literature"
+    )
+    assert payload["sections"][0]["heading_level"] == 2
     assert payload["sections"][0]["cited_paper_ids"] == ["p1"]
     assert payload["sections"][0]["citation_support"][0]["paper_id"] == "p1"
     assert payload["papers"][0]["harvard_inline"] == "(Smith, 2024)"
@@ -186,3 +208,16 @@ def test_synthesize_review_sections_repairs_unambiguous_paper_id_typo(
     assert output["sections"][0]["citation_support"][0]["paper_id"] == (
         "10_1148_radiol_2018180958"
     )
+
+
+def test_abstract_rejects_citations() -> None:
+    section = {
+        "section_id": "abstract",
+        "section_type": "abstract",
+        "paper_ids": ["p1"],
+    }
+    response = section_payload()
+    response["section_id"] = "abstract"
+
+    with pytest.raises(ValueError, match="Abstract must not contain citations"):
+        validate_section_response(section, response)

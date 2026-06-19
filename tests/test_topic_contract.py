@@ -960,6 +960,16 @@ def test_generated_topic_structure_accepts_replacement_target_main_topic() -> No
         },
     ]
     contract["topic_structure"]["secondary_topics"] = {
+        "fungi": [
+            {
+                "secondary_topic_id": "plant_fibers",
+                "label": "Plant fibers",
+                "field": "title_or_abstract",
+                "terms": ["plant fibers", "natural fibers"],
+                "retrieval_terms": ["plant fibers"],
+                "matching_terms": ["plant fibers", "natural fibers"],
+            }
+        ],
         "building_materials": [
             {
                 "secondary_topic_id": "construction_products",
@@ -972,12 +982,12 @@ def test_generated_topic_structure_accepts_replacement_target_main_topic() -> No
         ],
         "concrete_replacement": [
             {
-                "secondary_topic_id": "cement_substitution",
-                "label": "Cement substitution",
+                "secondary_topic_id": "brick_replacement",
+                "label": "Brick replacement",
                 "field": "title_or_abstract",
-                "terms": ["cement substitute", "cement replacement"],
-                "retrieval_terms": ["cement substitute", "cement replacement"],
-                "matching_terms": ["cement substitute", "cement replacement"],
+                "terms": ["brick replacement", "brick alternative"],
+                "retrieval_terms": ["brick replacement", "brick alternative"],
+                "matching_terms": ["brick replacement", "brick alternative"],
             }
         ],
     }
@@ -1031,6 +1041,16 @@ def test_generated_topic_structure_accepts_source_qualified_material_terms() -> 
         },
     ]
     contract["topic_structure"]["secondary_topics"] = {
+        "fungi": [
+            {
+                "secondary_topic_id": "plant_fibers",
+                "label": "Plant fibers",
+                "field": "title_or_abstract",
+                "terms": ["plant fibers", "natural fibers"],
+                "retrieval_terms": ["plant fibers"],
+                "matching_terms": ["plant fibers", "natural fibers"],
+            }
+        ],
         "building_materials": [
             {
                 "secondary_topic_id": "construction_products",
@@ -1043,12 +1063,12 @@ def test_generated_topic_structure_accepts_source_qualified_material_terms() -> 
         ],
         "concrete_replacement": [
             {
-                "secondary_topic_id": "cement_substitution",
-                "label": "Cement substitution",
+                "secondary_topic_id": "brick_replacement",
+                "label": "Brick replacement",
                 "field": "title_or_abstract",
-                "terms": ["cement substitute", "cement replacement"],
-                "retrieval_terms": ["cement substitute", "cement replacement"],
-                "matching_terms": ["cement substitute", "cement replacement"],
+                "terms": ["brick replacement", "brick alternative"],
+                "retrieval_terms": ["brick replacement", "brick alternative"],
+                "matching_terms": ["brick replacement", "brick alternative"],
             }
         ],
     }

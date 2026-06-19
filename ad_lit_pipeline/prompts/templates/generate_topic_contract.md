@@ -35,8 +35,8 @@ Rules:
     mechanism, setting, or measurement components, split those into separate
     main topics. Each must have `topic_id`, `label`, `field`, broad `terms`,
     `retrieval_terms`, and `matching_terms`.
-  - For each main topic, set `field` to one of `title`, `abstract`, or
-    `title_or_abstract`. Generated main topics should default to `title`.
+  - For each main topic, set `field` to one of `title`, `abstract`, or `title_or_abstract`.
+    Generated main topics should default to `title`.
     Use `title_or_abstract` only for detail or explanatory dimensions that can
     be absent from the title without weakening collection relevance, such as
     mechanisms, validation, workflows, measurement details, implementation
@@ -168,8 +168,8 @@ Rules:
   `cancer` may be adjacent sibling disease directions for an
   `alzheimers_disease` parent, while dementia, cognitive decline, MCI, mild
   cognitive impairment, prodromal disease, and preclinical disease belong in
-  the Alzheimer's disease parent terms. Likewise, `machine_learning` and
-  `deep_learning` are internal parts of `computational_methods` and belong in
+  the Alzheimer's disease parent terms. Likewise, `machine_learning` and `deep_learning`
+  are internal parts of `computational_methods` and belong in
   the parent terms.
 - Do not create vague secondary buckets such as `related_diseases`,
   `other_diseases`, or `dementia_types`. Use one secondary group per adjacent

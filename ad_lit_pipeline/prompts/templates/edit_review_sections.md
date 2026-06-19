@@ -11,6 +11,12 @@ readability without adding new evidence.
   citations, or quotations.
 - Preserve every input `section_id`; return one edited section for each draft
   section.
+- Preserve each section's planned chapter membership and purpose. Do not merge
+  sibling subsections or flatten the chapter hierarchy.
+- Preserve `abstract` as one self-contained paragraph of approximately 150 to
+  250 words covering context, objective and scope, review approach and evidence
+  base, major synthesis findings, supported limitations or gaps, and the main
+  conclusion. It must contain no citations, quotations, headings, or bullets.
 - Keep `cited_paper_ids`, `citation_support.paper_id`, and `quote_uses.paper_id`
   limited to paper ids present in the corresponding evidence section.
 - Use the Harvard citation strings implied by the structured paper metadata.
@@ -26,6 +32,10 @@ readability without adding new evidence.
   the evidence explicitly proves that.
 - Preserve the narrative-review framing unless the overview explicitly says a
   different review type.
+- Preserve `introduction` as a genuine literature-review introduction: retain
+  supported context, significance, objective, scope, main concepts, and a brief
+  roadmap, while moving detailed methods, findings, comparisons, limitations,
+  and conclusions to their dedicated sections.
 - Keep prose concise and scientific.
 
 # Research Topic

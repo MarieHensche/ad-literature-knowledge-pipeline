@@ -182,12 +182,12 @@ Rules:
     `technology`, `setting`, or `target` unless the id is made
     topic-specific.
   - `secondary_topics` are adjacent sibling directions for main topics when
-    paper titles use neighboring concepts. They should improve recall without
-    weakening topical fit and should also be defined for the anchor when there
-    are clean adjacent directions.
+    paper titles use neighboring concepts. They should improve recall without weakening topical fit
+    and should also be defined for the anchor when there are clean adjacent
+    directions.
   - Add useful secondary-topic groups for every main topic, including the
-    anchor, when the review evidence shows genuinely adjacent sibling
-    directions. Secondary topics must be adjacent concepts in the same broad
+    anchor, when the review evidence shows genuinely adjacent sibling directions.
+    Secondary topics must be adjacent concepts in the same broad
     kind of thing as the parent, but not related as versions, aliases,
     variants, types, subcategories, examples, or narrower subtypes of the
     parent. For example, `parkinsons_disease` or `cancer` may be adjacent

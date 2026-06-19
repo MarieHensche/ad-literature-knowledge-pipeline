@@ -32,42 +32,121 @@ METADATA_COLUMNS = ["paper_id", "title", "year", "doi", "authors", "venue", "sou
 PRIMARY_SECTION_LABEL = "main_topic"
 PREFERRED_SECTION_LABELS = ["methodology", "main_topic"]
 DEFAULT_SECTION_ID = "unassigned"
-STABLE_COMPARATIVE_SECTIONS = [
+BACKGROUND_CHAPTER = {
+    "chapter_id": "background_and_related_literature",
+    "chapter_label": "Background and Related Literature",
+}
+METHODS_CHAPTER = {
+    "chapter_id": "methods_and_analytical_approaches",
+    "chapter_label": "Methods and Analytical Approaches",
+}
+DATA_CHAPTER = {
+    "chapter_id": "data_foundations_and_study_designs",
+    "chapter_label": "Data Foundations and Study Designs",
+}
+OUTLOOK_CHAPTER = {
+    "chapter_id": "limitations_and_research_outlook",
+    "chapter_label": "Limitations and Research Outlook",
+}
+STABLE_SUBSECTIONS = [
     {
-        "section_id": "comparative_methods_and_evidence",
-        "label": "Comparative Methods And Evidence",
-        "section_type": "comparative_methods",
+        **METHODS_CHAPTER,
+        "section_id": "methodological_landscape",
+        "label": "Methodological Landscape",
+        "section_type": "methodological_landscape",
         "purpose": (
-            "Compare computational, analytical, experimental, or conceptual "
-            "approaches across the included papers. Avoid repeating individual "
-            "method sections."
+            "Describe the distribution and hierarchy of computational, "
+            "analytical, experimental, qualitative, or conceptual approaches "
+            "used across the included papers. Distinguish broad method families "
+            "from their subtypes."
         ),
     },
     {
-        "section_id": "datasets_and_study_designs",
-        "label": "Datasets And Study Designs",
-        "section_type": "datasets_study_designs",
+        **METHODS_CHAPTER,
+        "section_id": "comparison_of_approaches",
+        "label": "Comparison of Approaches",
+        "section_type": "comparison_of_approaches",
         "purpose": (
-            "Compare datasets, samples, cohorts, data sources, study designs, "
-            "and validation patterns across papers."
+            "Critically compare how approaches differ in purpose, assumptions, "
+            "strengths, trade-offs, and applicability using only supported "
+            "cross-paper evidence. Do not rank incomparable performance scores."
         ),
     },
     {
-        "section_id": "limitations_gaps_and_future_work",
-        "label": "Limitations, Gaps, And Future Directions",
-        "section_type": "limitations_gaps",
+        **METHODS_CHAPTER,
+        "section_id": "evidence_patterns_across_approaches",
+        "label": "Evidence Patterns Across Approaches",
+        "section_type": "evidence_patterns_across_approaches",
         "purpose": (
-            "Synthesize paper-reported limitations, explicitly stated gaps, and "
-            "future work. Do not invent gaps."
+            "Synthesize where findings across approaches converge, differ, or "
+            "remain uncertain. Interpret results in the context of each paper's "
+            "data, task, outcome, and validation setting."
         ),
     },
     {
-        "section_id": "conclusion",
-        "label": "Conclusion",
-        "section_type": "conclusion",
+        **DATA_CHAPTER,
+        "section_id": "datasets_and_data_sources",
+        "label": "Datasets and Data Sources",
+        "section_type": "datasets_and_data_sources",
         "purpose": (
-            "Conclude by integrating the main evidence, strengths, limitations, "
-            "and implications of the included literature."
+            "Compare named datasets, newly collected data, secondary data, and "
+            "other data origins used by the included papers. Note reuse, "
+            "availability, and diversity only when supported."
+        ),
+    },
+    {
+        **DATA_CHAPTER,
+        "section_id": "samples_cohorts_and_populations",
+        "label": "Samples, Cohorts, and Study Populations",
+        "section_type": "samples_cohorts_and_populations",
+        "purpose": (
+            "Synthesize the samples, cohorts, populations, or experimental "
+            "units represented in the evidence, including important differences "
+            "in size, composition, setting, or provenance when available."
+        ),
+    },
+    {
+        **DATA_CHAPTER,
+        "section_id": "study_designs_and_validation_strategies",
+        "label": "Study Designs and Validation Strategies",
+        "section_type": "study_designs_and_validation_strategies",
+        "purpose": (
+            "Compare study designs and validation strategies, explaining how "
+            "they shape evidential strength and comparability without inferring "
+            "details absent from the papers."
+        ),
+    },
+    {
+        **OUTLOOK_CHAPTER,
+        "section_id": "paper_reported_limitations",
+        "label": "Paper-Reported Limitations",
+        "section_type": "paper_reported_limitations",
+        "purpose": (
+            "Synthesize only limitations explicitly reported by the included "
+            "papers. Prioritize recurring and consequential limitations and do "
+            "not introduce limitations of this review."
+        ),
+    },
+    {
+        **OUTLOOK_CHAPTER,
+        "section_id": "explicit_research_gaps",
+        "label": "Explicit Research Gaps",
+        "section_type": "explicit_research_gaps",
+        "purpose": (
+            "Synthesize only research gaps explicitly identified by the papers. "
+            "Reject generic calls for more research unless the missing data, "
+            "population, method, validation, or question is specified."
+        ),
+    },
+    {
+        **OUTLOOK_CHAPTER,
+        "section_id": "future_research_directions",
+        "label": "Future Research Directions",
+        "section_type": "future_research_directions",
+        "purpose": (
+            "Synthesize only future research directions explicitly stated by "
+            "the included papers. Do not invent recommendations or transform "
+            "the review writer's interpretation into paper-reported future work."
         ),
     },
 ]
@@ -438,6 +517,9 @@ def build_section(
     purpose: str | None = None,
     topic_focus: dict[str, Any] | None = None,
     section_context: dict[str, Any] | None = None,
+    chapter_id: str | None = None,
+    chapter_label: str | None = None,
+    heading_level: int = 1,
 ) -> dict[str, Any]:
     section_label = label or value_labels(labels.get(section_label_id_value, {})).get(
         section_id, section_id.replace("_", " ")
@@ -449,6 +531,9 @@ def build_section(
         "purpose": purpose or "",
         "topic_focus": topic_focus or {},
         "section_context": section_context or {},
+        "chapter_id": chapter_id or "",
+        "chapter_label": chapter_label or "",
+        "heading_level": heading_level,
         "source_label": section_label_id_value,
         "paper_count": len(rows),
         "paper_ids": [clean_text(row.get("paper_id")) for row in rows],
@@ -501,6 +586,48 @@ def build_planned_sections(
 ) -> list[dict[str, Any]]:
     sections = [
         build_section(
+            "abstract",
+            usable_rows,
+            labels,
+            "review_plan",
+            label="Abstract",
+            section_type="abstract",
+            purpose=(
+                "Write a self-contained scientific literature-review abstract "
+                "that briefly establishes the context, states the review "
+                "objective and scope, summarizes the review approach and "
+                "evidence base, reports the most important synthesis-level "
+                "findings, identifies the principal supported limitations or "
+                "gaps, and ends with the main conclusion or implication."
+            ),
+            section_context=abstract_context(
+                label_values,
+                usable_rows,
+                review_methodology,
+            ),
+        ),
+        build_section(
+            "introduction",
+            usable_rows,
+            labels,
+            "review_plan",
+            label="Introduction",
+            section_type="introduction",
+            purpose=(
+                "Introduce the broader research area and central problem using "
+                "only supported evidence, explain why the topic matters, define "
+                "the review objective and scope, clarify the main concepts from "
+                "the topic contract, and orient the reader to the review's "
+                "organization. Briefly characterize the evidence base without "
+                "turning the introduction into a results or methods section."
+            ),
+            section_context=introduction_context(
+                label_values,
+                usable_rows,
+                review_methodology,
+            ),
+        ),
+        build_section(
             "review_methodology",
             usable_rows,
             labels,
@@ -533,10 +660,13 @@ def build_planned_sections(
                     "papers frame, study, measure, apply, or limit this concept."
                 ),
                 topic_focus=topic_focus(topic, label_values),
+                chapter_id=BACKGROUND_CHAPTER["chapter_id"],
+                chapter_label=BACKGROUND_CHAPTER["chapter_label"],
+                heading_level=2,
             )
         )
 
-    for section in STABLE_COMPARATIVE_SECTIONS:
+    for section in STABLE_SUBSECTIONS:
         sections.append(
             build_section(
                 section["section_id"],
@@ -546,10 +676,123 @@ def build_planned_sections(
                 label=section["label"],
                 section_type=section["section_type"],
                 purpose=section["purpose"],
+                chapter_id=section["chapter_id"],
+                chapter_label=section["chapter_label"],
+                heading_level=2,
             )
         )
 
+    sections.append(
+        build_section(
+            "conclusion",
+            usable_rows,
+            labels,
+            "review_plan",
+            label="Conclusion",
+            section_type="conclusion",
+            purpose=(
+                "Conclude by integrating the main evidence, strengths, "
+                "limitations, and implications of the included literature."
+            ),
+        )
+    )
+
     return sections
+
+
+def abstract_context(
+    label_values: dict[str, Any],
+    usable_rows: list[dict[str, str]],
+    review_methodology: dict[str, Any],
+) -> dict[str, Any]:
+    selection = review_methodology.get("selection_summary", {})
+    return {
+        "research_topic": label_values.get("research_topic", {}),
+        "review_type": review_type_from_label_values(label_values),
+        "evidence_base": {
+            "usable_paper_count": len(usable_rows),
+            "year_range": year_range(usable_rows),
+            "review_filter_counts": (
+                selection.get("review_filter_counts", {})
+                if isinstance(selection, dict)
+                else {}
+            ),
+        },
+        "scope_context": (
+            label_values.get("scope")
+            if isinstance(label_values.get("scope"), dict)
+            else {}
+        ),
+        "content_requirements": [
+            "Brief supported context and central problem.",
+            "Review objective and scope.",
+            "Review type, evidence source, and usable paper count.",
+            "Most important cross-paper findings or patterns.",
+            "Principal supported limitations or research gaps.",
+            "Main conclusion or implication.",
+        ],
+        "style_requirements": [
+            "One self-contained paragraph of approximately 150 to 250 words.",
+            "No citations, direct quotations, headings, bullets, or internal ids.",
+            "No unsupported background facts or claims of systematic review methods.",
+        ],
+    }
+
+
+def introduction_context(
+    label_values: dict[str, Any],
+    usable_rows: list[dict[str, str]],
+    review_methodology: dict[str, Any],
+) -> dict[str, Any]:
+    topic_structure = label_values.get("topic_structure")
+    main_topics = []
+    if isinstance(topic_structure, dict):
+        configured_topics = topic_structure.get("main_topics")
+        if isinstance(configured_topics, list):
+            main_topics = [
+                {
+                    "topic_id": clean_text(topic.get("value") or topic.get("topic_id")),
+                    "label": clean_text(
+                        topic.get("label") or topic.get("value") or topic.get("topic_id")
+                    ),
+                }
+                for topic in configured_topics
+                if isinstance(topic, dict)
+                and clean_text(topic.get("value") or topic.get("topic_id"))
+            ]
+
+    selection = review_methodology.get("selection_summary", {})
+    scope = label_values.get("scope")
+    return {
+        "review_objective": (
+            "Synthesize and critically orient the included literature around "
+            "the configured research topic and its main concepts."
+        ),
+        "scope_context": scope if isinstance(scope, dict) else {},
+        "main_topics": main_topics,
+        "evidence_base": {
+            "usable_paper_count": len(usable_rows),
+            "year_range": year_range(usable_rows),
+            "review_type": review_type_from_label_values(label_values),
+            "review_filter_counts": (
+                selection.get("review_filter_counts", {})
+                if isinstance(selection, dict)
+                else {}
+            ),
+        },
+        "content_requirements": [
+            "Establish the supported scholarly context and central problem.",
+            "Explain the topic's significance without unsupported general claims.",
+            "State the review objective, scope, and conceptual boundaries.",
+            "Introduce the configured main topics as the review's organizing concepts.",
+            "Preview the structure and broad evidence landscape without detailed results.",
+        ],
+        "content_exclusions": [
+            "Detailed search procedures, which belong in Review Methodology.",
+            "A paper-by-paper findings list or detailed performance comparisons.",
+            "Unsupported historical claims, prevalence figures, or external facts.",
+        ],
+    }
 
 
 def review_type_from_label_values(label_values: dict[str, Any]) -> str:
