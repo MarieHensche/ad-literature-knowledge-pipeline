@@ -159,17 +159,31 @@ def overview_lines(overview: dict[str, Any]) -> list[str]:
     return lines
 
 
+def abstract_text(payload: dict[str, Any]) -> str:
+    sections = payload.get("sections", [])
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict) or section.get("section_id") != "abstract":
+                continue
+            body = strip_internal_citation_markers(
+                clean_text(section.get("body_markdown"))
+            )
+            if body:
+                return body
+            summary = clean_text(section.get("summary"))
+            if summary:
+                return summary
+    return " ".join(overview_lines(payload.get("overview", {})))
+
+
 def normalize_heading(value: object, fallback: str) -> str:
     heading = clean_text(value)
     return heading or fallback
 
 
-def render_key_list(title: str, values: object) -> list[str]:
-    if not isinstance(values, list) or not values:
-        return []
-    lines = [f"**{title}**"]
-    lines.extend(f"- {clean_text(value)}" for value in values if clean_text(value))
-    return lines
+def section_heading_level(section: dict[str, Any]) -> int:
+    level = section.get("heading_level", 1)
+    return level if isinstance(level, int) and level in {1, 2} else 1
 
 
 def render_section(section: dict[str, Any]) -> list[str]:
@@ -178,21 +192,12 @@ def render_section(section: dict[str, Any]) -> list[str]:
     body = strip_internal_citation_markers(clean_text(section.get("body_markdown")))
     summary = clean_text(section.get("summary"))
 
-    lines = [f"## {title}", ""]
+    markdown_level = section_heading_level(section) + 1
+    lines = [f"{'#' * markdown_level} {title}", ""]
     if summary:
         lines.extend([f"_{summary}_", ""])
     if body:
         lines.extend([body, ""])
-
-    for list_title, key in [
-        ("Key points", "key_points"),
-        ("Methodological patterns", "methodological_patterns"),
-        ("Limitations and gaps", "limitations_or_gaps"),
-    ]:
-        list_lines = render_key_list(list_title, section.get(key))
-        if list_lines:
-            lines.extend(list_lines)
-            lines.append("")
     return lines
 
 
@@ -380,7 +385,7 @@ def strip_markdown_heading_marker(line: str) -> str:
 
 
 def latex_abstract(payload: dict[str, Any]) -> str:
-    return " ".join(overview_lines(payload.get("overview", {})))
+    return abstract_text(payload)
 
 
 def latex_section_lines(
@@ -391,7 +396,9 @@ def latex_section_lines(
     title = normalize_heading(section.get("title"), section_id.replace("_", " "))
     body = strip_internal_markers_preserve_blocks(section.get("body_markdown"))
     summary = clean_text(section.get("summary"))
-    lines = [rf"\section{{{latex_escape(title)}}}", ""]
+    heading_level = section_heading_level(section)
+    heading_command = "section" if heading_level == 1 else "subsection"
+    lines = [rf"\{heading_command}{{{latex_escape(title)}}}", ""]
     if summary:
         lines.extend([rf"\textit{{{latex_inline(summary, references)}}}", ""])
     if body:
@@ -410,7 +417,8 @@ def latex_section_lines(
                     paragraph = clean_text(" ".join(current_paragraph))
                     lines.extend([latex_inline(paragraph, references), ""])
                     current_paragraph = []
-                command, heading = clean_heading
+                _, heading = clean_heading
+                command = "subsection" if heading_level == 1 else "subsubsection"
                 lines.extend(
                     [
                         rf"\{command}{{{latex_escape(heading)}}}",
@@ -424,20 +432,6 @@ def latex_section_lines(
             paragraph = clean_text(" ".join(current_paragraph))
             lines.extend([latex_inline(paragraph, references), ""])
 
-    for list_title, key in [
-        ("Key points", "key_points"),
-        ("Methodological patterns", "methodological_patterns"),
-        ("Limitations and gaps", "limitations_or_gaps"),
-    ]:
-        values = section.get(key)
-        if not isinstance(values, list) or not values:
-            continue
-        items = [latex_inline(value, references) for value in values if clean_text(value)]
-        if not items:
-            continue
-        lines.extend([rf"\subsection*{{{latex_escape(list_title)}}}", r"\begin{itemize}"])
-        lines.extend(rf"  \item {item}" for item in items)
-        lines.extend([r"\end{itemize}", ""])
     return lines
 
 
@@ -462,8 +456,16 @@ def render_latex_main(payload: dict[str, Any], references: list[dict[str, Any]])
         r"\end{abstract}",
         "",
     ]
+    active_chapter = ""
     for section in sections:
         if isinstance(section, dict):
+            if clean_text(section.get("section_id")) == "abstract":
+                continue
+            chapter_id = clean_text(section.get("chapter_id"))
+            chapter_label = clean_text(section.get("chapter_label"))
+            if chapter_id and chapter_id != active_chapter:
+                lines.extend([rf"\section{{{latex_escape(chapter_label)}}}", ""])
+            active_chapter = chapter_id
             lines.extend(latex_section_lines(section, references))
 
     if cited_keys:
@@ -582,13 +584,25 @@ def assemble_markdown(payload: dict[str, Any]) -> str:
     if not isinstance(sections, list):
         raise ValueError("review_sections JSON must contain sections list.")
 
-    lines = [f"# {title_from_payload(payload)}", ""]
-    lines.append("## Overview")
-    lines.extend(overview_lines(payload.get("overview", {})))
-    lines.append("")
+    lines = [
+        f"# {title_from_payload(payload)}",
+        "",
+        "## Abstract",
+        "",
+        abstract_text(payload),
+        "",
+    ]
 
+    active_chapter = ""
     for section in sections:
         if isinstance(section, dict):
+            if clean_text(section.get("section_id")) == "abstract":
+                continue
+            chapter_id = clean_text(section.get("chapter_id"))
+            chapter_label = clean_text(section.get("chapter_label"))
+            if chapter_id and chapter_id != active_chapter:
+                lines.extend([f"## {chapter_label}", ""])
+            active_chapter = chapter_id
             lines.extend(render_section(section))
 
     references = ordered_reference_papers(payload)

@@ -22,6 +22,9 @@ def write_sections(path: Path) -> None:
                     {
                         "section_id": "early_detection",
                         "title": "Early detection",
+                        "chapter_id": "background_and_related_literature",
+                        "chapter_label": "Background and Related Literature",
+                        "heading_level": 2,
                         "summary": "MRI classification evidence was prominent.",
                         "body_markdown": (
                             "MRI classification models improved early detection "
@@ -89,31 +92,91 @@ def test_assemble_literature_review_markdown(
     assert result.row_counts["minimum_cited_papers"] == 1
     assert result.row_counts["latex_files"] == 3
     assert markdown.startswith("# Early AD detection")
+    assert "## Abstract" in markdown
+    assert "## Overview" not in markdown
     assert (
         "This narrative literature review summarizes evidence from 2 papers."
         in markdown
     )
     assert "The included evidence spans 2021 to 2024." in markdown
-    assert "## Early detection" in markdown
+    assert "## Background and Related Literature" in markdown
+    assert "### Early detection" in markdown
     assert (
         "MRI classification models improved early detection in the included "
         "evidence (Smith and Jones, 2024)."
     ) in markdown
     assert "[p1]" not in markdown
-    assert "**Key points**" in markdown
-    assert "- MRI classification was central." in markdown
+    source_payload = json.loads(sections_path.read_text(encoding="utf-8"))
+    assert source_payload["sections"][0]["key_points"] == [
+        "MRI classification was central."
+    ]
+    assert source_payload["sections"][0]["methodological_patterns"] == [
+        "The section was dominated by imaging methods."
+    ]
+    assert source_payload["sections"][0]["limitations_or_gaps"] == [
+        "The evidence base was small."
+    ]
+    assert "**Key points**" not in markdown
+    assert "MRI classification was central." not in markdown
+    assert "The section was dominated by imaging methods." not in markdown
+    assert "The evidence base was small." not in markdown
+    assert r"\subsection*{Key points}" not in latex
+    assert "MRI classification was central." not in latex
+    assert "The section was dominated by imaging methods." not in latex
+    assert "The evidence base was small." not in latex
     assert "## References" in markdown
     assert "Smith; Jones (2024). Paper one." in markdown
     assert "DOI: https://doi.org/10.123/one" in markdown
     assert "Uncited paper" not in markdown
     assert "\\documentclass{MITcsail}" in latex
     assert "\\title{Early AD detection}" in latex
+    assert "\\section{Background and Related Literature}" in latex
+    assert "\\subsection{Early detection}" in latex
     assert "\\citep{ref_p1}" in latex
     assert "\\bibliography{references}" in latex
     assert "@article{ref_p1," in bib
     assert "author = {Smith and Jones}" in bib
     assert "CSAIL-style literature review class" in cls
     assert "images/CSAIL_Primary_Regular_RGB.png" in cls
+
+
+def test_assemble_uses_generated_abstract_in_both_formats(tmp_path: Path) -> None:
+    sections_path = tmp_path / "review_sections.json"
+    output_path = tmp_path / "literature_review.md"
+    latex_dir = tmp_path / "literature_review_latex"
+    write_sections(sections_path)
+    payload = json.loads(sections_path.read_text(encoding="utf-8"))
+    payload["sections"].insert(
+        0,
+        {
+            "section_id": "abstract",
+            "title": "Abstract",
+            "summary": "",
+            "body_markdown": (
+                "This narrative review synthesizes two papers and identifies "
+                "prominent evidence patterns, limitations, and implications."
+            ),
+            "key_points": [],
+            "methodological_patterns": [],
+            "limitations_or_gaps": [],
+            "citation_support": [],
+            "cited_paper_ids": [],
+            "quote_uses": [],
+        },
+    )
+    sections_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    run(sections_path, output_path, latex_dir)
+    markdown = output_path.read_text(encoding="utf-8")
+    latex = (latex_dir / "main.tex").read_text(encoding="utf-8")
+
+    abstract = (
+        "This narrative review synthesizes two papers and identifies prominent "
+        "evidence patterns, limitations, and implications."
+    )
+    assert f"## Abstract\n\n{abstract}" in markdown
+    assert f"\\begin{{abstract}}\n{abstract}\n\\end{{abstract}}" in latex
+    assert "\\section{Abstract}" not in latex
 
 
 def test_assemble_literature_review_requires_all_eligible_papers_below_20(
@@ -130,18 +193,23 @@ def test_assemble_literature_review_requires_all_eligible_papers_below_20(
         run(sections_path, output_path)
 
 
-def test_assemble_literature_review_rejects_internal_ids_in_lists(
+def test_assemble_literature_review_hides_internal_ids_in_quality_fields(
     tmp_path: Path,
 ) -> None:
     sections_path = tmp_path / "review_sections.json"
     output_path = tmp_path / "literature_review.md"
+    latex_dir = tmp_path / "literature_review_latex"
     write_sections(sections_path)
     payload = json.loads(sections_path.read_text(encoding="utf-8"))
     payload["sections"][0]["key_points"] = ["Internal ids must not leak [p1]."]
     sections_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="internal paper-id markers"):
-        run(sections_path, output_path)
+    run(sections_path, output_path, latex_dir)
+
+    assert "Internal ids must not leak" not in output_path.read_text(encoding="utf-8")
+    assert "Internal ids must not leak" not in (latex_dir / "main.tex").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_assemble_literature_review_rejects_unknown_harvard_author(

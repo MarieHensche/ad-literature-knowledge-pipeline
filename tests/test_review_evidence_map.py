@@ -245,7 +245,7 @@ def test_build_review_evidence_map_groups_usable_evidence(
     payload = json.loads(output_path.read_text(encoding="utf-8"))
 
     assert result.row_counts["review_usable_papers"] == 2
-    assert result.row_counts["review_sections"] == 7
+    assert result.row_counts["review_sections"] == 15
     assert payload["overview"]["excluded_paper_count"] == 1
     assert payload["overview"]["review_type"] == "narrative"
     assert payload["overview"]["section_plan"] == (
@@ -275,26 +275,57 @@ def test_build_review_evidence_map_groups_usable_evidence(
 
     section_ids = [section["section_id"] for section in payload["sections"]]
     assert section_ids == [
+        "abstract",
+        "introduction",
         "review_methodology",
         "main_topic_early_detection",
         "main_topic_biomarkers",
-        "comparative_methods_and_evidence",
-        "datasets_and_study_designs",
-        "limitations_gaps_and_future_work",
+        "methodological_landscape",
+        "comparison_of_approaches",
+        "evidence_patterns_across_approaches",
+        "datasets_and_data_sources",
+        "samples_cohorts_and_populations",
+        "study_designs_and_validation_strategies",
+        "paper_reported_limitations",
+        "explicit_research_gaps",
+        "future_research_directions",
         "conclusion",
     ]
-    topic_section = payload["sections"][1]
+    abstract = payload["sections"][0]
+    assert abstract["section_type"] == "abstract"
+    assert abstract["section_context"]["evidence_base"]["usable_paper_count"] == 2
+    assert "No citations" in abstract["section_context"]["style_requirements"][1]
+
+    introduction = payload["sections"][1]
+    assert introduction["section_type"] == "introduction"
+    assert introduction["label"] == "Introduction"
+    assert introduction["section_context"]["evidence_base"][
+        "usable_paper_count"
+    ] == 2
+    assert introduction["section_context"]["main_topics"] == [
+        {"topic_id": "early_detection", "label": "Early detection"},
+        {"topic_id": "biomarkers", "label": "Biomarkers"},
+    ]
+    assert "Detailed search procedures" in introduction["section_context"][
+        "content_exclusions"
+    ][0]
+
+    topic_section = payload["sections"][3]
     assert topic_section["section_type"] == "main_topic_lens"
     assert topic_section["label"] == "Early detection In The Included Literature"
     assert topic_section["topic_focus"]["value"] == "early_detection"
     assert topic_section["topic_focus"]["term_hints"] == [
         {"value": "screening", "label": "screening"}
     ]
+    assert topic_section["chapter_id"] == "background_and_related_literature"
+    assert topic_section["chapter_label"] == "Background and Related Literature"
+    assert topic_section["heading_level"] == 2
 
-    section = payload["sections"][3]
+    section = payload["sections"][5]
     assert payload["overview"]["section_label"] == "methodology"
-    assert section["section_id"] == "comparative_methods_and_evidence"
-    assert section["section_type"] == "comparative_methods"
+    assert section["section_id"] == "methodological_landscape"
+    assert section["section_type"] == "methodological_landscape"
+    assert section["chapter_label"] == "Methods and Analytical Approaches"
     assert section["source_label"] == "review_plan"
     assert section["paper_ids"] == ["p1", "p3"]
     assert section["controlled_value_counts"]["methodology"] == [
