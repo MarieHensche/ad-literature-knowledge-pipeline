@@ -2909,12 +2909,14 @@ def validate_generated_topic_structure_quality(
     topic_description: str | None = None,
 ) -> None:
     """Raise when a generated/refined contract violates crucial structure rules."""
-    issues = generated_topic_structure_crucial_issues(
+    issues = generated_topic_structure_crucial_issue_records(
         contract,
         topic_description=topic_description,
     )
     if issues:
-        joined = "\n- ".join(issues)
+        joined = "\n- ".join(
+            f"[{issue.code}] {issue.message}" for issue in issues
+        )
         raise ValueError(f"{label} has weak topic_structure:\n- {joined}")
 
 
