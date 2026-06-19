@@ -1,0 +1,254 @@
+status: approved
+source_review_label_values: data/processed/lr_4_review_label_values.json
+instructions:
+- Edit values for controlled review labels only.
+- Use value_details as read-only context for counts and surface forms.
+- Use merge_values to map extracted synonyms to approved values.
+- Use drop_values to remove extracted values without dropping papers.
+- Delete a value to remove it from later review aggregation.
+- Add a lowercase snake_case value to keep a user-approved new value.
+- Set status to approved when the values are ready to merge.
+labels:
+  methodology:
+    label: methodology
+    value_mode: controlled_auto
+    selection: multi
+    values:
+    - convolutional_neural_network
+    - decision_tree
+    - deep_learning
+    - independent_component_analysis
+    - machine_learning
+    - multivariate_analysis
+    - network_analysis
+    - pattern_recognition
+    - support_vector_machine
+    - wavelet_analysis
+    merge_values:
+      multivariate_analytic_techniques: multivariate_analysis
+      graph_analysis: network_analysis
+      graph_theory: network_analysis
+      large_scale_network_analysis: network_analysis
+    drop_values:
+    - artificial_intelligence
+    - eeg
+    - neuroimaging
+    - resting_state_functional_mr_imaging
+    value_details:
+    - value: artificial_intelligence
+      paper_count: 1
+      surface_forms:
+      - form: artificial_intelligence
+        count: 1
+    - value: convolutional_neural_network
+      paper_count: 1
+      surface_forms:
+      - form: convolutional_neural_network
+        count: 1
+    - value: decision_tree
+      paper_count: 1
+      surface_forms:
+      - form: decision_tree
+        count: 1
+    - value: deep_learning
+      paper_count: 7
+      surface_forms:
+      - form: deep_learning
+        count: 7
+    - value: eeg
+      paper_count: 1
+      surface_forms:
+      - form: eeg
+        count: 1
+    - value: graph_analysis
+      paper_count: 1
+      surface_forms:
+      - form: graph_analysis
+        count: 1
+    - value: graph_theory
+      paper_count: 1
+      surface_forms:
+      - form: graph_theory
+        count: 1
+    - value: independent_component_analysis
+      paper_count: 1
+      surface_forms:
+      - form: independent_component_analysis
+        count: 1
+    - value: large_scale_network_analysis
+      paper_count: 1
+      surface_forms:
+      - form: large_scale_network_analysis
+        count: 1
+    - value: machine_learning
+      paper_count: 5
+      surface_forms:
+      - form: machine_learning
+        count: 5
+    - value: multivariate_analysis
+      paper_count: 1
+      surface_forms:
+      - form: multivariate_analytic_techniques
+        count: 1
+      canonicalized_from:
+      - value: multivariate_analytic_techniques
+        count: 1
+    - value: neuroimaging
+      paper_count: 1
+      surface_forms:
+      - form: neuroimaging
+        count: 1
+    - value: pattern_recognition
+      paper_count: 1
+      surface_forms:
+      - form: pattern_recognition
+        count: 1
+    - value: resting_state_functional_mr_imaging
+      paper_count: 1
+      surface_forms:
+      - form: resting_state_functional_mr_imaging
+        count: 1
+    - value: support_vector_machine
+      paper_count: 2
+      surface_forms:
+      - form: support_vector_machine
+        count: 2
+    - value: wavelet_analysis
+      paper_count: 1
+      surface_forms:
+      - form: wavelet_analysis
+        count: 1
+  study_design:
+    label: study design
+    value_mode: controlled_fixed
+    selection: single
+    values:
+    - benchmark_study
+    - case_control_study
+    - case_study
+    - cohort_study
+    - cross_sectional_study
+    - experimental_study
+    - longitudinal_study
+    - mixed_methods_study
+    - model_development_study
+    - observational_study
+    - qualitative_study
+    - quasi_experimental_study
+    - randomized_controlled_trial
+    - secondary_data_analysis
+    - simulation_study
+    - survey_study
+    - unclear
+    - validation_study
+    merge_values: {}
+    drop_values: []
+    value_details:
+    - value: benchmark_study
+      paper_count: 0
+      surface_forms: []
+    - value: case_control_study
+      paper_count: 0
+      surface_forms: []
+    - value: case_study
+      paper_count: 0
+      surface_forms: []
+    - value: cohort_study
+      paper_count: 1
+      surface_forms:
+      - form: cohort_study
+        count: 1
+    - value: cross_sectional_study
+      paper_count: 0
+      surface_forms: []
+    - value: experimental_study
+      paper_count: 1
+      surface_forms:
+      - form: experimental_study
+        count: 1
+    - value: longitudinal_study
+      paper_count: 0
+      surface_forms: []
+    - value: mixed_methods_study
+      paper_count: 0
+      surface_forms: []
+    - value: model_development_study
+      paper_count: 1
+      surface_forms:
+      - form: model_development_study
+        count: 1
+    - value: observational_study
+      paper_count: 7
+      surface_forms:
+      - form: observational_study
+        count: 7
+    - value: qualitative_study
+      paper_count: 0
+      surface_forms: []
+    - value: quasi_experimental_study
+      paper_count: 0
+      surface_forms: []
+    - value: randomized_controlled_trial
+      paper_count: 0
+      surface_forms: []
+    - value: secondary_data_analysis
+      paper_count: 1
+      surface_forms:
+      - form: secondary_data_analysis
+        count: 1
+    - value: simulation_study
+      paper_count: 0
+      surface_forms: []
+    - value: survey_study
+      paper_count: 0
+      surface_forms: []
+    - value: unclear
+      paper_count: 4
+      surface_forms:
+      - form: unclear
+        count: 4
+    - value: validation_study
+      paper_count: 2
+      surface_forms:
+      - form: validation_study
+        count: 2
+  dataset_or_sample:
+    label: dataset or sample
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  key_finding:
+    label: key finding
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  paper_limitation:
+    label: paper limitation
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  direct_quote:
+    label: direct quote
+    value_mode: evidence_quote
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []
+  future_work_or_gap:
+    label: future work or gap
+    value_mode: free_text
+    selection: ''
+    values: []
+    merge_values: {}
+    drop_values: []
+    value_details: []

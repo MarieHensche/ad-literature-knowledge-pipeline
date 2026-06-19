@@ -24,6 +24,19 @@ MAIN_PIPELINE_WITH_CALIBRATION = [
     "export_mantis",
 ]
 
+REVIEW_PIPELINE = [
+    "normalize_review_config",
+    "filter_review_papers",
+    "extract_review_labels",
+    "normalize_review_label_values",
+    "validate_review_labels",
+    "build_review_coverage_report",
+    "build_review_evidence_map",
+    "synthesize_review_sections",
+    "edit_review_sections",
+    "assemble_literature_review",
+]
+
 COLLECTION_PIPELINE = [
     "plan_search",
     "fetch_candidates",

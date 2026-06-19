@@ -1,0 +1,32 @@
+{
+  "source_config": "data/collection_plans/lr_5_topic_contract.yaml",
+  "research_topic": {
+    "title": "Computational Biology Methods for Alzheimer's Disease Research",
+    "description": "This research topic explores various computational biology methods used in the study of Alzheimer's disease to enhance understanding, diagnosis, and treatment strategies."
+  },
+  "category_count": 1,
+  "categories": [
+    {
+      "category_id": "computational_methods_detail",
+      "label": "computational methods detail",
+      "description": "Detailing different computational methods used in Alzheimer's disease research.",
+      "required": true,
+      "allowed_values": [
+        {
+          "value": "bioinformatics",
+          "label": "bioinformatics"
+        },
+        {
+          "value": "machine_learning",
+          "label": "machine_learning"
+        },
+        {
+          "value": "statistical_modeling",
+          "label": "statistical_modeling"
+        }
+      ],
+      "selection": "multi"
+    }
+  ],
+  "source_type": "topic_contract"
+}

@@ -8,13 +8,28 @@ from dotenv import load_dotenv
 
 from ad_lit_pipeline.core.artifacts import collection_artifacts, main_pipeline_artifacts
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
-from ad_lit_pipeline.core.registry import MAIN_PIPELINE, MAIN_PIPELINE_WITH_CALIBRATION
+from ad_lit_pipeline.core.registry import (
+    MAIN_PIPELINE,
+    MAIN_PIPELINE_WITH_CALIBRATION,
+    REVIEW_PIPELINE,
+)
 from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
 from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
 from ad_lit_pipeline.steps.metadata import normalize
+from ad_lit_pipeline.steps.review import assemble_review as review_assemble
+from ad_lit_pipeline.steps.review import config as review_config
+from ad_lit_pipeline.steps.review import coverage_report as review_coverage_report
+from ad_lit_pipeline.steps.review import edit_sections as review_edit_sections
+from ad_lit_pipeline.steps.review import evidence_map as review_evidence_map
+from ad_lit_pipeline.steps.review import extract_labels as review_extract_labels
+from ad_lit_pipeline.steps.review import filter_papers as review_filter_papers
+from ad_lit_pipeline.steps.review import label_value_review as review_label_review
+from ad_lit_pipeline.steps.review import label_values as review_label_values
+from ad_lit_pipeline.steps.review import synthesize_sections as review_synthesize
+from ad_lit_pipeline.steps.review import validate_labels as review_validate_labels
 from ad_lit_pipeline.steps.screening import rule_based_scope
 from ad_lit_pipeline.steps.tagging import (
     audit,
@@ -82,6 +97,12 @@ def explain(collection: str) -> None:
     print("Optional human review step:")
     print("  - review_tagging_categories")
     print()
+    print("Optional literature-review generation steps:")
+    for step in REVIEW_PIPELINE:
+        print(f"  - {step}")
+    print("Optional literature-review label-value review step:")
+    print("  - review_review_label_values")
+    print()
     print("Conventional outputs:")
     for field, value in artifacts.__dict__.items():
         print(f"  {field}: {value}")
@@ -95,8 +116,33 @@ def selected_main_pipeline(args: argparse.Namespace) -> list[str]:
         pipeline = MAIN_PIPELINE
 
     if args.review_tagging_categories or requested_step == "review_tagging_categories":
-        return pipeline_with_tagging_review(pipeline)
+        pipeline = pipeline_with_tagging_review(pipeline)
+
+    if review_steps_requested(args, requested_step):
+        pipeline = pipeline_with_review_generation(pipeline, args, requested_step)
+
     return pipeline
+
+
+def review_steps_requested(
+    args: argparse.Namespace,
+    requested_step: str | None,
+) -> bool:
+    review_steps = {*REVIEW_PIPELINE, "review_review_label_values"}
+    return (
+        args.generate_review
+        or args.extract_review_labels
+        or args.review_review_label_values
+        or requested_step in review_steps
+    )
+
+
+def review_label_extraction_enabled(args: argparse.Namespace) -> bool:
+    return (
+        args.generate_review
+        or args.extract_review_labels
+        or args.review_review_label_values
+    )
 
 
 def pipeline_with_tagging_review(pipeline: list[str]) -> list[str]:
@@ -109,6 +155,64 @@ def pipeline_with_tagging_review(pipeline: list[str]) -> list[str]:
         "review_tagging_categories",
         *pipeline[insertion_index:],
     ]
+
+
+def pipeline_with_review_generation(
+    pipeline: list[str],
+    args: argparse.Namespace,
+    requested_step: str | None,
+) -> list[str]:
+    """Insert efficient review extraction and append optional synthesis steps."""
+    if requested_step == "extract_review_labels":
+        return [*pipeline, "filter_review_papers", "extract_review_labels"]
+
+    if (
+        "filter_review_papers" not in pipeline
+        and "prepare_full_text" in pipeline
+    ):
+        insertion_index = pipeline.index("prepare_full_text") + 1
+        pipeline = [
+            *pipeline[:insertion_index],
+            "filter_review_papers",
+            *pipeline[insertion_index:],
+        ]
+
+    if (
+        "normalize_review_config" not in pipeline
+        and "tag_papers" in pipeline
+    ):
+        insertion_index = pipeline.index("tag_papers")
+        pipeline = [
+            *pipeline[:insertion_index],
+            "normalize_review_config",
+            *pipeline[insertion_index:],
+        ]
+
+    if args.extract_review_labels and not args.generate_review:
+        return pipeline
+
+    review_pipeline = [
+        "normalize_review_label_values",
+        "validate_review_labels",
+        "build_review_coverage_report",
+        "build_review_evidence_map",
+        "synthesize_review_sections",
+        "edit_review_sections",
+        "assemble_literature_review",
+    ]
+
+    if (
+        args.review_review_label_values
+        or requested_step == "review_review_label_values"
+    ) and "review_review_label_values" not in review_pipeline:
+        insertion_index = review_pipeline.index("validate_review_labels")
+        review_pipeline = [
+            *review_pipeline[:insertion_index],
+            "review_review_label_values",
+            *review_pipeline[insertion_index:],
+        ]
+
+    return [*pipeline, *review_pipeline]
 
 
 def build_step_functions(
@@ -171,6 +275,21 @@ def build_step_functions(
             model,
             topic_contract_path,
             trace_dir=trace_dir,
+            review_config_path=(
+                artifacts.review_config_normalized_json
+                if review_label_extraction_enabled(args)
+                else None
+            ),
+            review_output_path=(
+                artifacts.review_labels_raw_csv
+                if review_label_extraction_enabled(args)
+                else None
+            ),
+            review_papers_path=(
+                artifacts.review_eligible_papers_csv
+                if review_label_extraction_enabled(args)
+                else None
+            ),
         ),
         "audit_extraction": lambda: audit.run(
             artifacts.extraction_filled_csv,
@@ -181,6 +300,74 @@ def build_step_functions(
         "export_mantis": lambda: mantis.run(
             artifacts.extraction_filled_csv,
             artifacts.mantis_ready_csv,
+        ),
+        "normalize_review_config": lambda: review_config.run(
+            topic_contract_path,
+            artifacts.review_config_normalized_json,
+        ),
+        "filter_review_papers": lambda: review_filter_papers.run(
+            artifacts.scope_screened_full_text_csv,
+            artifacts.review_eligible_papers_csv,
+            artifacts.review_filter_report_json,
+        ),
+        "extract_review_labels": lambda: review_extract_labels.run(
+            artifacts.review_eligible_papers_csv,
+            artifacts.review_config_normalized_json,
+            artifacts.review_labels_raw_csv,
+            model,
+            trace_dir=trace_dir,
+            max_papers=args.review_max_papers,
+        ),
+        "normalize_review_label_values": lambda: review_label_values.run(
+            artifacts.review_labels_raw_csv,
+            artifacts.review_config_normalized_json,
+            artifacts.review_label_values_json,
+        ),
+        "review_review_label_values": lambda: review_label_review.run(
+            artifacts.review_label_values_json,
+            artifacts.review_label_values_review_yaml,
+        ),
+        "validate_review_labels": lambda: review_validate_labels.run(
+            artifacts.review_labels_raw_csv,
+            artifacts.review_label_values_json,
+            artifacts.review_quality_report_csv,
+        ),
+        "build_review_coverage_report": lambda: review_coverage_report.run(
+            artifacts.review_eligible_papers_csv,
+            artifacts.review_labels_raw_csv,
+            artifacts.review_label_values_json,
+            artifacts.review_quality_report_csv,
+            artifacts.review_coverage_report_json,
+            artifacts.review_filter_report_json,
+        ),
+        "build_review_evidence_map": lambda: review_evidence_map.run(
+            artifacts.review_labels_raw_csv,
+            artifacts.review_label_values_json,
+            artifacts.review_quality_report_csv,
+            artifacts.review_evidence_map_json,
+            artifacts.review_filter_report_json,
+        ),
+        "synthesize_review_sections": lambda: review_synthesize.run(
+            artifacts.review_evidence_map_json,
+            artifacts.review_sections_json,
+            model,
+            trace_dir=trace_dir,
+        ),
+        "edit_review_sections": lambda: review_edit_sections.run(
+            artifacts.review_evidence_map_json,
+            artifacts.review_sections_json,
+            artifacts.review_edited_sections_json,
+            model,
+            trace_dir=trace_dir,
+        ),
+        "assemble_literature_review": lambda: review_assemble.run(
+            (
+                artifacts.review_edited_sections_json
+                if artifacts.review_edited_sections_json.exists()
+                else artifacts.review_sections_json
+            ),
+            artifacts.literature_review_md,
+            artifacts.literature_review_latex_dir,
         ),
     }
 
@@ -220,7 +407,24 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
     status = run_selected_steps(selected, step_functions, manifest, args.dry_run)
     if status == "paused":
         artifacts = main_pipeline_artifacts(args.collection)
+        paused_step = None
+        if manifest.payload.get("steps"):
+            paused_step = manifest.payload["steps"][-1].get("step_name")
         print()
+        if paused_step == "review_review_label_values":
+            print("Pipeline paused for review label-value review.")
+            print(f"Run id: {manifest.run_id}")
+            print(f"Manifest: {manifest.manifest_path}")
+            print(f"Review file: {artifacts.review_label_values_review_yaml}")
+            return
+
+        if paused_step == "build_review_coverage_report":
+            print("Pipeline paused for critical literature-review coverage.")
+            print(f"Run id: {manifest.run_id}")
+            print(f"Manifest: {manifest.manifest_path}")
+            print(f"Coverage report: {artifacts.review_coverage_report_json}")
+            return
+
         print("Pipeline paused for tagging category review.")
         print(f"Run id: {manifest.run_id}")
         print(f"Manifest: {manifest.manifest_path}")
@@ -234,6 +438,11 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
     print(f"Manifest: {manifest.manifest_path}")
     print(f"Mantis-ready CSV: {artifacts.mantis_ready_csv}")
     print(f"Audit file: {artifacts.extraction_audit_csv}")
+    if args.generate_review:
+        print(f"Literature review Markdown: {artifacts.literature_review_md}")
+        print(f"Literature review LaTeX: {artifacts.literature_review_latex_dir}")
+    elif args.extract_review_labels:
+        print(f"Review labels CSV: {artifacts.review_labels_raw_csv}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -308,6 +517,39 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Pause before tagging-rule generation so the user can review and "
             "edit tagging categories and values."
+        ),
+    )
+    run_parser.add_argument(
+        "--extract-review-labels",
+        action="store_true",
+        help=(
+            "Opt into optional literature-review label extraction. This writes "
+            "review-only artifacts without changing the Mantis export."
+        ),
+    )
+    run_parser.add_argument(
+        "--generate-review",
+        action="store_true",
+        help=(
+            "Opt into optional literature-review generation. This implies "
+            "--extract-review-labels."
+        ),
+    )
+    run_parser.add_argument(
+        "--review-review-label-values",
+        action="store_true",
+        help=(
+            "Pause for a human review of auto-discovered literature-review "
+            "label values before review synthesis."
+        ),
+    )
+    run_parser.add_argument(
+        "--review-max-papers",
+        type=int,
+        default=None,
+        help=(
+            "Maximum included full-text papers to use for review generation. "
+            "Omit to allow all included papers."
         ),
     )
     run_parser.add_argument("--run-id", default=None, help="Optional run id.")

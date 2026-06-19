@@ -256,6 +256,81 @@ def render_generate_tagging_rules_prompt(
     )
 
 
+def render_extract_review_labels_prompt(
+    paper: dict[str, Any],
+    review_config: dict[str, Any],
+) -> str:
+    return render_template(
+        "extract_review_labels.md",
+        {
+            "research_topic_json": json_block(review_config["research_topic"]),
+            "topic_structure_json": json_block(
+                review_config.get("topic_structure", {})
+            ),
+            "review_config_json": json_block(review_config["review"]),
+            "paper_json": json_block(paper),
+        },
+    )
+
+
+def render_tag_paper_with_review_prompt(
+    paper: dict[str, str],
+    config: dict[str, object],
+    rules: dict[str, object],
+    review_paper: dict[str, Any],
+    review_config: dict[str, Any],
+    topic_contract: dict[str, Any] | None = None,
+) -> str:
+    return render_template(
+        "tag_paper_with_review.md",
+        {
+            "tagging_prompt": render_tag_paper_prompt(
+                paper,
+                config,
+                rules,
+                topic_contract,
+            ),
+            "review_config_json": json_block(review_config["review"]),
+            "review_topic_structure_json": json_block(
+                review_config.get("topic_structure", {})
+            ),
+            "review_paper_json": json_block(review_paper),
+        },
+    )
+
+
+def render_synthesize_review_section_prompt(
+    evidence_map: dict[str, Any],
+    section: dict[str, Any],
+) -> str:
+    return render_template(
+        "synthesize_review_section.md",
+        {
+            "research_topic_json": json_block(evidence_map.get("research_topic", {})),
+            "overview_json": json_block(evidence_map.get("overview", {})),
+            "quality_json": json_block(evidence_map.get("quality", {})),
+            "section_json": json_block(section),
+        },
+    )
+
+
+def render_edit_review_sections_prompt(
+    evidence_map: dict[str, Any],
+    review_sections: dict[str, Any],
+) -> str:
+    return render_template(
+        "edit_review_sections.md",
+        {
+            "research_topic_json": json_block(evidence_map.get("research_topic", {})),
+            "overview_json": json_block(evidence_map.get("overview", {})),
+            "quality_json": json_block(evidence_map.get("quality", {})),
+            "papers_json": json_block(evidence_map.get("papers", [])),
+            "evidence_sections_json": json_block(evidence_map.get("sections", [])),
+            "draft_sections_json": json_block(review_sections.get("sections", [])),
+        },
+    )
+
+
 def render_tag_paper_prompt(
     paper: dict[str, str],
     config: dict[str, object],

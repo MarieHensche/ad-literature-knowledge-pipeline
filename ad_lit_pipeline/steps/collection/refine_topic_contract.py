@@ -755,10 +755,15 @@ def call_llm(
             issues = generated_tagging_quality_issue_records(contract)
             if should_attempt_tagging_repair(issues, contract):
                 repair_call_id = f"{call_id}_repair"
+                repair_target = merge_refined_tagging(
+                    current_contract,
+                    proposed_contract,
+                    include_topic_structure=False,
+                )
                 try:
                     repaired_contract, repair_trace_paths = call_tagging_repair(
                         topic_description=topic_description,
-                        failed_contract=contract,
+                        failed_contract=repair_target,
                         review_overviews=compact_reviews,
                         issues=issues,
                         model=model,

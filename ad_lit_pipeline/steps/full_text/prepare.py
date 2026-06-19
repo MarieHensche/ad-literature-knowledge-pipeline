@@ -288,6 +288,29 @@ def extract_local_file(row: dict[str, str], path: Path, cache_dir: Path) -> Full
     )
 
 
+def reuse_existing_text(row: dict[str, str]) -> FullTextResult | None:
+    text_path = row.get("full_text_text_path", "").strip()
+    if not text_path:
+        return None
+
+    path = Path(text_path).expanduser()
+    if not path.exists():
+        return None
+
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if len(text) < MIN_FULL_TEXT_CHARS:
+        return None
+
+    return FullTextResult(
+        status=row.get("full_text_status") or "existing_text_available",
+        source=row.get("full_text_source") or "existing_text_path",
+        url=row.get("full_text_url", ""),
+        license=row.get("full_text_license", ""),
+        text_path=str(path),
+        chars=len(text),
+    )
+
+
 def extract_remote_location(
     row: dict[str, str],
     location: FullTextLocation,
@@ -499,6 +522,10 @@ def resolve_full_text(
     unpaywall_email: str | None,
     core_api_key: str | None,
 ) -> FullTextResult:
+    existing_text = reuse_existing_text(row)
+    if existing_text is not None:
+        return existing_text
+
     existing = row.get("full_text_path", "").strip()
     errors = []
 

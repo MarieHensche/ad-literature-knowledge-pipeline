@@ -1,0 +1,493 @@
+{
+  "source_config": "data/collection_plans/lr_4_topic_contract.yaml",
+  "source_type": "topic_contract",
+  "research_topic": {
+    "title": "Computational Biology Methods for Alzheimer's Disease Research",
+    "description": "This research topic explores various computational biology methods used in the study of Alzheimer's disease to enhance understanding, diagnosis, and treatment strategies."
+  },
+  "scope": {
+    "include_criteria": [
+      "Papers directly studying Alzheimer's disease using computational methods",
+      "Papers that examine methodologies, tools, and approaches in computational biology related to Alzheimer's",
+      "Reviews, meta-analyses, and empirical studies that help map the topic."
+    ],
+    "exclude_criteria": [
+      "Papers focusing on unrelated neurological disorders that do not pertain to Alzheimer's disease."
+    ],
+    "boundary_rules": [
+      "Include borderline or tangentially relevant papers when they address one meaningful aspect of computational biology methods in Alzheimer's research.",
+      "Exclude papers only when the title and abstract clearly indicate a lack of relevance to Alzheimer's disease or computational biology."
+    ]
+  },
+  "collection": {
+    "allowed_providers": [
+      "openalex"
+    ],
+    "preferred_provider": "openalex",
+    "max_results_default": 50,
+    "exclude_openalex_review_type": false,
+    "search_queries": [
+      {
+        "query": "computational methods Alzheimer's disease",
+        "reason": "To capture research specifically linking computational strategies to Alzheimer's."
+      },
+      {
+        "query": "bioinformatics approaches in Alzheimer's research",
+        "reason": "Focus on bioinformatics contributions to understanding Alzheimer's."
+      },
+      {
+        "query": "machine learning applications Alzheimer research",
+        "reason": "Highlight machine learning and AI methodologies in the domain."
+      },
+      {
+        "query": "statistical modeling for Alzheimer's analysis",
+        "reason": "Gather studies employing statistical analysis techniques on Alzheimer's data."
+      },
+      {
+        "query": "Alzheimer's disease diagnosis computational biology",
+        "reason": "To find research on using computational biology for diagnosing Alzheimer's."
+      },
+      {
+        "query": "reviews computational biology Alzheimer's disease",
+        "reason": "To compile review articles on computational methodologies in the context of Alzheimer's research."
+      }
+    ]
+  },
+  "topic_structure": {
+    "anchor_topic_id": "alzheimers_disease",
+    "main_topics": [
+      {
+        "value": "alzheimers_disease",
+        "label": "Alzheimer's Disease"
+      },
+      {
+        "value": "computational_methods",
+        "label": "Computational Biology Methods"
+      }
+    ],
+    "term_hints": [
+      {
+        "topic_id": "alzheimers_disease",
+        "label": "Alzheimer's Disease",
+        "is_anchor": true,
+        "terms": [
+          {
+            "value": "alzheimer_s_disease",
+            "label": "Alzheimer's disease"
+          },
+          {
+            "value": "ad",
+            "label": "AD"
+          },
+          {
+            "value": "alzheimer_disease",
+            "label": "Alzheimer disease"
+          },
+          {
+            "value": "alzheimers",
+            "label": "Alzheimers"
+          },
+          {
+            "value": "alzheimer_s",
+            "label": "Alzheimer's"
+          },
+          {
+            "value": "dementia",
+            "label": "dementia"
+          },
+          {
+            "value": "cognitive_decline",
+            "label": "cognitive decline"
+          },
+          {
+            "value": "mild_cognitive_impairment",
+            "label": "mild cognitive impairment"
+          },
+          {
+            "value": "mci",
+            "label": "MCI"
+          },
+          {
+            "value": "prodromal_alzheimer_s_disease",
+            "label": "prodromal Alzheimer's disease"
+          },
+          {
+            "value": "preclinical_alzheimer_s_disease",
+            "label": "preclinical Alzheimer's disease"
+          },
+          {
+            "value": "dementia_related_cognitive_impairment",
+            "label": "dementia-related cognitive impairment"
+          }
+        ]
+      },
+      {
+        "topic_id": "computational_methods",
+        "label": "Computational Biology Methods",
+        "is_anchor": false,
+        "terms": [
+          {
+            "value": "computational_biology",
+            "label": "computational biology"
+          },
+          {
+            "value": "bioinformatics",
+            "label": "bioinformatics"
+          },
+          {
+            "value": "computational_genomics",
+            "label": "computational genomics"
+          },
+          {
+            "value": "machine_learning",
+            "label": "machine learning"
+          },
+          {
+            "value": "statistical_modeling",
+            "label": "statistical modeling"
+          },
+          {
+            "value": "ml",
+            "label": "ML"
+          },
+          {
+            "value": "artificial_intelligence",
+            "label": "artificial intelligence"
+          },
+          {
+            "value": "ai",
+            "label": "AI"
+          },
+          {
+            "value": "deep_learning",
+            "label": "deep learning"
+          },
+          {
+            "value": "supervised_learning",
+            "label": "supervised learning"
+          },
+          {
+            "value": "unsupervised_learning",
+            "label": "unsupervised learning"
+          },
+          {
+            "value": "network_analysis",
+            "label": "network analysis"
+          },
+          {
+            "value": "systems_biology",
+            "label": "systems biology"
+          },
+          {
+            "value": "predictive_modeling",
+            "label": "predictive modeling"
+          },
+          {
+            "value": "data_modeling",
+            "label": "data modeling"
+          },
+          {
+            "value": "computational_methods",
+            "label": "computational methods"
+          },
+          {
+            "value": "genomic_analysis",
+            "label": "genomic analysis"
+          },
+          {
+            "value": "data_science",
+            "label": "data science"
+          },
+          {
+            "value": "big_data",
+            "label": "big data"
+          }
+        ]
+      }
+    ]
+  },
+  "review": {
+    "enabled": true,
+    "review_type": "narrative",
+    "output": {
+      "formats": [
+        "markdown"
+      ],
+      "citation_style": "harvard",
+      "max_quote_words": 40
+    },
+    "label_count": 7,
+    "labels": [
+      {
+        "label_id": "methodology",
+        "label": "methodology",
+        "description": "Main operational method(s) the paper used to generate or analyze its evidence.",
+        "extraction_rule": "Extract only the main operational methods, procedures, techniques, instruments, analytic approaches, or interventions used to generate or analyze evidence. Keep values compact and normalize equivalent wording to the same lowercase snake_case concept. Do not extract study design, dataset/sample names, findings, or research aims.",
+        "value_mode": "controlled_auto",
+        "selection": "multi",
+        "required": false,
+        "allowed_values": [],
+        "values_from": "",
+        "max_values_per_paper": 2,
+        "max_words_per_value": 5,
+        "max_items_per_paper": null,
+        "max_words_per_item": null,
+        "missing_value": "",
+        "evidence_sections": [
+          "title",
+          "abstract",
+          "methods",
+          "methodology",
+          "materials_and_methods",
+          "study_design",
+          "procedure",
+          "approach",
+          "analysis"
+        ]
+      },
+      {
+        "label_id": "study_design",
+        "label": "study design",
+        "description": "Overall research design or evidence structure of the paper.",
+        "extraction_rule": "Choose the closest allowed study-design value based on the paper's overall research design or evidence structure. Map equivalent wording to the closest allowed value even when the exact phrase is not present. Use unclear only when the design is genuinely not inferable from the available evidence. Do not extract methods, datasets, samples, findings, or outcomes.",
+        "value_mode": "controlled_fixed",
+        "selection": "single",
+        "required": false,
+        "allowed_values": [
+          {
+            "value": "observational_study",
+            "label": "observational_study"
+          },
+          {
+            "value": "experimental_study",
+            "label": "experimental_study"
+          },
+          {
+            "value": "randomized_controlled_trial",
+            "label": "randomized_controlled_trial"
+          },
+          {
+            "value": "quasi_experimental_study",
+            "label": "quasi_experimental_study"
+          },
+          {
+            "value": "cohort_study",
+            "label": "cohort_study"
+          },
+          {
+            "value": "case_control_study",
+            "label": "case_control_study"
+          },
+          {
+            "value": "cross_sectional_study",
+            "label": "cross_sectional_study"
+          },
+          {
+            "value": "longitudinal_study",
+            "label": "longitudinal_study"
+          },
+          {
+            "value": "qualitative_study",
+            "label": "qualitative_study"
+          },
+          {
+            "value": "survey_study",
+            "label": "survey_study"
+          },
+          {
+            "value": "case_study",
+            "label": "case_study"
+          },
+          {
+            "value": "mixed_methods_study",
+            "label": "mixed_methods_study"
+          },
+          {
+            "value": "validation_study",
+            "label": "validation_study"
+          },
+          {
+            "value": "simulation_study",
+            "label": "simulation_study"
+          },
+          {
+            "value": "benchmark_study",
+            "label": "benchmark_study"
+          },
+          {
+            "value": "model_development_study",
+            "label": "model_development_study"
+          },
+          {
+            "value": "secondary_data_analysis",
+            "label": "secondary_data_analysis"
+          },
+          {
+            "value": "unclear",
+            "label": "unclear"
+          }
+        ],
+        "values_from": "",
+        "max_values_per_paper": 1,
+        "max_words_per_value": 4,
+        "max_items_per_paper": null,
+        "max_words_per_item": null,
+        "missing_value": "",
+        "evidence_sections": [
+          "title",
+          "abstract",
+          "introduction",
+          "methods",
+          "methodology",
+          "materials_and_methods",
+          "study_design",
+          "procedure",
+          "approach"
+        ]
+      },
+      {
+        "label_id": "dataset_or_sample",
+        "label": "dataset or sample",
+        "description": "Dataset, cohort, sample, data source, corpus, population, or material used as evidence in the paper.",
+        "extraction_rule": "Extract only dataset, cohort, sample, data source, corpus, population, material name, or origin. If named, use the name. If not named but described, use a short origin phrase. Do not extract methods, study design, findings, or aims.",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": false,
+        "allowed_values": [],
+        "values_from": "",
+        "max_values_per_paper": null,
+        "max_words_per_value": null,
+        "max_items_per_paper": 2,
+        "max_words_per_item": 18,
+        "missing_value": "unclear",
+        "evidence_sections": [
+          "abstract",
+          "methods",
+          "methodology",
+          "materials_and_methods",
+          "study_design",
+          "data",
+          "sample",
+          "participants",
+          "population",
+          "cohort"
+        ]
+      },
+      {
+        "label_id": "key_finding",
+        "label": "key finding",
+        "description": "Main result or conclusion reported by the paper that is relevant to the review topic.",
+        "extraction_rule": "Extract one compact neutral claim stating the paper's main result or conclusion relevant to the review topic. Prefer reported findings over aims, background, methods, or dataset descriptions.",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": true,
+        "allowed_values": [],
+        "values_from": "",
+        "max_values_per_paper": null,
+        "max_words_per_value": null,
+        "max_items_per_paper": 1,
+        "max_words_per_item": 35,
+        "missing_value": "unclear",
+        "evidence_sections": [
+          "results",
+          "findings",
+          "discussion",
+          "conclusion"
+        ]
+      },
+      {
+        "label_id": "paper_limitation",
+        "label": "paper limitation",
+        "description": "Most important limitations explicitly reported by the paper.",
+        "extraction_rule": "Extract up to two of the most important and most limiting limitations explicitly reported by this paper. Use compact, neutral sentences. Do not infer limitations. Do not extract broad review-level statements such as more research is needed unless they are specifically tied to this paper's limitation.",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": false,
+        "allowed_values": [],
+        "values_from": "",
+        "max_values_per_paper": null,
+        "max_words_per_value": null,
+        "max_items_per_paper": 2,
+        "max_words_per_item": 25,
+        "missing_value": "unclear",
+        "evidence_sections": [
+          "limitations",
+          "discussion",
+          "conclusion",
+          "abstract"
+        ]
+      },
+      {
+        "label_id": "direct_quote",
+        "label": "direct quote",
+        "description": "Short direct quotation that could support the review narrative.",
+        "extraction_rule": "",
+        "value_mode": "evidence_quote",
+        "selection": "",
+        "required": false,
+        "allowed_values": [],
+        "values_from": "",
+        "max_values_per_paper": null,
+        "max_words_per_value": null,
+        "max_items_per_paper": null,
+        "max_words_per_item": null,
+        "missing_value": "",
+        "evidence_sections": [
+          "introduction",
+          "results",
+          "findings",
+          "discussion",
+          "conclusion"
+        ]
+      },
+      {
+        "label_id": "future_work_or_gap",
+        "label": "future work or gap",
+        "description": "Future work, unresolved question, or research gap explicitly stated by the paper.",
+        "extraction_rule": "Extract up to two important future-work directions or research gaps only when the paper clearly states them as future work, an unresolved question, or a gap. Do not infer or invent gaps. Broad field-level gaps are allowed only when explicitly stated by the paper. Reject generic statements such as more studies are needed unless they specify the study type, data, population, method, or question needed.",
+        "value_mode": "free_text",
+        "selection": "",
+        "required": false,
+        "allowed_values": [],
+        "values_from": "",
+        "max_values_per_paper": null,
+        "max_words_per_value": null,
+        "max_items_per_paper": 2,
+        "max_words_per_item": 25,
+        "missing_value": "unclear",
+        "evidence_sections": [
+          "future_work",
+          "discussion",
+          "conclusion",
+          "limitations"
+        ]
+      }
+    ],
+    "known_section_keys": [
+      "abstract",
+      "analysis",
+      "approach",
+      "background",
+      "cohort",
+      "conclusion",
+      "data",
+      "discussion",
+      "findings",
+      "future_work",
+      "introduction",
+      "limitations",
+      "literature_review",
+      "materials_and_methods",
+      "methodology",
+      "methods",
+      "participants",
+      "population",
+      "procedure",
+      "protocol",
+      "related_work",
+      "results",
+      "sample",
+      "study_design"
+    ]
+  }
+}

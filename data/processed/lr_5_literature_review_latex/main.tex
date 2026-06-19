@@ -1,0 +1,216 @@
+\documentclass{MITcsail}
+
+\title{Computational Biology Methods for Alzheimer's Disease Research}
+\author{AD Literature Knowledge Pipeline\\
+\vspace{1em}
+\normalfont{\small Automated narrative literature review}}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{firstpagestyle}
+
+\begin{abstract}
+This narrative literature review summarizes evidence from 18 papers. The included evidence spans 2006 to 2023.
+\end{abstract}
+
+\section{Review Methodology}
+
+\textit{This section outlines the systematic approach used to assemble the literature review on computational biology methods in Alzheimer's research.}
+
+The literature review incorporates a comprehensive analysis of \textbf{18 papers} published between 2006 and 2023, focusing on computational biology methods applicable to Alzheimer's disease. All papers met the predefined inclusion criteria, resulting in a \textbf{100\% usability rate}. \textbf{OpenAlex} was utilized as the primary database, with tailored search queries capturing relevant studies pertaining to computational methodologies, including bioinformatics approaches and machine learning applications. The selection process adhered to strict criteria, ensuring the inclusion of studies directly addressing computational methods relevant to Alzheimer's. Papers focusing on unrelated neurological disorders were excluded, as were review-type papers, to maintain the integrity of original findings. Notably, there is extensive coverage of methodologies such as \textbf{machine learning} and \textbf{deep learning}, with \textbf{8} and \textbf{6} papers respectively addressing these approaches. Emphasis is placed on network analyses and hybrid models aimed at enhancing diagnostic performance. Limitations identified across several papers include issues such as small sample sizes and a lack of diversity in datasets. The review highlights gaps in existing literature, suggesting future research should focus on enhancing model explainability and applying methods to larger, more diverse populations to improve diagnostic capabilities in Alzheimer's disease.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item 18 papers reviewed from 2006 to 2023
+  \item 100\% usability rate, no papers excluded
+  \item Focus on machine learning and deep learning methodologies
+  \item Strict inclusion criteria to ensure relevance
+  \item Notable limitations regarding sample size and diversity
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Machine learning methods are predominant, with various deep learning architectures explored.
+  \item Network analysis techniques employed for insights into brain connectivity changes.
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Small sample sizes in several studies limit generalizability.
+  \item A lack of diversity in datasets affects model training and validation.
+\end{itemize}
+
+\section{Alzheimer's Disease In The Included Literature}
+
+\textit{This section examines how Alzheimer's disease (AD) is framed and studied across various computational biology methods in the reviewed literature, highlighting key findings, methodologies utilized, limitations identified, and future research directions.}
+
+Alzheimer's disease (AD) is a complex neurodegenerative disorder characterized by cognitive decline and specific pathological changes in the brain. Recent literature employing computational biology methods has significantly advanced our understanding of AD, emphasizing the importance of early detection and progression assessment. Key findings across studies reveal alterations in functional brain networks associated with Alzheimer's disease. \citet{ref_10_1523_jneurosci_2250_06_2006} identified a nonlinear trajectory of fMRI activation linked to stages of cognitive impairment, indicating integrity loss in hippocampal memory systems. \citet{ref_10_3389_fnagi_2019_00220} demonstrated that deep learning algorithms could classify AD using multimodal neuroimaging, achieving significant accuracy. Additionally, \citet{ref_10_1371_journal_pcbi_1000100} noted that metrics derived from network analysis could serve as imaging-based biomarkers to distinguish AD from healthy aging, underscoring the potential clinical applications of such methodologies. The methodological landscape is marked by a focus on machine learning techniques, particularly deep learning approaches, employed in eight of the eighteen reviewed papers. These studies show how deep learning can enhance diagnostic accuracy, particularly in early-stage identification \citep{ref_10_1109_isbi_2014_6868045,ref_10_1109_access_2021_3090474}. Notable among these is the DEMNET model, which achieved a diagnostic accuracy of 95.23\% \citep{ref_10_1109_access_2021_3090474}. Despite these advancements, several limitations persist. Certain studies, such as by \citet{ref_10_1523_jneurosci_2250_06_2006}, are constrained by small sample sizes and a primary focus on early-stage individuals, which could limit generalizability. Class imbalances and dataset homogeneity also present challenges \citep{ref_10_1186_1471_2202_10_101,ref_10_1002_alz_13390}. Future research should address these challenges by utilizing more diverse populations and enhancing the robustness of machine learning models to improve their applicability in varied clinical settings. In summary, while computational biology methods have advanced the understanding of Alzheimer's disease through deep learning and network analyses, there remains a need for more nuanced approaches that address existing limitations and explore comprehensive datasets.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item Alterations in fMRI activation linked to cognitive decline indicate loss in memory systems \citep{ref_10_1523_jneurosci_2250_06_2006}.
+  \item Deep learning approaches show potential in classifying and predicting Alzheimer's disease onset using neuroimaging data \citep{ref_10_3389_fnagi_2019_00220,ref_10_1109_access_2021_3090474}.
+  \item Network analysis may serve as a biomarker to differentiate Alzheimer's from healthy aging \citep{ref_10_1371_journal_pcbi_1000100}.
+  \item Methodological dominance of machine learning, specifically deep learning techniques, demonstrates significant diagnostic accuracy advancements.
+  \item Limitations include small sample sizes and dataset homogeneity affecting generalizability.
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Predominance of deep learning and machine learning techniques for diagnostics.
+  \item Network analysis approaches utilized across studies, revealing insights into functional connectivity alterations in AD.
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Small sample sizes in studies like \citet{ref_10_1523_jneurosci_2250_06_2006} affect generalizability.
+  \item Class imbalance issues noted in datasets used for training deep learning models \citep{ref_10_1186_1471_2202_10_101,ref_10_1109_access_2021_3090474}.
+  \item Lack of research addressing the diverse capabilities of methodologies across various stages of Alzheimer's.
+\end{itemize}
+
+\section{Computational Biology Methods In The Included Literature}
+
+\textit{This section explores the diverse computational biology methods employed in Alzheimer’s disease research by synthesizing findings from included literature to highlight their methodologies, applications, limitations, and potential future directions.}
+
+Computational biology plays a crucial role in advancing our understanding of Alzheimer’s disease (AD) through various methodologies such as machine learning, deep learning, and network analysis. The reviewed literature demonstrates a clear trend towards utilizing deep learning techniques to enhance diagnostic accuracy and predict disease progression. For instance, \citet{ref_10_1109_isbi_2014_6868045} highlighted that employing a deep learning architecture significantly improved the accuracy of diagnosing Alzheimer’s disease, affirming the significance of these methodologies in clinical applications \citep{ref_10_1109_isbi_2014_6868045}. Similarly, the model developed by \citet{ref_10_1148_radiol_2018180958} achieved an impressive specificity of 82\% at 100\% sensitivity when diagnosing Alzheimer disease, illustrating the potential of deep learning in medical imaging contexts \citep{ref_10_1148_radiol_2018180958}. Moreover, machine learning approaches, particularly both supervised and unsupervised techniques, have shown promise in identifying subtle patterns within neuroimaging data. This is evident in the work of \citet{ref_10_3389_fpubh_2022_853294}, who reported an average validation accuracy of 83\% for predicting early-stage Alzheimer’s disease \citep{ref_10_3389_fpubh_2022_853294}. The integration of diverse data types, including magnetic resonance imaging and functional connectivity measures, is central to creating robust models that can classify different stages of the disease effectively. Furthermore, network analysis has emerged as a pivotal tool for understanding the underlying changes in brain connectivity associated with Alzheimer’s disease. \citet{ref_10_1371_journal_pcbi_1000100} emphasized that network measures might serve as valuable imaging biomarkers to differentiate Alzheimer’s from healthy aging, emphasizing the clinical relevance of such analyses \citep{ref_10_1371_journal_pcbi_1000100}. However, limitations persist in the current literature, such as the generalizability of findings due to often limited sample sizes and the need for more diverse participant groups \citep{ref_10_1523_jneurosci_2250_06_2006,ref_10_1111_jon_12214}. Additionally, future work is necessary to refine these computational methods further. For example, \citet{ref_10_3389_fnagi_2019_00220} suggested improving deep learning performance by incorporating hybrid data types and enhancing classifier explainability \citep{ref_10_3389_fnagi_2019_00220}. \citet{ref_10_1002_alz_13390} identified the challenges of dataset diversity and biomarker invasiveness in Alzheimer's research \citep{ref_10_1002_alz_13390}. As advances in artificial intelligence and machine learning continue to evolve, they may catalyze deeper insights into Alzheimer’s disease, ultimately aiming for more tailored and effective diagnosis and treatment strategies.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item Deep learning significantly enhances the accuracy of Alzheimer's disease diagnosis.
+  \item Machine learning techniques are effective in classifying different stages of the disease.
+  \item Network analysis provides insights into brain connectivity changes associated with AD.
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Deep learning methodologies dominate recent advancements in AD research.
+  \item Integration of various data types improves algorithm effectiveness and predictive power.
+  \item Network analysis is utilized to identify changes in functional brain connectivity.
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Small sample sizes often limit generalizability of findings.
+  \item A lack of diversity in datasets affects model robustness.
+  \item Further exploration of network characteristics in broader populations is required.
+\end{itemize}
+
+\section{Comparative Methods and Evidence in Computational Approaches for Alzheimer's Disease Research}
+
+\textit{This section compares various computational methodologies employed in Alzheimer's Disease research, highlighting patterns, significant findings, and limitations across studies.}
+
+Recent advancements in computational methods have enhanced the understanding and diagnosis of Alzheimer's Disease (AD). Among the methodologies examined, deep learning is prominent, with eight relevant studies demonstrating various architectures aimed at improving diagnostic accuracy. \citet{ref_10_1109_isbi_2014_6868045} underscored the critical role of deep learning in early diagnosis, achieving significant accuracy improvements compared to traditional techniques. Similarly, the DEMNET model developed by \citet{ref_10_1109_access_2021_3090474} achieved high performance metrics, illustrating the clinical potential of these models. Network analysis has also been leveraged in three studies to investigate intrinsic connectivity patterns within the brain. \citet{ref_10_1371_journal_pcbi_1000100} indicated that network metrics could function as biomarkers for distinguishing AD from healthy individuals, a finding supported by \citet{ref_10_1186_1471_2202_10_101}, who identified deviations in the small-world network structures typically associated with healthy brains. Collectively, these studies suggest a paradigm shift towards understanding and utilizing complex network dynamics, which could significantly advance AD research. Despite promising advancements, several common limitations persist across studies, including constraints related to sample size and generalizability. \citet{ref_10_1523_jneurosci_2250_06_2006} noted concerns that their findings might lack robustness due to the small sample size, a sentiment echoed by \citet{ref_10_1371_journal_pcbi_1000100} and \citet{ref_10_1111_jon_12214}. Furthermore, the increasing complexity of deep learning models raises challenges in terms of interpretability and the need for rich, diverse datasets to develop robust classifiers \citep{ref_10_1002_alz_13390}. These limitations highlight the ongoing need for research focused on enhancing model performance and ensuring data integrity.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item Deep learning methods significantly enhance diagnostic accuracy for Alzheimer's disease.
+  \item Network analysis reveals connectivity patterns that could serve as biomarkers.
+  \item Common limitations across studies include small sample sizes and issues of generalizability.
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Predominance of deep learning techniques in diagnostic frameworks.
+  \item Network analysis indicating connectivity patterns as potential biomarkers.
+  \item Application of multimodal data to boost prediction accuracy.
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Small sample sizes limit the generalizability of findings.
+  \item Deep learning models face challenges regarding interpretability.
+  \item A need for larger, more diverse datasets to facilitate effective model training.
+\end{itemize}
+
+\section{Datasets and Study Designs in Computational Biology Research for Alzheimer's Disease}
+
+\textit{This section analyzes the datasets and study designs employed across various computational biology methods for Alzheimer's disease research, highlighting key findings and common limitations in the literature.}
+
+The utilization of diverse datasets and study designs is critical in advancing computational biology research aimed at understanding Alzheimer's disease. Across the eighteen reviewed papers, multiple methodologies, including deep learning and machine learning, were employed to analyze a variety of data sources such as neuroimaging and clinical data. Datasets and Samples Studies frequently leveraged neuroimaging datasets involving individuals at different cognitive stages, including mild cognitive impairment (MCI) and Alzheimer's disease (AD). \citet{ref_10_1523_jneurosci_2250_06_2006} illustrated the significance of fMRI data in evaluating memory networks, revealing nonlinear activation trajectories during cognitive tasks. Similarly, \citet{ref_10_1371_journal_pcbi_1000100} pointed out the potential of network measures as imaging-based biomarkers to differentiate between AD and healthy aging. The volume of data varied significantly across studies, with some, like \citet{ref_10_1148_radiol_2018180958}, utilizing large populations to validate diagnosis methods via deep learning, while others faced limitations due to smaller sample sizes that potentially impaired generalizability \citep{ref_10_1111_jon_12214,ref_10_1523_jneurosci_2250_06_2006}. Study Designs Six papers implemented observational study designs, exploring abnormalities without altering variables, while two focused on validation studies, validating model predictions or methods against external benchmarks \citep{ref_10_1109_access_2021_3090474,ref_10_1016_j_jalz_2019_02_007}. There is notable variability in how studies classified their methodologies, indicating a lack of clarity \citep{ref_10_1016_j_neuroimage_2014_06_077,ref_10_1016_j_neuroimage_2019_01_031}. Key Findings and Limitations The prominent application of deep learning positioned it as the leading methodology for classification tasks \citep{ref_10_1109_isbi_2014_6868045,ref_10_3389_fnagi_2019_00220}. Despite its success, limitations emerged, notably class imbalances in datasets affecting model training \citep{ref_10_1109_access_2021_3090474}. The need for diverse and large datasets is a recurring theme, with researchers recommending exploration of broader populations to enhance model robustness and ensure generalizability \citep{ref_10_1002_alz_13390,ref_10_3389_fpubh_2022_853294}. In conclusion, the synthesis of datasets and methodologies across these studies highlights both the progress made and the hurdles yet to be overcome as the field evolves toward improved diagnostic and predictive capabilities for Alzheimer's disease using computational approaches.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item Diverse datasets including neuroimaging and clinical data are essential for Alzheimer's research.
+  \item Deep learning significantly impacts diagnosis accuracy in AD with multiple successful applications.
+  \item Small sample sizes and unclear study designs present limitations that warrant attention.
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Deep learning is the dominant methodology used across studies, particularly in diagnosing AD.
+  \item Observational studies are the most common design, but validation studies provide essential checks against benchmarks.
+  \item A lack of clarity in study design classifications presents challenges in comparing methodologies.
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Sample size limitations affect generalizability of findings in several studies.
+  \item Class imbalance in datasets hinders deep learning model performance.
+  \item Unclear study designs complicate the synthesis of research findings.
+\end{itemize}
+
+\section{Limitations, Gaps, And Future Directions}
+
+\textit{This section synthesizes reported limitations and identifies gaps in the current research on computational biology methods for Alzheimer's disease, alongside proposed directions for future studies.}
+
+Limitations and Gaps The examined literature reveals several limitations and gaps in the current understanding and utilization of computational biology methods in Alzheimer's disease research. 1. \textbf{Sample Size Limitations}: A recurring limitation across various studies is the small sample size, which restricts the generalizability of findings. \citet{ref_10_1523_jneurosci_2250_06_2006} note that their findings are constrained by a relatively small sample size focused exclusively on early-stage individuals. Similarly, \citet{ref_10_1371_journal_pcbi_1000100} also indicate that limited sample size may impact the robustness of their conclusions. 2. \textbf{Methodological Bottlenecks}: Many studies point out inherent issues with specific computational techniques. \citet{ref_10_1109_isbi_2014_6868045} attribute the bottleneck in diagnosis performance to limitations within the learning models employed, emphasizing the need for refinement in these methodologies. 3. \textbf{Diversity in Patient Populations}: A significant gap exists regarding the diversity of datasets used in studies. For example, \citet{ref_10_1148_radiol_2018180958} and \citet{ref_10_1148_radiol_2016152703} stress that the applicability of their findings may not extend to more diverse patient populations, which is essential for improving diagnostic accuracy. Future Directions Several suggestions for future research emerge from the literature: 1. \textbf{Addressing Mechanisms of Activation}: \citet{ref_10_1523_jneurosci_2250_06_2006} suggest that further studies are required to explore the mechanisms underlying observed activation patterns in different Alzheimer's disease stages. 2. \textbf{Improved Methodology}: \citet{ref_10_3389_fnagi_2019_00220} recommend enhancing deep learning performance by integrating hybrid data types and improving the explainability of classifiers. 3. \textbf{Validation Across Diverse Populations}: \citet{ref_10_1148_radiol_10100734} underscore the necessity for ongoing validation of computational approaches across various and larger cohorts to ensure their generalizability. 4. \textbf{Exploring New AI Approaches}: \citet{ref_10_1002_alz_13390} highlight that overcoming current challenges in Alzheimer's research may require collecting data from underrepresented groups and developing advanced AI techniques for biomarker discovery. In summary, while current computational biology approaches hold promise in advancing Alzheimer's disease research, attention to sample diversity, methodological enhancement, and a comprehensive mechanistic understanding is crucial to future progress.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item Limited sample sizes restrict generalizability.
+  \item Methodological bottlenecks are inherent in existing techniques.
+  \item Diversity in patient populations is lacking in current studies.
+  \item Future research should focus on improving explanatory power of models.
+  \item Need for validation of methodologies across varied cohorts.
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Deep learning methods are frequently cited as needing improvement.
+  \item Small sample sizes or homogeneity of datasets were common complaints in studies.
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Small sample sizes impact generalizability \citep{ref_10_1523_jneurosci_2250_06_2006,ref_10_1371_journal_pcbi_1000100}.
+  \item Methodological limitations restrict diagnostic performance \citep{ref_10_1109_isbi_2014_6868045}.
+  \item Diversity of dataset populations is insufficient \citep{ref_10_1148_radiol_2018180958,ref_10_1148_radiol_2016152703}.
+\end{itemize}
+
+\section{Conclusion}
+
+\textit{This section synthesizes the literature on computational biology methods used in Alzheimer's disease research, identifying key findings, methodological strengths, and limitations.}
+
+This review of literature addressing computational biology methods in Alzheimer's disease (AD) research reveals significant advancements in diagnostic and analytical capabilities. Deep learning approaches, such as those proposed by \citet{ref_10_1109_isbi_2014_6868045}, enhance diagnostic accuracy for AD. \citet{ref_10_3389_fnagi_2019_00220} confirmed these findings, demonstrating that multimodal neuroimaging and deep learning techniques provide promising accuracy in classifying AD and predicting conversion from mild cognitive impairment (MCI) to AD. Network analysis also uncovers notable alterations in brain connectivity linked to AD. \citet{ref_10_1371_journal_pcbi_1000100} showed that functional brain networks display substantial deviations in connectivity patterns, indicating their potential as biomarkers for distinguishing AD from healthy aging. \citet{ref_10_1523_jneurosci_2250_06_2006} discussed the dynamic activation patterns of brain regions across different stages of cognitive impairment, employing independent component analysis to elucidate memory-related networks. However, limitations persist. Small sample sizes in many studies may hinder the generalizability of findings \citep{ref_10_1523_jneurosci_2250_06_2006,ref_10_1371_journal_pcbi_1000100}. As noted by \citet{ref_10_1148_radiol_2018180958}, the performance of deep learning models may not generalize to diverse populations, stressing the need for more inclusive datasets. Future research should extend existing methodologies, integrating data from diverse demographic groups to bolster the robustness of findings. The role of artificial intelligence and advanced computational techniques is promising in this field, as highlighted by \citet{ref_10_1002_alz_13390}, who suggested that such approaches could streamline the discovery of relevant biomarkers for Alzheimer's disease. In conclusion, while computational biology makes strides in Alzheimer's research, ongoing efforts to address methodological limitations and expand the diversity of study populations are crucial for further advancing our understanding and treatment of AD.
+
+\subsection*{Key points}
+\begin{itemize}
+  \item Deep learning models improve diagnostic accuracy for Alzheimer's disease.
+  \item Functional brain network analysis may serve as a biomarker for distinguishing Alzheimer’s disease from normal aging.
+  \item Existing studies often suffer from small sample sizes, which affect the generalizability of findings.
+\end{itemize}
+
+\subsection*{Methodological patterns}
+\begin{itemize}
+  \item Deep learning
+  \item Network analysis
+  \item Machine learning
+\end{itemize}
+
+\subsection*{Limitations and gaps}
+\begin{itemize}
+  \item Small sample sizes limit the generalizability of findings.
+  \item The performance of models may not generalize across diverse populations.
+  \item There is a need for more comprehensive datasets and methodologies.
+\end{itemize}
+
+\clearpage
+\bibliographystyle{abbrvnat}
+\nocite{ref_10_1523_jneurosci_2250_06_2006,ref_10_1148_radiol_10100734,ref_10_1148_radiol_2016152703,ref_10_1148_radiol_2018180958,ref_10_1111_jon_12214,ref_10_1186_1471_2202_10_101,ref_10_3389_fnagi_2019_00220,ref_10_3389_fpubh_2022_853294,ref_10_1016_j_jalz_2019_02_007,ref_10_1109_isbi_2014_6868045,ref_10_1016_j_bspc_2021_103293,ref_10_1016_j_neuroimage_2014_10_002,ref_10_1109_access_2021_3090474,ref_10_1016_j_neuroimage_2019_01_031,ref_10_1007_978_3_642_40763_5_72,ref_10_1016_j_neuroimage_2014_06_077,ref_10_1371_journal_pcbi_1000100,ref_10_1002_alz_13390}
+\bibliography{references}
+
+\section*{Acknowledgments}
+This document was generated from structured literature-review evidence produced by the AD literature knowledge pipeline.
+
+\end{document}

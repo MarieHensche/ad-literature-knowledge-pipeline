@@ -8,10 +8,14 @@ from pathlib import Path
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.llm.client import JSONLLMClient, OpenAIResponsesClient
-from ad_lit_pipeline.llm.schemas import paper_tags_schema
+from ad_lit_pipeline.llm.schemas import paper_tags_schema, paper_tags_with_review_schema
 from ad_lit_pipeline.llm.trace import LLMTraceWriter
-from ad_lit_pipeline.prompts.render import render_tag_paper_prompt
+from ad_lit_pipeline.prompts.render import (
+    render_tag_paper_prompt,
+    render_tag_paper_with_review_prompt,
+)
 from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
+from ad_lit_pipeline.steps.review import extract_labels as review_extract
 from ad_lit_pipeline.topics.contract import (
     FALLBACK_TAG_VALUES,
     load_topic_contract,
@@ -66,6 +70,11 @@ def read_papers(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 def read_included_papers(path: Path) -> list[dict[str, str]]:
     _, rows = read_papers(path)
     return [row for row in rows if row.get("scope_decision") == "include"]
+
+
+def read_paper_ids(path: Path) -> set[str]:
+    _, rows = read_papers(path)
+    return {row["paper_id"] for row in rows if row.get("paper_id")}
 
 
 def categories_from_config(config: dict[str, object]) -> list[dict[str, object]]:
@@ -173,14 +182,41 @@ def call_llm(
     client: JSONLLMClient,
     topic_contract: dict[str, object] | None = None,
     trace_writer: LLMTraceWriter | None = None,
+    review_config: dict[str, object] | None = None,
 ) -> tuple[dict[str, object], list[Path]]:
-    prompt = render_tag_paper_prompt(paper_text(paper), config, rules, topic_contract)
+    tagging_paper = paper_text(paper)
+    schema_name = "paper_tags"
+    schema = paper_tags_schema(config)
+    if review_config is None:
+        prompt = render_tag_paper_prompt(
+            tagging_paper,
+            config,
+            rules,
+            topic_contract,
+        )
+    else:
+        review_paper = review_extract.paper_payload(
+            paper,
+            review_extract.read_full_text(paper),
+            review_config,
+        )
+        prompt = render_tag_paper_with_review_prompt(
+            tagging_paper,
+            config,
+            rules,
+            review_paper,
+            review_config,
+            topic_contract,
+        )
+        schema_name = "paper_tags_with_review"
+        schema = paper_tags_with_review_schema(config, review_config)
+
     result = client.create_json(
         model=model,
         system_message=SYSTEM_MESSAGE,
         prompt=prompt,
-        schema_name="paper_tags",
-        schema=paper_tags_schema(config),
+        schema_name=schema_name,
+        schema=schema,
         step_name=STEP.name,
         call_id=paper.get("paper_id", "paper"),
         trace_writer=trace_writer,
@@ -294,22 +330,50 @@ def run(
     topic_contract_path: Path | None = None,
     client: JSONLLMClient | None = None,
     trace_dir: Path | None = None,
+    review_config_path: Path | None = None,
+    review_output_path: Path | None = None,
+    review_papers_path: Path | None = None,
 ) -> StepResult:
     input_columns, all_papers = read_papers(papers_path)
     papers = [paper for paper in all_papers if paper.get("scope_decision") == "include"]
     config = load_json(config_path)
     rules = load_json(rules_path)
     topic_contract = load_topic_contract(topic_contract_path) if topic_contract_path else None
+    review_config = load_json(review_config_path) if review_config_path else None
+    if review_config is not None and review_output_path is None:
+        raise ValueError("review_output_path is required when review_config_path is set.")
+    review_paper_ids = (
+        read_paper_ids(review_papers_path)
+        if review_config is not None and review_papers_path is not None
+        else None
+    )
     llm_client = client or OpenAIResponsesClient()
     trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
 
     rows = []
+    review_rows = []
     all_trace_paths: list[Path] = []
     warnings = []
+    review_skipped_reviews = 0
 
     for index, paper in enumerate(papers, start=1):
         paper_id = paper.get("paper_id") or f"row_{index}"
         print(f"Tagging paper {index}/{len(papers)}: {paper_id}")
+        skip_review_extraction = (
+            review_config is not None
+            and (
+                (
+                    review_paper_ids is not None
+                    and paper.get("paper_id") not in review_paper_ids
+                )
+                or (
+                    review_paper_ids is None
+                    and review_extract.is_likely_review_paper(paper)
+                )
+            )
+        )
+        if skip_review_extraction:
+            review_skipped_reviews += 1
 
         try:
             tagged, trace_paths = call_llm(
@@ -320,9 +384,39 @@ def run(
                 llm_client,
                 topic_contract,
                 trace_writer,
+                None if skip_review_extraction else review_config,
             )
+            review_parsed = None
+            if review_config is not None and not skip_review_extraction:
+                review_parsed = tagged.get("review_labels")
+                tagged = tagged.get("knowledge_tags")
+                if not isinstance(tagged, dict):
+                    raise ValueError("Combined response missing knowledge_tags object.")
             validate_tagged_row(tagged, config, rules)
             rows.append(flatten_tagged_row(paper, tagged, config))
+            if review_config is not None and not skip_review_extraction:
+                try:
+                    if not isinstance(review_parsed, dict):
+                        raise ValueError(
+                            "Combined response missing review_labels object."
+                        )
+                    review_labels = review_extract.validate_and_normalize_labels(
+                        review_parsed,
+                        review_config,
+                    )
+                    review_rows.append(
+                        review_extract.flatten_review_row(
+                            paper,
+                            review_labels,
+                            review_parsed,
+                            review_config,
+                        )
+                    )
+                except ValueError as review_error:
+                    warnings.append(
+                        "Failed to extract review labels for "
+                        f"'{paper_id}': {review_error}"
+                    )
             all_trace_paths.extend(trace_paths)
 
         except ValueError as error:
@@ -334,15 +428,32 @@ def run(
             # Paper is skipped, not added to rows
 
     write_rows(output_path, rows, config, output_columns(input_columns, config))
+    outputs = {"extraction_filled_csv": output_path}
+    row_counts = {"tagged_papers": len(rows)}
+    inputs = {
+        "scope_screened_full_text_csv": papers_path,
+        "tagging_config_json": config_path,
+        "tagging_rules_json": rules_path,
+    }
+    if review_config is not None and review_output_path is not None:
+        review_extract.write_rows(
+            review_output_path,
+            review_rows,
+            review_extract.output_columns(review_config),
+        )
+        inputs["review_config_normalized_json"] = review_config_path
+        if review_papers_path is not None:
+            inputs["review_eligible_papers_csv"] = review_papers_path
+        outputs["review_labels_raw_csv"] = review_output_path
+        row_counts["review_candidate_papers"] = len(papers)
+        row_counts["review_skipped_review_papers"] = review_skipped_reviews
+        row_counts["review_labeled_papers"] = len(review_rows)
+
     return StepResult(
         step_name=STEP.name,
-        inputs={
-            "scope_screened_full_text_csv": papers_path,
-            "tagging_config_json": config_path,
-            "tagging_rules_json": rules_path,
-        },
-        outputs={"extraction_filled_csv": output_path},
-        row_counts={"tagged_papers": len(rows)},
+        inputs=inputs,
+        outputs=outputs,
+        row_counts=row_counts,
         trace_paths=all_trace_paths,
         warnings=warnings,
     )
@@ -385,6 +496,21 @@ def main() -> None:
         default=None,
         help="Optional directory where prompt/response traces are written.",
     )
+    parser.add_argument(
+        "--review-config",
+        default=None,
+        help="Optional normalized review config JSON for same-pass review labels.",
+    )
+    parser.add_argument(
+        "--review-output",
+        default=None,
+        help="Optional review labels CSV written when --review-config is used.",
+    )
+    parser.add_argument(
+        "--review-papers",
+        default=None,
+        help="Optional review-eligible paper CSV used to exclude review articles.",
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -400,6 +526,9 @@ def main() -> None:
         model,
         topic_contract_path,
         trace_dir=trace_dir,
+        review_config_path=Path(args.review_config) if args.review_config else None,
+        review_output_path=Path(args.review_output) if args.review_output else None,
+        review_papers_path=Path(args.review_papers) if args.review_papers else None,
     )
 
     print(f"Tagged papers: {result.row_counts['tagged_papers']}")
