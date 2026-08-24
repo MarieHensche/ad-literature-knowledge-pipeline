@@ -212,6 +212,8 @@ function collectionPayload(workflow = "collection") {
     traceDir: $("collectionTraceDir").value.trim(),
     runMainAfterCollection: $("runMainAfterCollection").checked,
     reviewTaggingCategories: $("collectionReviewTaggingCategories").checked,
+    generateReview: $("collectionGenerateReview").checked,
+    reviewReviewLabelValues: $("collectionReviewReviewLabelValues").checked,
   };
   if (workflow === "contract") {
     payload.topicContract = "";
@@ -276,6 +278,26 @@ function renderJob(job) {
   $("jobLog").scrollTop = $("jobLog").scrollHeight;
 }
 
+async function revealReplayCollection(collection) {
+  const papersPath = `data/raw/${collection}_papers.csv`;
+  const contractPath = `data/collection_plans/${collection}_topic_contract.yaml`;
+  $("mainCollectionName").value = collection;
+  $("paperPath").value = papersPath;
+  $("paperInputSelect").value = papersPath;
+  $("mainContractPath").value = contractPath;
+  $("mainContractSelect").value = contractPath;
+  $("mainGenerateReview").checked = true;
+  $("mainReviewTaggingCategories").checked = true;
+  $("mainReviewReviewLabelValues").checked = true;
+  updateMainStepControls();
+  switchTab("main");
+  await Promise.all([
+    loadPaperOverview(papersPath),
+    loadContractOverview(contractPath),
+    loadReviewOutputs(collection),
+  ]);
+}
+
 function watchJob(jobId) {
   window.clearInterval(state.jobTimer);
   state.jobTimer = window.setInterval(async () => {
@@ -290,6 +312,18 @@ function watchJob(jobId) {
         state.lastGeneratedContractPath = null;
         if (job.status === "succeeded" && generatedContractPath) {
           await loadContract(generatedContractPath);
+        }
+        if (
+          job.status === "succeeded" &&
+          job.replayCollection &&
+          job.replayWorkflow !== "contract"
+        ) {
+          await revealReplayCollection(job.replayCollection);
+          showToast(`${job.replayCollection} is ready.`);
+        }
+        if (job.status === "succeeded" && job.replayWorkflow === "contract") {
+          switchTab("collect");
+          showToast("Topic contract ready for review.");
         }
       }
     } catch (error) {
@@ -364,8 +398,9 @@ async function loadContractOverview(path = selectedContractForMain()) {
   renderCategoryOverview(overview);
 }
 
-async function loadReviewOutputs() {
-  const collection = $("mainCollectionName").value.trim();
+async function loadReviewOutputs(
+  collection = $("mainCollectionName").value.trim()
+) {
   if (!collection) {
     showToast("Collection is required to find review outputs.");
     return;
@@ -427,10 +462,31 @@ function renderCategoryOverview(overview) {
 
 function renderReviewOutputs(outputs) {
   const container = $("reviewOutput");
+  const mantisPath = outputs.mantisCsv?.path || "";
+  const mantisExists = Boolean(outputs.mantisCsv?.exists);
   const pdfPath = outputs.pdf?.path || "";
   const pdfExists = Boolean(outputs.pdf?.exists);
   const mdPath = outputs.markdown?.path || "";
   container.innerHTML = `
+    <div class="mantis-launch-card">
+      <div>
+        <strong>Mantis-ready CSV</strong>
+        <p>${escapeHtml(mantisPath)}</p>
+      </div>
+      <div class="mantis-actions">
+        <button
+          class="secondary-button mantis-download"
+          data-path="${escapeAttr(mantisPath)}"
+          type="button"
+          ${mantisExists ? "" : "disabled"}
+        >Download Mantis CSV</button>
+        <button
+          class="primary-button mantis-launch"
+          type="button"
+          disabled
+        >Open Mantis</button>
+      </div>
+    </div>
     <div class="artifact-row">
       <button class="path-button" data-path="${escapeAttr(mdPath)}" type="button">${escapeHtml(mdPath)}</button>
       <span class="badge ${outputs.markdown?.exists ? "succeeded" : ""}">${outputs.markdown?.exists ? "found" : "missing"}</span>
@@ -445,6 +501,32 @@ function renderReviewOutputs(outputs) {
         : `<p class="empty-text">Generate the literature review to show the main PDF here.</p>`
     }
   `;
+}
+
+function downloadMantisCsv(csvPath, button) {
+  if (!csvPath) {
+    showToast("The Mantis-ready CSV is not available.");
+    return;
+  }
+  const download = document.createElement("a");
+  download.href = `/api/workspace-file?path=${encodeURIComponent(csvPath)}`;
+  download.download = csvPath.split("/").pop() || "mantis_ready.csv";
+  document.body.appendChild(download);
+  download.click();
+  download.remove();
+  const launchButton = button.closest(".mantis-actions")?.querySelector(".mantis-launch");
+  if (launchButton) {
+    launchButton.disabled = false;
+  }
+  showToast("Mantis-ready CSV downloaded.");
+}
+
+function launchMantis() {
+  window.open(
+    "https://mantis.csail.mit.edu/new-space/csv_synthesis/",
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
 
 function firstAuthorText(authors) {
@@ -718,6 +800,16 @@ function bindEvents() {
   });
 
   document.addEventListener("click", (event) => {
+    const downloadButton = event.target.closest(".mantis-download");
+    if (downloadButton) {
+      downloadMantisCsv(downloadButton.dataset.path, downloadButton);
+      return;
+    }
+    const mantisButton = event.target.closest(".mantis-launch");
+    if (mantisButton) {
+      launchMantis();
+      return;
+    }
     const button = event.target.closest(".path-button");
     if (button) {
       previewFile(button.dataset.path).catch(showError);

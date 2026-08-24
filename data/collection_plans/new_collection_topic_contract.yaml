@@ -1,0 +1,290 @@
+topic_id: ai_alzheimers_research
+research_topic:
+  title: Artificial Intelligence Applications in Alzheimer Disease Research
+  description: Exploration of how artificial intelligence methods are utilized in
+    research focused on Alzheimer's disease, including diagnostic tools, treatment
+    strategies, and data analysis.
+topic_structure:
+  anchor_topic_id: alzheimers_disease
+  anchor_reason: Alzheimer's disease is the core focus of this research topic and
+    is essential for screening relevant literature.
+  main_topics:
+  - topic_id: alzheimers_disease
+    label: Alzheimer's Disease
+    field: title
+    terms:
+    - Alzheimer's disease
+    - Alzheimer dementia
+    - AD
+    - Alzheimer disease
+    - senile dementia of the Alzheimer's type
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia
+    - dementia-related cognitive impairment
+    retrieval_terms:
+    - Alzheimer's disease
+    - AD
+    - Alzheimer dementia
+    - Alzheimer disease
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - dementia
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+    matching_terms:
+    - Alzheimer's disease
+    - Alzheimer dementia
+    - Alzheimer disease
+    - AD
+    - senile dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia
+    - MCI
+    - dementia-related cognitive impairment
+  - topic_id: artificial_intelligence
+    label: Artificial Intelligence
+    field: title
+    terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - deep learning
+    - computational intelligence
+    retrieval_terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - deep learning
+    matching_terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - ML
+    - deep learning
+    - neural networks
+  - topic_id: computational_methods
+    label: Computational Methods
+    field: title
+    terms:
+    - computational methods
+    - data mining
+    - bioinformatics
+    - predictive modeling
+    - machine learning
+    - ML
+    - artificial intelligence
+    - AI
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - statistical modeling
+    - network analysis
+    - systems biology
+    retrieval_terms:
+    - computational methods
+    - bioinformatics
+    - machine learning
+    - ML
+    - artificial intelligence
+    - AI
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - statistical modeling
+    - network analysis
+    - systems biology
+    matching_terms:
+    - computational methods
+    - data mining
+    - bioinformatics
+    - predictive modeling
+    - machine learning
+    - ML
+    - artificial intelligence
+    - AI
+    - deep learning
+    - supervised learning
+    - unsupervised learning
+    - statistical modeling
+    - network analysis
+    - systems biology
+  secondary_topics:
+    artificial_intelligence:
+    - secondary_topic_id: diagnostics
+      label: AI Diagnostics
+      field: title
+      terms:
+      - AI diagnostics
+      - AI in diagnostics
+      retrieval_terms:
+      - AI diagnostics
+      - artificial intelligence diagnostics
+      matching_terms:
+      - AI diagnostics
+      - artificial intelligence diagnostics
+    alzheimers_disease:
+    - secondary_topic_id: therapeutics
+      label: Therapeutics
+      field: title
+      terms:
+      - Alzheimer therapeutics
+      - treatment
+      - cholinergic treatment
+      - cholinesterase inhibitors
+      - donepezil
+      - rivastigmine
+      retrieval_terms:
+      - Alzheimer therapeutics
+      - cholinergic treatment
+      matching_terms:
+      - Alzheimer therapeutics
+      - cholinergic treatment
+      - cholinesterase inhibitors
+      - donepezil
+      - rivastigmine
+    computational_methods:
+    - secondary_topic_id: experimental_methods
+      label: Experimental methods
+      field: title
+      terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      retrieval_terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      matching_terms:
+      - experimental methods
+      - laboratory methods
+      - clinical methods
+      - wet lab methods
+scope:
+  include_criteria:
+  - Papers directly discussing AI applications in Alzheimer's disease research
+  - Papers focusing on AI techniques relevant to Alzheimer-related studies
+  - Review articles and meta-analyses concerning AI methodologies in Alzheimer's research
+  exclude_criteria:
+  - Papers that do not address Alzheimer's disease or AI methods
+  boundary_rules:
+  - Include borderline papers that may apply AI techniques to related neurodegenerative
+    diseases.
+  - Exclude irrelevant papers where the title and abstract indicate no connection
+    to Alzheimer's or AI.
+rule_based_screening:
+  include_terms:
+  - Alzheimer's disease
+  - AI
+  - artificial intelligence
+  - machine learning
+  exclude_terms: []
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for
+    primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of
+    the topic
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ''
+  categories:
+    diagnostic_methods:
+      required: true
+      values:
+      - ai_diagnostics
+      - traditional_diagnostics
+      description: Methods used for diagnostics in Alzheimer's disease research, grounded
+        in discussions of AI diagnostic applications.
+      selection: single
+    treatment_methods:
+      required: true
+      values:
+      - cholinergic_treatment
+      - donepezil
+      - rivastigmine
+      description: Methods of treatment or intervention for Alzheimer's disease based
+        on the review evidence.
+      selection: multi
+    cognitive_outcomes:
+      required: false
+      values:
+      - memory
+      - attention
+      - learning
+      description: Cognitive outcome measures reported in studies about Alzheimer's
+        disease interventions or technologies.
+      selection: multi
+    experimental_designs:
+      required: false
+      values:
+      - clinical_trials
+      - observational_studies
+      - systematic_reviews
+      description: Experimental designs inform the evaluation of AI applications in
+        Alzheimer's research.
+      selection: single
+    research_focus:
+      required: true
+      values:
+      - neuroimaging
+      - genetic_risk_factors
+      - biomarkers
+      description: Focus areas within Alzheimer's disease research, adjusted based
+        on relevant methodologies and factors.
+      selection: multi
+    risk_factors:
+      required: false
+      values:
+      - genetic_factors
+      - head_injuries
+      - vascular_diseases
+      - environmental_factors
+      description: Examined risk factors in Alzheimer's disease context based on literature
+        findings.
+      selection: multi
+    technology_types:
+      required: false
+      values:
+      - machine_learning
+      - deep_learning
+      - data_mining
+      description: Types of technologies or AI methods discussed within the context
+        of Alzheimer's disease research.
+      selection: multi
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: artificial intelligence Alzheimer's disease
+    reason: Direct exploration of AI use in Alzheimer's research.
+  - query: machine learning in Alzheimer's studies
+    reason: Focusing on machine learning applications specifically.
+  - query: AI techniques for dementia
+    reason: Expanding the concept to include dementia-related AI research.
+  - query: deep learning Alzheimer's disease
+    reason: Investigating the specific use of deep learning methods.
+  - query: AI applications in neurodegeneration
+    reason: Broader view on using AI across neurodegenerative contexts.
+  - query: computational methods in Alzheimer's disease research
+    reason: Focusing on the method aspect connected with Alzheimer's.
+  - query: AI diagnostics Alzheimer disease
+    reason: Exploring how AI is used for diagnostic purposes.
+  - query: data analysis Alzheimer's disease AI
+    reason: Focusing on AI in data analysis contexts for Alzheimer's.

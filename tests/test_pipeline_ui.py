@@ -93,9 +93,9 @@ def test_build_main_command_can_generate_literature_review(tmp_path: Path) -> No
 
 
 def test_ui_has_main_contract_dropdown() -> None:
-    html = (Path(__file__).resolve().parents[1] / "pipeline_ui/static/index.html").read_text(
-        encoding="utf-8"
-    )
+    static_dir = Path(__file__).resolve().parents[1] / "pipeline_ui" / "static"
+    html = (static_dir / "index.html").read_text(encoding="utf-8")
+    javascript = (static_dir / "app.js").read_text(encoding="utf-8")
 
     assert 'id="paperInputSelect"' in html
     assert 'id="mainContractSelect"' in html
@@ -105,6 +105,10 @@ def test_ui_has_main_contract_dropdown() -> None:
     assert 'id="categoryOverview"' in html
     assert 'id="mainGenerateReview"' in html
     assert 'id="reviewOutput"' in html
+    assert 'id="collectionGenerateReview"' in html
+    assert 'id="collectionReviewReviewLabelValues"' in html
+    assert "Download Mantis CSV" in javascript
+    assert "Open Mantis" in javascript
 
 
 def test_paper_list_summarizes_collected_papers(tmp_path: Path) -> None:
@@ -167,6 +171,51 @@ tagging:
         {"value": "neuroimaging", "label": "Neuroimaging"},
         {"value": "speech_language", "label": "Speech language"},
     ]
+
+
+def test_replay_job_uses_prepared_artifacts_without_running_commands(
+    tmp_path: Path,
+) -> None:
+    collection = "demo"
+    for relative_path in server.replay_artifact_paths(collection):
+        path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("prepared", encoding="utf-8")
+
+    job = server.Job(
+        id="replay-job",
+        commands=[],
+        log_path=tmp_path / "runs" / "replay-job" / "ui_process.log",
+        replay_collection=collection,
+    )
+
+    server.run_replay_job(job, "main", tmp_path, step_delay=0)
+
+    assert job.status == "succeeded"
+    assert job.return_codes == {"Prepared pipeline": 0}
+    assert "Pipeline complete." in job.log_path.read_text(encoding="utf-8")
+
+
+def test_replay_artifact_validation_lists_missing_files(tmp_path: Path) -> None:
+    with pytest.raises(server.UiError, match="demo_papers.csv"):
+        server.validate_replay_artifacts("demo", tmp_path)
+
+
+def test_review_outputs_exposes_mantis_ready_csv(tmp_path: Path) -> None:
+    csv_path = tmp_path / "data" / "processed" / "demo_mantis_ready.csv"
+    csv_path.parent.mkdir(parents=True)
+    csv_path.write_text("paper_id,title\np1,Example\n", encoding="utf-8")
+
+    outputs = server.review_outputs("demo", tmp_path)
+
+    assert outputs["mantisCsv"]["path"] == "data/processed/demo_mantis_ready.csv"
+    assert outputs["mantisCsv"]["exists"] is True
+
+
+def test_contract_replay_stops_for_user_review() -> None:
+    assert server.replay_step_names("contract") == list(
+        server.CONTRACT_BOOTSTRAP_PIPELINE
+    )
 
 
 def test_build_contract_generation_job_uses_collection_cli(tmp_path: Path) -> None:

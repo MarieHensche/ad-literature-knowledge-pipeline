@@ -1,0 +1,177 @@
+topic_id: artificial_intelligence_alzheimer_research
+research_topic:
+  title: Artificial Intelligence in Alzheimer's Disease Research
+  description: Exploring the applications of artificial intelligence in the research
+    and understanding of Alzheimer's disease.
+topic_structure:
+  anchor_topic_id: alzheimers_disease
+  anchor_reason: Alzheimer's disease is the core focus of this research direction.
+  main_topics:
+  - topic_id: alzheimers_disease
+    label: Alzheimer's Disease
+    field: title
+    terms:
+    - Alzheimer's disease
+    - AD
+    - Alzheimer
+    - Alzheimers
+    - Alzheimer disease
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+    retrieval_terms:
+    - Alzheimer's disease
+    - AD
+    - Alzheimer
+    - Alzheimer disease
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+    matching_terms:
+    - Alzheimer disease
+    - Alzheimer's
+    - Alzheimer's type dementia
+    - Alzheimer's disease
+    - AD
+    - dementia
+    - cognitive decline
+    - mild cognitive impairment
+    - MCI
+    - prodromal Alzheimer's disease
+    - preclinical Alzheimer's disease
+    - dementia-related cognitive impairment
+  - topic_id: artificial_intelligence
+    label: Artificial Intelligence
+    field: title
+    terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    - ML
+    - deep learning
+    - computational intelligence
+    retrieval_terms:
+    - artificial intelligence
+    - AI
+    - machine learning
+    matching_terms:
+    - AI tools
+    - AI applications
+    - AI methods
+  secondary_topics:
+    artificial_intelligence:
+    - secondary_topic_id: computer_vision
+      label: Computer Vision
+      field: title
+      terms:
+      - computer vision
+      - image analysis
+      - computerized imaging
+      - visual recognition
+      retrieval_terms:
+      - computer vision
+      - image analysis
+      matching_terms:
+      - visual processing
+      - image recognition methods
+    alzheimers_disease:
+    - secondary_topic_id: parkinsons_disease
+      label: Parkinson's disease
+      field: title
+      terms:
+      - Parkinson's disease
+      - Parkinson disease
+      - PD
+      retrieval_terms:
+      - Parkinson's disease
+      - Parkinson disease
+      matching_terms:
+      - Parkinson's disease
+      - Parkinson disease
+      - PD
+      - parkinsonism
+    - secondary_topic_id: cancer
+      label: Cancer
+      field: title
+      terms:
+      - cancer
+      - neoplasm
+      - tumor
+      retrieval_terms:
+      - cancer
+      - neoplasm
+      - tumor
+      matching_terms:
+      - cancer
+      - neoplasm
+      - tumor
+      - tumour
+scope:
+  include_criteria:
+  - Papers directly studying artificial intelligence applications in Alzheimer's research
+  - Studies exploring AI methodology as applied to Alzheimer's disease
+  - Review papers that summarize AI techniques related to Alzheimer's disease
+  exclude_criteria:
+  - Papers not addressing Alzheimer's disease or AI
+  boundary_rules:
+  - Include borderline papers that reference AI in a context relevant to Alzheimer's
+    disease.
+  - Exclude papers with irrelevant titles and abstracts unrelated to the focus.
+rule_based_screening:
+  include_terms:
+  - artificial intelligence
+  - AI
+  - Alzheimer's disease
+  - dementia
+  - cognitive decline
+  exclude_terms: []
+  exclude_wins: false
+candidate_screening:
+  missing_abstract_policy: include if title or metadata is plausibly relevant
+  borderline_policy: include
+  human_review_policy: include
+  review_policy: include reviews unless the research question explicitly asks for
+    primary studies only
+  tangential_topic_policy: include candidates that address one meaningful aspect of
+    the topic
+tagging:
+  fallback_policy:
+    prefer_unclear_when_allowed: false
+    prefer_mixed_or_unclear_when_unclear_missing: false
+    missing_information_value: ''
+  categories:
+    alzheimer_disease_research:
+      required: true
+      values:
+      - early_detection
+      - treatment_effectiveness
+      - diagnostic_methods
+      description: Provisional category for studies related to Alzheimer's disease.
+      selection: multi
+collection:
+  allowed_providers:
+  - openalex
+  preferred_provider: openalex
+  max_results_default: 50
+  exclude_openalex_review_type: false
+  search_queries:
+  - query: artificial intelligence Alzheimer disease
+    reason: Direct application of AI to Alzheimer's research
+  - query: AI methods Alzheimer disease
+    reason: Exploring AI methodologies relevant to Alzheimer's
+  - query: machine learning Alzheimer's disease
+    reason: Specific focus on machine learning in Alzheimer's research
+  - query: AI applications dementia
+    reason: Broader AI applications in dementia research
+  - query: cognitive decline AI
+    reason: AI's role in studying cognitive decline
+  - query: computer vision Alzheimer's disease
+    reason: AI's computer vision applications in Alzheimer's research

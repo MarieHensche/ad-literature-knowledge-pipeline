@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -39,6 +40,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 COLLECTION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$")
 SAFE_CONTRACT_DIRS = (Path("configs/topics"), Path("data/collection_plans"))
+DEMO_REPLAY_COLLECTION: str | None = None
 
 
 class UiError(ValueError):
@@ -66,6 +68,8 @@ class Job:
     return_codes: dict[str, int] = field(default_factory=dict)
     error: str | None = None
     pid: int | None = None
+    replay_collection: str | None = None
+    replay_workflow: str | None = None
 
 
 JOBS: dict[str, Job] = {}
@@ -599,6 +603,7 @@ def review_outputs(collection: str, root: Path = ROOT) -> dict[str, Any]:
     pdf_path = artifacts.literature_review_latex_dir / "main.pdf"
     return {
         "collection": collection,
+        "mantisCsv": path_summary(artifacts.mantis_ready_csv, root),
         "markdown": path_summary(artifacts.literature_review_md, root),
         "latexDir": path_summary(artifacts.literature_review_latex_dir, root),
         "pdf": path_summary(pdf_path, root),
@@ -722,6 +727,8 @@ def job_payload(job: Job, root: Path = ROOT) -> dict[str, Any]:
         "pid": job.pid,
         "returnCodes": job.return_codes,
         "error": job.error,
+        "replayCollection": job.replay_collection,
+        "replayWorkflow": job.replay_workflow,
         "logPath": relative_to_root(job.log_path, root),
         "log": read_log_tail(job.log_path),
         "commands": [
@@ -734,6 +741,105 @@ def job_payload(job: Job, root: Path = ROOT) -> dict[str, Any]:
             for command in job.commands
         ],
     }
+
+
+def replay_artifact_paths(collection: str) -> list[Path]:
+    return [
+        Path("data/raw") / f"{collection}_papers.csv",
+        Path("data/collection_plans") / f"{collection}_topic_contract.yaml",
+        Path("data/processed") / f"{collection}_mantis_ready.csv",
+        Path("data/processed") / f"{collection}_literature_review.md",
+        Path("data/processed")
+        / f"{collection}_literature_review_latex"
+        / "main.pdf",
+    ]
+
+
+def validate_replay_artifacts(collection: str, root: Path = ROOT) -> None:
+    missing = [
+        path.as_posix()
+        for path in replay_artifact_paths(collection)
+        if not (root / path).is_file()
+    ]
+    if missing:
+        raise UiError(
+            "Prepared demo artifacts are missing: " + ", ".join(missing)
+        )
+
+
+def replay_step_names(workflow: str) -> list[str]:
+    if workflow == "contract":
+        return list(CONTRACT_BOOTSTRAP_PIPELINE)
+    if workflow == "main":
+        return main_step_names(
+            review_tagging_categories=True,
+            generate_review=True,
+            review_review_label_values=True,
+        )
+    return [
+        "plan_search",
+        *COLLECTION_PIPELINE,
+        *main_step_names(
+            review_tagging_categories=True,
+            generate_review=True,
+            review_review_label_values=True,
+        ),
+    ]
+
+
+def run_replay_job(
+    job: Job,
+    workflow: str,
+    root: Path = ROOT,
+    step_delay: float = 0.45,
+) -> None:
+    collection = job.replay_collection
+    if not collection:
+        raise UiError("A replay collection is required.")
+
+    with JOBS_LOCK:
+        job.status = "running"
+        job.started_at = utc_now()
+
+    try:
+        validate_replay_artifacts(collection, root)
+        steps = replay_step_names(workflow)
+        job.log_path.parent.mkdir(parents=True, exist_ok=True)
+        with job.log_path.open("w", encoding="utf-8") as log_handle:
+            log_handle.write(f"Starting literature pipeline for {collection}\n")
+            for index, step_name in enumerate(steps, start=1):
+                log_handle.write(
+                    f"Running {step_name} ({index}/{len(steps)})\n"
+                )
+                log_handle.flush()
+                time.sleep(step_delay)
+                log_handle.write(f"Completed: {step_name}\n")
+                log_handle.flush()
+            if workflow == "contract":
+                log_handle.write("\nTopic contract ready for review.\n")
+                log_handle.write(
+                    "Contract: "
+                    f"data/collection_plans/{collection}_topic_contract.yaml\n"
+                )
+            else:
+                log_handle.write("\nPipeline complete.\n")
+                log_handle.write(
+                    f"Papers: data/raw/{collection}_papers.csv\n"
+                    f"Mantis CSV: data/processed/{collection}_mantis_ready.csv\n"
+                    "Literature review: "
+                    f"data/processed/{collection}_literature_review.md\n"
+                    "Main PDF: "
+                    f"data/processed/{collection}_literature_review_latex/main.pdf\n"
+                )
+        with JOBS_LOCK:
+            job.return_codes["Prepared pipeline"] = 0
+            job.status = "succeeded"
+            job.ended_at = utc_now()
+    except Exception as error:
+        with JOBS_LOCK:
+            job.status = "failed"
+            job.error = str(error)
+            job.ended_at = utc_now()
 
 
 def run_job(job: Job, root: Path = ROOT) -> None:
@@ -776,14 +882,41 @@ def run_job(job: Job, root: Path = ROOT) -> None:
             job.ended_at = utc_now()
 
 
-def start_job(payload: dict[str, Any], root: Path = ROOT) -> dict[str, Any]:
+def start_job(
+    payload: dict[str, Any],
+    root: Path = ROOT,
+    replay_collection: str | None = None,
+) -> dict[str, Any]:
     commands = build_job_commands(payload, root)
     first_run_id = commands[0].run_id
     log_path = root / "runs" / first_run_id / "ui_process.log"
-    job = Job(id=uuid4().hex[:12], commands=commands, log_path=log_path)
+    requested_collection = optional_text(payload, "collection")
+    active_replay = (
+        replay_collection
+        if replay_collection and requested_collection == replay_collection
+        else None
+    )
+    replay_workflow = (
+        require_text(payload, "workflow", "workflow") if active_replay else None
+    )
+    job = Job(
+        id=uuid4().hex[:12],
+        commands=commands,
+        log_path=log_path,
+        replay_collection=active_replay,
+        replay_workflow=replay_workflow,
+    )
     with JOBS_LOCK:
         JOBS[job.id] = job
-    thread = threading.Thread(target=run_job, args=(job, root), daemon=True)
+    if active_replay:
+        assert replay_workflow is not None
+        thread = threading.Thread(
+            target=run_replay_job,
+            args=(job, replay_workflow, root),
+            daemon=True,
+        )
+    else:
+        thread = threading.Thread(target=run_job, args=(job, root), daemon=True)
     thread.start()
     return job_payload(job, root)
 
@@ -837,7 +970,10 @@ class PipelineUiHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/contracts/save":
                 self.send_json(save_contract(payload))
             elif parsed.path == "/api/runs/start":
-                self.send_json(start_job(payload), HTTPStatus.ACCEPTED)
+                self.send_json(
+                    start_job(payload, replay_collection=DEMO_REPLAY_COLLECTION),
+                    HTTPStatus.ACCEPTED,
+                )
             else:
                 self.send_error_json("Not found.", HTTPStatus.NOT_FOUND)
         except UiError as error:
@@ -954,14 +1090,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the local pipeline UI.")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind.")
     parser.add_argument("--port", type=int, default=8765, help="Port to bind.")
+    parser.add_argument(
+        "--demo-replay",
+        metavar="COLLECTION",
+        help="Replay prepared artifacts for this collection instead of running it.",
+    )
     return parser
 
 
 def main() -> None:
+    global DEMO_REPLAY_COLLECTION
     args = build_parser().parse_args()
+    DEMO_REPLAY_COLLECTION = (
+        validate_collection(args.demo_replay) if args.demo_replay else None
+    )
+    if DEMO_REPLAY_COLLECTION:
+        validate_replay_artifacts(DEMO_REPLAY_COLLECTION)
     server = ThreadingHTTPServer((args.host, args.port), PipelineUiHandler)
     print(f"Pipeline UI: http://{args.host}:{args.port}")
     print(f"Workspace: {ROOT}")
+    if DEMO_REPLAY_COLLECTION:
+        print(f"Prepared demo replay: {DEMO_REPLAY_COLLECTION}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
