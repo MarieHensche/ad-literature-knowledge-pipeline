@@ -273,6 +273,25 @@ def render_extract_review_labels_prompt(
     )
 
 
+def render_extract_knowledge_findings_prompt(
+    topic_contract: dict[str, Any],
+    source: dict[str, Any],
+    evidence_excerpts: list[dict[str, Any]],
+    topic_ids: list[str],
+) -> str:
+    return render_template(
+        "extract_knowledge_findings.md",
+        {
+            "research_topic_json": json_block(
+                topic_contract.get("research_topic", {})
+            ),
+            "topic_ids_json": json_block(topic_ids),
+            "source_json": json_block(source),
+            "evidence_excerpts_json": json_block(evidence_excerpts),
+        },
+    )
+
+
 def render_tag_paper_with_review_prompt(
     paper: dict[str, str],
     config: dict[str, object],

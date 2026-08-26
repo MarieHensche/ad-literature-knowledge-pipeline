@@ -37,6 +37,16 @@ REVIEW_PIPELINE = [
     "assemble_literature_review",
 ]
 
+KNOWLEDGE_PIPELINE = [
+    "export_knowledge_sources",
+    "export_knowledge_evidence_excerpts",
+]
+
+KNOWLEDGE_FINDINGS_PIPELINE = [
+    *KNOWLEDGE_PIPELINE,
+    "extract_knowledge_findings",
+]
+
 COLLECTION_PIPELINE = [
     "plan_search",
     "fetch_candidates",

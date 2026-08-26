@@ -77,6 +77,45 @@ def read_paper_ids(path: Path) -> set[str]:
     return {row["paper_id"] for row in rows if row.get("paper_id")}
 
 
+def read_ordered_paper_ids(path: Path) -> list[str]:
+    _, rows = read_papers(path)
+    paper_ids = []
+    seen = set()
+    for row in rows:
+        paper_id = row.get("paper_id")
+        if not paper_id or paper_id in seen:
+            continue
+        paper_ids.append(paper_id)
+        seen.add(paper_id)
+    return paper_ids
+
+
+def limited_review_paper_ids(
+    papers: list[dict[str, str]],
+    review_papers_path: Path | None,
+    max_papers: int | None,
+) -> tuple[set[str] | None, int | None, int | None]:
+    if max_papers is not None and max_papers < 1:
+        raise ValueError("max_papers must be at least 1 when provided.")
+
+    if review_papers_path is not None:
+        available_ids = read_ordered_paper_ids(review_papers_path)
+    elif max_papers is not None:
+        available_ids = [
+            paper["paper_id"]
+            for paper in papers
+            if paper.get("paper_id")
+            and not review_extract.is_likely_review_paper(paper)
+        ]
+    else:
+        return None, None, None
+
+    selected_ids = (
+        available_ids[:max_papers] if max_papers is not None else available_ids
+    )
+    return set(selected_ids), len(available_ids), len(selected_ids)
+
+
 def categories_from_config(config: dict[str, object]) -> list[dict[str, object]]:
     categories = config.get("categories")
     if not isinstance(categories, list):
@@ -333,20 +372,29 @@ def run(
     review_config_path: Path | None = None,
     review_output_path: Path | None = None,
     review_papers_path: Path | None = None,
+    review_max_papers: int | None = None,
 ) -> StepResult:
     input_columns, all_papers = read_papers(papers_path)
-    papers = [paper for paper in all_papers if paper.get("scope_decision") == "include"]
+    papers = [
+        paper for paper in all_papers if paper.get("scope_decision") == "include"
+    ]
     config = load_json(config_path)
     rules = load_json(rules_path)
     topic_contract = load_topic_contract(topic_contract_path) if topic_contract_path else None
     review_config = load_json(review_config_path) if review_config_path else None
     if review_config is not None and review_output_path is None:
-        raise ValueError("review_output_path is required when review_config_path is set.")
-    review_paper_ids = (
-        read_paper_ids(review_papers_path)
-        if review_config is not None and review_papers_path is not None
-        else None
-    )
+        raise ValueError(
+            "review_output_path is required when review_config_path is set."
+        )
+    review_paper_ids = None
+    review_available_papers = None
+    review_selected_papers = None
+    if review_config is not None:
+        (
+            review_paper_ids,
+            review_available_papers,
+            review_selected_papers,
+        ) = limited_review_paper_ids(papers, review_papers_path, review_max_papers)
     llm_client = client or OpenAIResponsesClient()
     trace_writer = LLMTraceWriter(trace_dir) if trace_dir is not None else None
 
@@ -391,7 +439,9 @@ def run(
                 review_parsed = tagged.get("review_labels")
                 tagged = tagged.get("knowledge_tags")
                 if not isinstance(tagged, dict):
-                    raise ValueError("Combined response missing knowledge_tags object.")
+                    raise ValueError(
+                        "Combined response missing knowledge_tags object."
+                    )
             validate_tagged_row(tagged, config, rules)
             rows.append(flatten_tagged_row(paper, tagged, config))
             if review_config is not None and not skip_review_extraction:
@@ -420,9 +470,11 @@ def run(
             all_trace_paths.extend(trace_paths)
 
         except ValueError as error:
-            # LLM failed or validation failed - skip this paper and continue with warning
             error_msg = str(error)
-            warning = f"Failed to tag paper '{paper_id}' after retry (skipped): {error_msg}"
+            warning = (
+                f"Failed to tag paper '{paper_id}' after retry (skipped): "
+                f"{error_msg}"
+            )
             warnings.append(warning)
             print(f"  Warning: {warning}")
             # Paper is skipped, not added to rows
@@ -448,6 +500,12 @@ def run(
         row_counts["review_candidate_papers"] = len(papers)
         row_counts["review_skipped_review_papers"] = review_skipped_reviews
         row_counts["review_labeled_papers"] = len(review_rows)
+        if review_available_papers is not None:
+            row_counts["review_eligible_papers"] = review_available_papers
+        if review_selected_papers is not None:
+            row_counts["review_selected_papers"] = review_selected_papers
+        if review_max_papers is not None:
+            row_counts["review_max_papers"] = review_max_papers
 
     return StepResult(
         step_name=STEP.name,
@@ -511,6 +569,12 @@ def main() -> None:
         default=None,
         help="Optional review-eligible paper CSV used to exclude review articles.",
     )
+    parser.add_argument(
+        "--review-max-papers",
+        type=int,
+        default=None,
+        help="Maximum eligible papers to use for same-pass review labels.",
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -529,6 +593,7 @@ def main() -> None:
         review_config_path=Path(args.review_config) if args.review_config else None,
         review_output_path=Path(args.review_output) if args.review_output else None,
         review_papers_path=Path(args.review_papers) if args.review_papers else None,
+        review_max_papers=args.review_max_papers,
     )
 
     print(f"Tagged papers: {result.row_counts['tagged_papers']}")

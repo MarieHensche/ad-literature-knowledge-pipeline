@@ -42,7 +42,33 @@ REVIEW_TITLE_PATTERNS = [
         r"\brapid\s+reviews?\b",
         r"\breviews?\s+and\s+meta[-\s]?analys(?:is|es)\b",
         r"\bmeta[-\s]?analys(?:is|es)\b",
+        r"\bsurveys?\b",
+        r"\boverviews?\b",
+        r"\bcurrent\s+trends?\b",
+        r"\bfuture\s+perspectives?\b",
+        r"\bprogress,\s+challenges,\s+and\s+future\s+directions?\b",
+        r"\bchallenges\s+and\s+future\s+directions?\b",
+        r"\bstate[-\s]+of[-\s]+the[-\s]+art\b",
+        r"\bbibliometric\b",
+        r"\bscientometric\b",
         r"\breviews?\b",
+    ]
+]
+REVIEW_ABSTRACT_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        (
+            r"\bin\s+this\s+review,\s+we\s+"
+            r"(?:summarize|review|survey|discuss|examine|highlight|provide)\b"
+        ),
+        (
+            r"\bthis\s+review\s+"
+            r"(?:summarizes|reviews|surveys|discusses|examines|highlights|provides)\b"
+        ),
+        (
+            r"\bwe\s+(?:summarize|review|survey)\s+"
+            r"(?:recent|current|existing|the)\s+.*\bin\s+this\s+review\b"
+        ),
     ]
 ]
 REVIEW_METADATA_COLUMNS = [
@@ -82,6 +108,12 @@ def included_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
 def is_likely_review_paper(row: dict[str, str]) -> bool:
     title = normalize_space(row.get("title", ""))
     if title and any(pattern.search(title) for pattern in REVIEW_TITLE_PATTERNS):
+        return True
+
+    abstract = normalize_space(row.get("abstract", ""))
+    if abstract and any(
+        pattern.search(abstract) for pattern in REVIEW_ABSTRACT_PATTERNS
+    ):
         return True
 
     for column in REVIEW_METADATA_COLUMNS:

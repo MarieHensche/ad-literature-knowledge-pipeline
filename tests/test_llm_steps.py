@@ -5010,6 +5010,154 @@ def test_tag_papers_can_write_review_labels_in_same_llm_call(
     assert "Section-focused review evidence" in client.requests[0]["prompt"]
 
 
+def test_tag_papers_review_max_limits_same_pass_review_labels(
+    tmp_path: Path,
+) -> None:
+    papers_path = tmp_path / "scope.csv"
+    review_papers_path = tmp_path / "review_eligible.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "filled.csv"
+    review_config_path = tmp_path / "review_config.json"
+    review_output_path = tmp_path / "review_labels.csv"
+    full_text_path = tmp_path / "full_text.txt"
+    full_text_path.write_text(
+        "Methods\nThe authors used MRI classification.\n\n"
+        "Results\nThe model improved early detection.\n",
+        encoding="utf-8",
+    )
+    rows = [
+        {
+            "paper_id": "p1",
+            "title": "First MCI screening paper",
+            "year": "2024",
+            "doi": "10.123/one",
+            "abstract": "Screening for MCI.",
+            "authors": "A. Author",
+            "venue": "Journal",
+            "source": "test",
+            "full_text_text_path": str(full_text_path),
+            "scope_decision": "include",
+        },
+        {
+            "paper_id": "p2",
+            "title": "Second MCI screening paper",
+            "year": "2024",
+            "doi": "10.123/two",
+            "abstract": "Screening for MCI.",
+            "authors": "B. Author",
+            "venue": "Journal",
+            "source": "test",
+            "full_text_text_path": str(full_text_path),
+            "scope_decision": "include",
+        },
+    ]
+    fieldnames = [
+        "paper_id",
+        "title",
+        "year",
+        "doi",
+        "abstract",
+        "authors",
+        "venue",
+        "source",
+        "full_text_text_path",
+        "scope_decision",
+    ]
+    write_csv(papers_path, rows, fieldnames)
+    write_csv(review_papers_path, rows, fieldnames)
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "review_status",
+                "required": True,
+                "allowed_values": [{"value": "ai_tagged"}],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "review_status",
+                "selection": "single",
+                "required": True,
+                "fallback_value": "ai_tagged",
+                "reason": "Required.",
+            }
+        ]
+    }
+    contract = deepcopy(load_topic_contract(TOPIC_CONTRACT))
+    contract["review"] = {
+        "labels": {
+            "main_topic": {
+                "description": "Best topic-structure main topic.",
+                "value_mode": "controlled_fixed",
+                "selection": "single",
+                "values_from": "topic_structure.main_topics",
+                "evidence_sections": ["title", "abstract"],
+            },
+        }
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    rules_path.write_text(json.dumps(rules), encoding="utf-8")
+    review_config_path.write_text(
+        json.dumps(normalize_review_config(contract)),
+        encoding="utf-8",
+    )
+    client = StaticJSONClient(
+        [
+            {
+                "knowledge_tags": {
+                    "paper_id": "p1",
+                    "main_knowledge_claim": "The first paper screens for MCI.",
+                    "review_status": ["ai_tagged"],
+                },
+                "review_labels": {
+                    "paper_id": "p1",
+                    "labels": {"main_topic": ["early_detection"]},
+                    "evidence_sections_used": ["abstract"],
+                    "extraction_notes": [],
+                },
+            },
+            {
+                "paper_id": "p2",
+                "main_knowledge_claim": "The second paper screens for MCI.",
+                "review_status": ["ai_tagged"],
+            },
+        ]
+    )
+
+    result = run_tag_papers(
+        papers_path,
+        config_path,
+        rules_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+        review_config_path=review_config_path,
+        review_output_path=review_output_path,
+        review_papers_path=review_papers_path,
+        review_max_papers=1,
+    )
+
+    review_rows = list(
+        csv.DictReader(review_output_path.open(newline="", encoding="utf-8"))
+    )
+    assert result.row_counts["tagged_papers"] == 2
+    assert result.row_counts["review_eligible_papers"] == 2
+    assert result.row_counts["review_selected_papers"] == 1
+    assert result.row_counts["review_max_papers"] == 1
+    assert result.row_counts["review_labeled_papers"] == 1
+    assert [request["schema_name"] for request in client.requests] == [
+        "paper_tags_with_review",
+        "paper_tags",
+    ]
+    assert [row["paper_id"] for row in review_rows] == ["p1"]
+
+
 def test_validate_tagged_row_allows_optional_and_clears_inapplicable_values() -> None:
     config = {
         "categories": [

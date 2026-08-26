@@ -275,6 +275,108 @@ def test_assemble_literature_review_rejects_unknown_harvard_author(
         run(sections_path, output_path)
 
 
+def test_assemble_repairs_leading_qualifier_inside_parenthetical_citation(
+    tmp_path: Path,
+) -> None:
+    sections_path = tmp_path / "review_sections.json"
+    output_path = tmp_path / "literature_review.md"
+    diagnostic_json = tmp_path / "literature_review_citation_diagnostics.json"
+    diagnostic_md = tmp_path / "literature_review_citation_diagnostics.md"
+    write_sections(sections_path)
+    diagnostic_json.write_text("{}", encoding="utf-8")
+    diagnostic_md.write_text("old failure", encoding="utf-8")
+    payload = json.loads(sections_path.read_text(encoding="utf-8"))
+    payload["sections"][0]["body_markdown"] = (
+        "Multimodal models supported diagnosis "
+        "(e.g., Golovanevsky et al., 2022; Smith, 2022)."
+    )
+    payload["sections"][0]["citation_support"] = [
+        {"paper_id": "p1", "claim": "Multimodal models supported diagnosis."},
+        {"paper_id": "p2", "claim": "A second 2022 paper was cited."},
+    ]
+    payload["sections"][0]["cited_paper_ids"] = ["p1", "p2"]
+    payload["papers"] = [
+        {
+            "paper_id": "p1",
+            "title": "Multimodal attention diagnosis",
+            "year": "2022",
+            "doi": "10.123/golovanevsky",
+            "authors": "Golovanevsky; Eickhoff; Singh",
+            "venue": "Journal",
+        },
+        {
+            "paper_id": "p2",
+            "title": "Second paper",
+            "year": "2022",
+            "doi": "10.123/smith",
+            "authors": "Smith",
+            "venue": "Journal",
+        },
+    ]
+    sections_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    run(sections_path, output_path)
+
+    markdown = output_path.read_text(encoding="utf-8")
+    assert "e.g., (Golovanevsky et al., 2022; Smith, 2022)" in markdown
+    assert "(e.g., Golovanevsky et al., 2022)" not in markdown
+    assert not diagnostic_json.exists()
+    assert not diagnostic_md.exists()
+
+
+def test_assemble_writes_citation_diagnostics_for_invalid_harvard_text(
+    tmp_path: Path,
+) -> None:
+    sections_path = tmp_path / "review_sections.json"
+    output_path = tmp_path / "literature_review.md"
+    write_sections(sections_path)
+    payload = json.loads(sections_path.read_text(encoding="utf-8"))
+    payload["sections"][0]["body_markdown"] = (
+        "Multimodal models supported diagnosis "
+        "(e.g., Collins et al., 2022; Smith, 2022)."
+    )
+    payload["sections"][0]["citation_support"] = [
+        {"paper_id": "p1", "claim": "Multimodal models supported diagnosis."},
+        {"paper_id": "p2", "claim": "A second 2022 paper was cited."},
+    ]
+    payload["sections"][0]["cited_paper_ids"] = ["p1", "p2"]
+    payload["papers"] = [
+        {
+            "paper_id": "p1",
+            "title": "Multimodal attention diagnosis",
+            "year": "2022",
+            "doi": "10.123/golovanevsky",
+            "authors": "Golovanevsky; Eickhoff; Singh",
+            "venue": "Journal",
+        },
+        {
+            "paper_id": "p2",
+            "title": "Second paper",
+            "year": "2022",
+            "doi": "10.123/smith",
+            "authors": "Smith",
+            "venue": "Journal",
+        },
+    ]
+    sections_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"\(e\.g\., Collins et al\., 2022\)"):
+        run(sections_path, output_path)
+
+    diagnostic_json = tmp_path / "literature_review_citation_diagnostics.json"
+    diagnostic_md = tmp_path / "literature_review_citation_diagnostics.md"
+    assert diagnostic_json.exists()
+    assert diagnostic_md.exists()
+    diagnostic = json.loads(diagnostic_json.read_text(encoding="utf-8"))
+    assert diagnostic["invalid_citations"][0]["citation"] == (
+        "(e.g., Collins et al., 2022)"
+    )
+    assert diagnostic["invalid_citations"][0]["nearest_heading"] == "### Early detection"
+    assert "`(e.g., Collins et al., 2022)`" in diagnostic_md.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_assemble_literature_review_repairs_unique_year_harvard_typo(
     tmp_path: Path,
 ) -> None:
@@ -294,6 +396,44 @@ def test_assemble_literature_review_repairs_unique_year_harvard_typo(
     assert "(Smith and Jones, 2024)" in markdown
     assert "Smith and Jones (2024)" in markdown
     assert "Suk et al." not in markdown
+
+
+def test_assemble_repairs_section_local_harvard_typo_when_year_is_ambiguous(
+    tmp_path: Path,
+) -> None:
+    sections_path = tmp_path / "review_sections.json"
+    output_path = tmp_path / "literature_review.md"
+    write_sections(sections_path)
+    payload = json.loads(sections_path.read_text(encoding="utf-8"))
+    payload["sections"][0]["body_markdown"] = (
+        "MRI classification models improved early detection (Almond et al., 2024)."
+    )
+    payload["sections"].append(
+        {
+            "section_id": "other_evidence",
+            "title": "Other evidence",
+            "summary": "",
+            "body_markdown": "A second study contributed evidence (Doe, 2024).",
+            "key_points": [],
+            "methodological_patterns": [],
+            "limitations_or_gaps": [],
+            "citation_support": [
+                {"paper_id": "p2", "claim": "A second study contributed evidence."}
+            ],
+            "cited_paper_ids": ["p2"],
+            "quote_uses": [],
+        }
+    )
+    payload["papers"][1]["year"] = "2024"
+    payload["papers"][1]["doi"] = "10.123/two"
+    sections_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    run(sections_path, output_path)
+    markdown = output_path.read_text(encoding="utf-8")
+
+    assert "(Smith and Jones, 2024)" in markdown
+    assert "(Doe, 2024)" in markdown
+    assert "Almond et al." not in markdown
 
 
 def test_assemble_latex_handles_embedded_markdown_headings(

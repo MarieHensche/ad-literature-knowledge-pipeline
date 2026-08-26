@@ -6,9 +6,15 @@ from collections.abc import Callable
 from pathlib import Path
 from dotenv import load_dotenv
 
-from ad_lit_pipeline.core.artifacts import collection_artifacts, main_pipeline_artifacts
+from ad_lit_pipeline.core.artifacts import (
+    collection_artifacts,
+    knowledge_artifacts,
+    main_pipeline_artifacts,
+)
 from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
 from ad_lit_pipeline.core.registry import (
+    KNOWLEDGE_FINDINGS_PIPELINE,
+    KNOWLEDGE_PIPELINE,
     MAIN_PIPELINE,
     MAIN_PIPELINE_WITH_CALIBRATION,
     REVIEW_PIPELINE,
@@ -18,6 +24,11 @@ from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
 from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.steps.importers import bibtex, json_metadata, ris
+from ad_lit_pipeline.steps.knowledge import (
+    export_evidence_excerpts as knowledge_evidence_excerpts,
+    export_sources as knowledge_sources,
+    extract_findings as knowledge_findings,
+)
 from ad_lit_pipeline.steps.metadata import normalize
 from ad_lit_pipeline.steps.review import assemble_review as review_assemble
 from ad_lit_pipeline.steps.review import config as review_config
@@ -87,6 +98,7 @@ def run_normalize_metadata(args: argparse.Namespace) -> StepResult:
 
 def explain(collection: str) -> None:
     artifacts = main_pipeline_artifacts(collection)
+    knowledge_paths = knowledge_artifacts(collection)
     print("Main pipeline steps:")
     for step in MAIN_PIPELINE:
         print(f"  - {step}")
@@ -97,6 +109,13 @@ def explain(collection: str) -> None:
     print("Optional human review step:")
     print("  - review_tagging_categories")
     print()
+    print("Optional knowledge export steps:")
+    for step in KNOWLEDGE_PIPELINE:
+        print(f"  - {step}")
+    print()
+    print("Optional knowledge finding extraction step:")
+    print("  - extract_knowledge_findings")
+    print()
     print("Optional literature-review generation steps:")
     for step in REVIEW_PIPELINE:
         print(f"  - {step}")
@@ -105,6 +124,8 @@ def explain(collection: str) -> None:
     print()
     print("Conventional outputs:")
     for field, value in artifacts.__dict__.items():
+        print(f"  {field}: {value}")
+    for field, value in knowledge_paths.__dict__.items():
         print(f"  {field}: {value}")
 
 
@@ -121,7 +142,29 @@ def selected_main_pipeline(args: argparse.Namespace) -> list[str]:
     if review_steps_requested(args, requested_step):
         pipeline = pipeline_with_review_generation(pipeline, args, requested_step)
 
+    if knowledge_findings_requested(args, requested_step):
+        pipeline = pipeline_with_knowledge_findings(pipeline)
+    elif knowledge_steps_requested(args, requested_step):
+        pipeline = pipeline_with_knowledge_exports(pipeline)
+
     return pipeline
+
+
+def knowledge_steps_requested(
+    args: argparse.Namespace,
+    requested_step: str | None,
+) -> bool:
+    return args.export_knowledge or requested_step in KNOWLEDGE_PIPELINE
+
+
+def knowledge_findings_requested(
+    args: argparse.Namespace,
+    requested_step: str | None,
+) -> bool:
+    return (
+        args.extract_knowledge_findings
+        or requested_step == KNOWLEDGE_FINDINGS_PIPELINE[-1]
+    )
 
 
 def review_steps_requested(
@@ -143,6 +186,33 @@ def review_label_extraction_enabled(args: argparse.Namespace) -> bool:
         or args.extract_review_labels
         or args.review_review_label_values
     )
+
+
+def pipeline_with_knowledge_exports(pipeline: list[str]) -> list[str]:
+    """Insert knowledge exports immediately after full-text preparation."""
+    if all(step in pipeline for step in KNOWLEDGE_PIPELINE):
+        return list(pipeline)
+
+    insertion_index = pipeline.index("prepare_full_text") + 1
+    return [
+        *pipeline[:insertion_index],
+        *KNOWLEDGE_PIPELINE,
+        *pipeline[insertion_index:],
+    ]
+
+
+def pipeline_with_knowledge_findings(pipeline: list[str]) -> list[str]:
+    """Insert knowledge exports and finding extraction after full text."""
+    pipeline = pipeline_with_knowledge_exports(pipeline)
+    if "extract_knowledge_findings" in pipeline:
+        return list(pipeline)
+
+    insertion_index = pipeline.index("export_knowledge_evidence_excerpts") + 1
+    return [
+        *pipeline[:insertion_index],
+        "extract_knowledge_findings",
+        *pipeline[insertion_index:],
+    ]
 
 
 def pipeline_with_tagging_review(pipeline: list[str]) -> list[str]:
@@ -220,6 +290,7 @@ def build_step_functions(
     trace_dir: Path,
 ) -> dict[str, object]:
     artifacts = main_pipeline_artifacts(args.collection)
+    knowledge_paths = knowledge_artifacts(args.collection)
     collection_paths = collection_artifacts(args.collection)
     topic_contract_path = Path(args.topic_contract)
     config_path = Path(args.tagging_config) if args.tagging_config else None
@@ -239,6 +310,22 @@ def build_step_functions(
             Path(args.full_text_cache_dir).expanduser(),
             args.full_text_email,
             args.core_api_key,
+        ),
+        "export_knowledge_sources": lambda: knowledge_sources.run(
+            artifacts.scope_screened_full_text_csv,
+            knowledge_paths.sources_jsonl,
+        ),
+        "export_knowledge_evidence_excerpts": lambda: knowledge_evidence_excerpts.run(
+            artifacts.scope_screened_full_text_csv,
+            knowledge_paths.evidence_excerpts_jsonl,
+        ),
+        "extract_knowledge_findings": lambda: knowledge_findings.run(
+            knowledge_paths.sources_jsonl,
+            knowledge_paths.evidence_excerpts_jsonl,
+            knowledge_paths.findings_jsonl,
+            topic_contract_path,
+            model,
+            trace_dir=trace_dir,
         ),
         "calibrate_topic_contract": lambda: calibrate_topic_contract.run(
             artifacts.scope_screened_full_text_csv,
@@ -290,6 +377,7 @@ def build_step_functions(
                 if review_label_extraction_enabled(args)
                 else None
             ),
+            review_max_papers=args.review_max_papers,
         ),
         "audit_extraction": lambda: audit.run(
             artifacts.extraction_filled_csv,
@@ -443,6 +531,13 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
         print(f"Literature review LaTeX: {artifacts.literature_review_latex_dir}")
     elif args.extract_review_labels:
         print(f"Review labels CSV: {artifacts.review_labels_raw_csv}")
+    knowledge_paths = knowledge_artifacts(args.collection)
+    if "export_knowledge_sources" in selected:
+        print(f"Sources JSONL: {knowledge_paths.sources_jsonl}")
+    if "export_knowledge_evidence_excerpts" in selected:
+        print(f"Evidence excerpts JSONL: {knowledge_paths.evidence_excerpts_jsonl}")
+    if "extract_knowledge_findings" in selected:
+        print(f"Findings JSONL: {knowledge_paths.findings_jsonl}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -517,6 +612,22 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Pause before tagging-rule generation so the user can review and "
             "edit tagging categories and values."
+        ),
+    )
+    run_parser.add_argument(
+        "--export-knowledge",
+        action="store_true",
+        help=(
+            "Export knowledge-layer sources.jsonl and evidence_excerpts.jsonl "
+            "after full-text preparation."
+        ),
+    )
+    run_parser.add_argument(
+        "--extract-knowledge-findings",
+        action="store_true",
+        help=(
+            "Extract LLM-based findings.jsonl after exporting knowledge-layer "
+            "sources and evidence excerpts."
         ),
     )
     run_parser.add_argument(

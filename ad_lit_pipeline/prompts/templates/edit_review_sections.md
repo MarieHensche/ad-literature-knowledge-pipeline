@@ -17,6 +17,9 @@ readability without adding new evidence.
   250 words covering context, objective and scope, review approach and evidence
   base, major synthesis findings, supported limitations or gaps, and the main
   conclusion. It must contain no citations, quotations, headings, or bullets.
+- For `abstract`, return empty arrays for `cited_paper_ids`,
+  `citation_support`, and `quote_uses`; do not include citation or quotation
+  support metadata even when source evidence informed the summary.
 - Keep `cited_paper_ids`, `citation_support.paper_id`, and `quote_uses.paper_id`
   limited to paper ids present in the corresponding evidence section.
 - Use the Harvard citation strings implied by the structured paper metadata.

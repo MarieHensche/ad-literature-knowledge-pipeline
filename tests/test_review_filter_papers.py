@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 
+from ad_lit_pipeline.steps.review.extract_labels import is_likely_review_paper
 from ad_lit_pipeline.steps.review.filter_papers import run
 
 
@@ -93,3 +94,40 @@ def test_filter_review_papers_excludes_reviews_and_preserves_columns(
             "review_filter_decision": "retain",
         }
     ]
+
+
+def test_likely_review_detection_catches_review_like_title_and_abstract() -> None:
+    assert is_likely_review_paper(
+        {
+            "title": "Deep learning for Alzheimer's disease diagnosis: A survey",
+            "abstract": "",
+            "publication_type": "article",
+        }
+    )
+    assert is_likely_review_paper(
+        {
+            "title": (
+                "Automatic detection of Alzheimer's disease using deep learning: "
+                "Current trends and future perspectives"
+            ),
+            "abstract": "",
+            "publication_type": "article",
+        }
+    )
+    assert is_likely_review_paper(
+        {
+            "title": "Artificial intelligence for drug discovery in Alzheimer's",
+            "abstract": (
+                "In this review, we summarize AI-driven methodologies and "
+                "future directions."
+            ),
+            "publication_type": "article",
+        }
+    )
+    assert not is_likely_review_paper(
+        {
+            "title": "Primary validation of an Alzheimer's classifier",
+            "abstract": "The introduction reviews prior imaging classifiers.",
+            "publication_type": "article",
+        }
+    )

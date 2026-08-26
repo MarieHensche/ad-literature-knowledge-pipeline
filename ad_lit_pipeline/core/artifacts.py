@@ -35,6 +35,19 @@ class MainPipelineArtifacts:
 
 
 @dataclass(frozen=True)
+class KnowledgeArtifacts:
+    """Derived artifact paths for knowledge-layer outputs."""
+
+    sources_jsonl: Path
+    evidence_excerpts_jsonl: Path
+    findings_jsonl: Path
+    relationships_jsonl: Path
+    gaps_jsonl: Path
+    synthesis_claims_jsonl: Path
+    field_summary_json: Path
+
+
+@dataclass(frozen=True)
 class CollectionArtifacts:
     """Derived artifact paths for the collection workflow."""
 
@@ -176,4 +189,26 @@ def collection_artifacts(
             collection, "calibration_full_text_manifest.csv", base_dir
         ),
         papers_csv=raw_path(collection, "papers.csv", base_dir),
+    )
+
+
+def knowledge_artifacts(
+    collection: str,
+    base_dir: Path = Path("."),
+) -> KnowledgeArtifacts:
+    """Build all conventional knowledge-layer artifact paths."""
+    return KnowledgeArtifacts(
+        sources_jsonl=processed_path(collection, "sources.jsonl", base_dir),
+        evidence_excerpts_jsonl=processed_path(
+            collection, "evidence_excerpts.jsonl", base_dir
+        ),
+        findings_jsonl=processed_path(collection, "findings.jsonl", base_dir),
+        relationships_jsonl=processed_path(
+            collection, "relationships.jsonl", base_dir
+        ),
+        gaps_jsonl=processed_path(collection, "gaps.jsonl", base_dir),
+        synthesis_claims_jsonl=processed_path(
+            collection, "synthesis_claims.jsonl", base_dir
+        ),
+        field_summary_json=processed_path(collection, "field_summary.json", base_dir),
     )

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from difflib import get_close_matches
 import re
 import shutil
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
-from ad_lit_pipeline.io.json_io import read_json_object
+from ad_lit_pipeline.io.json_io import read_json_object, write_json
 from ad_lit_pipeline.steps.review.citations import (
     citation_sort_key,
     clean_text,
@@ -33,6 +34,10 @@ PAPER_ID_MARKER_PATTERN = re.compile(r"\[(?:p\d+|[A-Za-z0-9_.:/-]+)(?:\s*;\s*(?:
 AUTHOR_YEAR_CITATION_PATTERN = re.compile(r"\(([^()]*\b\d{4}[a-z]?\b[^()]*)\)")
 NARRATIVE_CITATION_PATTERN = re.compile(
     r"\b([A-Z][A-Za-z'’-]+(?: et al\.| and [A-Z][A-Za-z'’-]+)?) \((\d{4}[a-z]?)\)"
+)
+CITATION_LEADING_QUALIFIER_PATTERN = re.compile(
+    r"^(?P<qualifier>e\.g\.|eg|for example|for instance|see|cf\.),?\s+",
+    re.IGNORECASE,
 )
 LATEX_SPECIAL_CHARS = {
     "\\": r"\textbackslash{}",
@@ -766,11 +771,10 @@ def allowed_harvard_narrative_texts(payload: dict[str, Any]) -> set[str]:
     return allowed
 
 
-def citation_text_by_year(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
-    papers = payload.get("papers", [])
+def citation_text_by_year_for_papers(
+    papers: list[Any],
+) -> dict[str, dict[str, str]]:
     by_year: dict[str, list[dict[str, str]]] = {}
-    if not isinstance(papers, list):
-        return {}
     for paper in papers:
         if not isinstance(paper, dict):
             continue
@@ -792,11 +796,71 @@ def citation_text_by_year(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
     }
 
 
-def repair_harvard_citations(markdown: str, payload: dict[str, Any]) -> str:
+def paper_lookup_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    papers = payload.get("papers", [])
+    if not isinstance(papers, list):
+        return {}
+    lookup = {}
+    for paper in papers:
+        if not isinstance(paper, dict):
+            continue
+        paper_id = clean_text(paper.get("paper_id"))
+        if paper_id:
+            lookup[paper_id] = paper
+    return lookup
+
+
+def citation_text_by_year_for_paper_ids(
+    payload: dict[str, Any],
+    paper_ids: set[str],
+) -> dict[str, dict[str, str]]:
+    lookup = paper_lookup_by_id(payload)
+    return citation_text_by_year_for_papers(
+        [lookup[paper_id] for paper_id in paper_ids if paper_id in lookup]
+    )
+
+
+def citation_text_by_year(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    papers = payload.get("papers", [])
+    if not isinstance(papers, list):
+        return {}
+    return citation_text_by_year_for_papers(papers)
+
+
+def repair_harvard_citations(
+    markdown: str,
+    payload: dict[str, Any],
+    section: dict[str, Any] | None = None,
+) -> str:
     unique_years = citation_text_by_year(payload)
+    section_unique_years = (
+        citation_text_by_year_for_paper_ids(
+            payload,
+            referenced_paper_ids([section]),
+        )
+        if isinstance(section, dict)
+        else {}
+    )
     allowed_inline = allowed_harvard_citation_texts(payload)
     allowed_narrative = allowed_harvard_narrative_texts(payload)
     prose, separator, references = markdown.partition("\n## References")
+
+    def replacement_for_year(year: str, key: str) -> str:
+        section_replacement = section_unique_years.get(year, {}).get(key)
+        if section_replacement:
+            return section_replacement
+        return unique_years.get(year, {}).get(key, "")
+
+    def qualifier_and_citation(part: str) -> tuple[str, str]:
+        match = CITATION_LEADING_QUALIFIER_PATTERN.match(part)
+        if match is None:
+            return "", part
+        qualifier = match.group("qualifier").casefold()
+        if qualifier == "eg":
+            qualifier = "e.g."
+        if qualifier in {"e.g.", "for example", "for instance"}:
+            qualifier = f"{qualifier},"
+        return qualifier, part[match.end():].strip()
 
     def repair_inline(match: re.Match[str]) -> str:
         inner = clean_text(match.group(1))
@@ -805,18 +869,34 @@ def repair_harvard_citations(markdown: str, payload: dict[str, Any]) -> str:
         parts = [clean_text(part) for part in inner.split(";")]
         repaired_parts = []
         changed = False
+        leading_qualifier = ""
         for part in parts:
+            qualifier, unqualified_part = qualifier_and_citation(part)
+            if qualifier and not repaired_parts and unqualified_part in allowed_inline:
+                if not leading_qualifier:
+                    leading_qualifier = qualifier
+                repaired_parts.append(unqualified_part)
+                changed = True
+                continue
+
             year_match = re.search(r"\b(\d{4}[a-z]?)\b", part)
             if not year_match or part in allowed_inline:
                 repaired_parts.append(part)
                 continue
-            replacement = unique_years.get(year_match.group(1), {}).get("inline")
-            if replacement and replacement.startswith("(") and replacement.endswith(")"):
+            replacement = replacement_for_year(year_match.group(1), "inline")
+            if (
+                replacement
+                and replacement.startswith("(")
+                and replacement.endswith(")")
+            ):
                 repaired_parts.append(replacement[1:-1])
                 changed = True
             else:
                 repaired_parts.append(part)
-        return f"({'; '.join(repaired_parts)})" if changed else match.group(0)
+        if not changed:
+            return match.group(0)
+        repaired = f"({'; '.join(repaired_parts)})"
+        return f"{leading_qualifier} {repaired}" if leading_qualifier else repaired
 
     repaired = AUTHOR_YEAR_CITATION_PATTERN.sub(repair_inline, prose)
 
@@ -824,15 +904,19 @@ def repair_harvard_citations(markdown: str, payload: dict[str, Any]) -> str:
         citation = f"{match.group(1)} ({match.group(2)})"
         if citation in allowed_narrative:
             return citation
-        return unique_years.get(match.group(2), {}).get("narrative", citation)
+        return replacement_for_year(match.group(2), "narrative") or citation
 
     repaired = NARRATIVE_CITATION_PATTERN.sub(repair_narrative, repaired)
     return repaired + separator + references
 
 
-def repaired_text_value(value: object, payload: dict[str, Any]) -> str:
+def repaired_text_value(
+    value: object,
+    payload: dict[str, Any],
+    section: dict[str, Any] | None = None,
+) -> str:
     text = clean_text(value)
-    return repair_harvard_citations(text, payload) if text else ""
+    return repair_harvard_citations(text, payload, section) if text else ""
 
 
 def payload_with_repaired_citations(payload: dict[str, Any]) -> dict[str, Any]:
@@ -845,44 +929,246 @@ def payload_with_repaired_citations(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         for key in ["title", "summary", "body_markdown"]:
             if key in section:
-                section[key] = repaired_text_value(section.get(key), payload)
+                section[key] = repaired_text_value(
+                    section.get(key),
+                    payload,
+                    section,
+                )
         for key in ["key_points", "methodological_patterns", "limitations_or_gaps"]:
             values = section.get(key)
             if isinstance(values, list):
                 section[key] = [
-                    repaired_text_value(value, payload)
+                    repaired_text_value(value, payload, section)
                     for value in values
                 ]
     return repaired
 
 
 def validate_harvard_citations(markdown: str, payload: dict[str, Any]) -> None:
+    invalid = harvard_citation_diagnostics(markdown, payload)
+    if invalid:
+        raise_harvard_citation_error(invalid)
+
+
+def citation_context(text: str, start: int, end: int, radius: int = 140) -> str:
+    context_start = max(0, start - radius)
+    context_end = min(len(text), end + radius)
+    prefix = "..." if context_start > 0 else ""
+    suffix = "..." if context_end < len(text) else ""
+    return clean_text(prefix + text[context_start:context_end] + suffix)
+
+
+def nearest_markdown_heading(text: str, start: int) -> str:
+    headings = [
+        line.strip()
+        for line in text[:start].splitlines()
+        if line.lstrip().startswith("#")
+    ]
+    return headings[-1] if headings else ""
+
+
+def suggested_harvard_citation(
+    citation: str,
+    allowed: set[str],
+    allowed_narrative: set[str],
+) -> str:
+    if citation in allowed or citation in allowed_narrative:
+        return citation
+
+    inner = (
+        citation[1:-1]
+        if citation.startswith("(") and citation.endswith(")")
+        else citation
+    )
+    without_qualifier = CITATION_LEADING_QUALIFIER_PATTERN.sub("", inner).strip()
+    if without_qualifier != inner:
+        if without_qualifier in allowed:
+            return f"({without_qualifier})"
+        if without_qualifier in allowed_narrative:
+            return without_qualifier
+
+    parenthetical_candidates = {f"({citation})" for citation in allowed}
+    candidates = sorted(parenthetical_candidates | allowed_narrative)
+    matches = get_close_matches(citation, candidates, n=1, cutoff=0.82)
+    return matches[0] if matches else ""
+
+
+def harvard_citation_diagnostics(
+    markdown: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
     allowed = allowed_harvard_citation_texts(payload)
     allowed_narrative = allowed_harvard_narrative_texts(payload)
     if not allowed and not allowed_narrative:
-        return
+        return []
 
     prose = markdown.split("\n## References", 1)[0]
-    invalid = set()
+    invalid = []
+    seen = set()
     for match in AUTHOR_YEAR_CITATION_PATTERN.finditer(prose):
         inner = clean_text(match.group(1))
         if re.fullmatch(r"\d{4}[a-z]?", inner):
             continue
         parts = [clean_text(part) for part in inner.split(";")]
         for part in parts:
-            if part and re.search(r"\b\d{4}[a-z]?\b", part) and part not in allowed:
-                invalid.add(f"({part})")
+            if (
+                part
+                and re.search(r"\b\d{4}[a-z]?\b", part)
+                and part not in allowed
+            ):
+                citation = f"({part})"
+                key = ("parenthetical", citation, match.start())
+                if key in seen:
+                    continue
+                seen.add(key)
+                invalid.append(
+                    {
+                        "citation": citation,
+                        "citation_kind": "parenthetical",
+                        "matched_text": match.group(0),
+                        "nearest_heading": nearest_markdown_heading(
+                            prose,
+                            match.start(),
+                        ),
+                        "suggested_exact_citation": suggested_harvard_citation(
+                            citation,
+                            allowed,
+                            allowed_narrative,
+                        ),
+                        "context": citation_context(
+                            prose,
+                            match.start(),
+                            match.end(),
+                        ),
+                    }
+                )
     for match in NARRATIVE_CITATION_PATTERN.finditer(prose):
         citation = f"{match.group(1)} ({match.group(2)})"
         if citation not in allowed_narrative:
-            invalid.add(citation)
+            key = ("narrative", citation, match.start())
+            if key in seen:
+                continue
+            seen.add(key)
+            invalid.append(
+                {
+                    "citation": citation,
+                    "citation_kind": "narrative",
+                    "matched_text": match.group(0),
+                    "nearest_heading": nearest_markdown_heading(
+                        prose,
+                        match.start(),
+                    ),
+                    "suggested_exact_citation": suggested_harvard_citation(
+                        citation,
+                        allowed,
+                        allowed_narrative,
+                    ),
+                    "context": citation_context(prose, match.start(), match.end()),
+                }
+            )
 
-    if invalid:
-        raise ValueError(
-            "Literature review contains Harvard citations that do not match "
-            "structured paper metadata: "
-            + ", ".join(sorted(invalid))
+    return invalid
+
+
+def raise_harvard_citation_error(invalid: list[dict[str, str]]) -> None:
+    citations = sorted({record["citation"] for record in invalid})
+    raise ValueError(
+        "Literature review contains Harvard citations that do not match "
+        "structured paper metadata: "
+        + ", ".join(citations)
+    )
+
+
+def citation_diagnostics_paths(output_path: Path) -> tuple[Path, Path]:
+    stem = output_path.stem
+    return (
+        output_path.with_name(f"{stem}_citation_diagnostics.json"),
+        output_path.with_name(f"{stem}_citation_diagnostics.md"),
+    )
+
+
+def clear_harvard_citation_diagnostics(output_path: Path) -> None:
+    for path in citation_diagnostics_paths(output_path):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+
+
+def write_harvard_citation_diagnostics(
+    review_sections_path: Path,
+    output_path: Path,
+    markdown: str,
+    payload: dict[str, Any],
+    invalid: list[dict[str, str]],
+) -> dict[str, Path]:
+    json_path, markdown_path = citation_diagnostics_paths(output_path)
+    allowed_inline = sorted(
+        f"({citation})" for citation in allowed_harvard_citation_texts(payload)
+    )
+    allowed_narrative = sorted(allowed_harvard_narrative_texts(payload))
+    diagnostic_payload = {
+        "step": STEP.name,
+        "failure_type": "invalid_harvard_citation",
+        "review_sections_json": str(review_sections_path),
+        "attempted_output_markdown": str(output_path),
+        "invalid_citations": invalid,
+        "allowed_parenthetical_citations": allowed_inline,
+        "allowed_narrative_citations": allowed_narrative,
+        "likely_cause": (
+            "Generated prose placed extra wording inside a Harvard citation, "
+            "or used an author-year string that is not present in the structured "
+            "paper metadata."
+        ),
+    }
+    write_json(json_path, diagnostic_payload)
+
+    lines = [
+        "# Literature Review Citation Diagnostics",
+        "",
+        f"Step: `{STEP.name}`",
+        f"Review sections JSON: `{review_sections_path}`",
+        f"Attempted Markdown output: `{output_path}`",
+        "",
+        "## Invalid Citations",
+        "",
+    ]
+    for index, record in enumerate(invalid, start=1):
+        suggestion = record.get("suggested_exact_citation") or "none"
+        lines.extend(
+            [
+                f"{index}. Citation: `{record['citation']}`",
+                f"   Kind: `{record['citation_kind']}`",
+                f"   Matched text: `{record['matched_text']}`",
+                f"   Nearest heading: `{record.get('nearest_heading') or 'unknown'}`",
+                f"   Suggested exact citation: `{suggestion}`",
+                f"   Context: {record['context']}",
+                "",
+            ]
         )
+    lines.extend(
+        [
+            "## Why This Failed",
+            "",
+            (
+                "The assembler validates generated Harvard citations against the "
+                "structured citation metadata. Extra words inside the parentheses, "
+                "such as `e.g.,`, make the citation fail even when the underlying "
+                "paper exists."
+            ),
+            "",
+            "## Allowed Parenthetical Citations",
+            "",
+        ]
+    )
+    lines.extend(f"- `{citation}`" for citation in allowed_inline)
+    lines.extend(["", "## Allowed Narrative Citations", ""])
+    lines.extend(f"- `{citation}`" for citation in allowed_narrative)
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {
+        "citation_diagnostics_json": json_path,
+        "citation_diagnostics_md": markdown_path,
+    }
 
 
 def run(
@@ -892,18 +1178,29 @@ def run(
 ) -> StepResult:
     payload = read_json_object(review_sections_path)
     payload, trim_metadata, warnings = trim_section_references(payload)
-    coverage = validate_citation_coverage(payload)
-    markdown = assemble_markdown(payload)
-    markdown = repair_harvard_citations(markdown, payload)
+    output_payload = payload_with_repaired_citations(payload)
+    coverage = validate_citation_coverage(output_payload)
+    markdown = assemble_markdown(output_payload)
+    markdown = repair_harvard_citations(markdown, output_payload)
     validate_markdown(markdown)
-    validate_harvard_citations(markdown, payload)
+    invalid_citations = harvard_citation_diagnostics(markdown, output_payload)
+    if invalid_citations:
+        write_harvard_citation_diagnostics(
+            review_sections_path,
+            output_path,
+            markdown,
+            output_payload,
+            invalid_citations,
+        )
+        raise_harvard_citation_error(invalid_citations)
+    clear_harvard_citation_diagnostics(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(markdown, encoding="utf-8")
-    sections = payload.get("sections", [])
-    references = ordered_reference_papers(payload)
+    sections = output_payload.get("sections", [])
+    references = ordered_reference_papers(output_payload)
     outputs = {"literature_review_md": output_path}
     if latex_dir is not None:
-        write_latex_package(payload_with_repaired_citations(payload), latex_dir, references)
+        write_latex_package(output_payload, latex_dir, references)
         outputs["literature_review_latex_dir"] = latex_dir
     cited_ids = referenced_paper_ids(
         [section for section in sections if isinstance(section, dict)]

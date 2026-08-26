@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from ad_lit_pipeline.llm.client import StaticJSONClient
 from ad_lit_pipeline.steps.review.edit_sections import run
 
@@ -139,6 +141,68 @@ def write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def abstract_evidence_map_payload() -> dict[str, object]:
+    payload = evidence_map_payload()
+    payload["sections"] = [
+        {
+            "section_id": "abstract",
+            "section_type": "abstract",
+            "paper_ids": ["p1"],
+            "paper_count": 1,
+            "controlled_value_counts": {},
+            "text_evidence": {},
+            "quotes": [],
+        }
+    ]
+    return payload
+
+
+def abstract_draft_sections_payload() -> dict[str, object]:
+    payload = draft_sections_payload()
+    payload["sections"] = [
+        {
+            "section_id": "abstract",
+            "title": "Abstract",
+            "summary": "",
+            "body_markdown": "This narrative review summarizes one paper.",
+            "key_points": [],
+            "methodological_patterns": [],
+            "limitations_or_gaps": [],
+            "citation_support": [],
+            "cited_paper_ids": [],
+            "quote_uses": [],
+        }
+    ]
+    return payload
+
+
+def edited_abstract_payload(body: str) -> dict[str, object]:
+    return {
+        "sections": [
+            {
+                "section_id": "abstract",
+                "title": "Abstract",
+                "summary": "",
+                "body_markdown": body,
+                "key_points": [],
+                "methodological_patterns": [],
+                "limitations_or_gaps": [],
+                "citation_support": [
+                    {"paper_id": "p1", "claim": "The review used one paper."}
+                ],
+                "cited_paper_ids": ["p1"],
+                "quote_uses": [
+                    {
+                        "paper_id": "p1",
+                        "quote": "classification improved",
+                        "reason": "supports finding",
+                    }
+                ],
+            }
+        ]
+    }
+
+
 def test_edit_review_sections_writes_validated_sections(tmp_path: Path) -> None:
     evidence_path = tmp_path / "evidence.json"
     sections_path = tmp_path / "sections.json"
@@ -168,9 +232,71 @@ def test_edit_review_sections_writes_validated_sections(tmp_path: Path) -> None:
     assert client.requests[0]["call_id"] == "edit_review_methodology"
     assert client.requests[1]["call_id"] == "edit_conclusion"
     assert "Do not invent or alter author names" in client.requests[0]["prompt"]
+    assert "For `abstract`, return empty arrays" in client.requests[0]["prompt"]
     assert payload["sections"][0]["summary"] == "The evidence base was small."
     assert payload["sections"][1]["section_id"] == "conclusion"
     assert payload["source_review_sections"] == str(sections_path)
+
+
+def test_edit_review_sections_drops_abstract_support_metadata(
+    tmp_path: Path,
+) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    sections_path = tmp_path / "sections.json"
+    output_path = tmp_path / "edited.json"
+    write_json(evidence_path, abstract_evidence_map_payload())
+    write_json(sections_path, abstract_draft_sections_payload())
+    client = StaticJSONClient(
+        [
+            edited_abstract_payload(
+                "This narrative review summarizes evidence about AI-enabled "
+                "Alzheimer's disease research without citing individual papers."
+            )
+        ]
+    )
+
+    result = run(evidence_path, sections_path, output_path, "test-model", client=client)
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    section = payload["sections"][0]
+
+    assert section["cited_paper_ids"] == []
+    assert section["citation_support"] == []
+    assert section["quote_uses"] == []
+    assert any("Dropped 1 quote_uses item" in warning for warning in result.warnings)
+
+
+def test_edit_review_sections_writes_diagnostics_on_validation_failure(
+    tmp_path: Path,
+) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    sections_path = tmp_path / "sections.json"
+    output_path = tmp_path / "edited.json"
+    diagnostics_json = tmp_path / "edited_edit_diagnostics.json"
+    diagnostics_md = tmp_path / "edited_edit_diagnostics.md"
+    write_json(evidence_path, abstract_evidence_map_payload())
+    write_json(sections_path, abstract_draft_sections_payload())
+    client = StaticJSONClient(
+        [edited_abstract_payload("This abstract cites one study (Smith, 2024).")]
+    )
+
+    with pytest.raises(ValueError, match="Diagnostics"):
+        run(
+            evidence_path,
+            sections_path,
+            output_path,
+            "test-model",
+            client=client,
+            trace_dir=tmp_path / "traces",
+        )
+
+    assert diagnostics_json.exists()
+    assert diagnostics_md.exists()
+    diagnostics = json.loads(diagnostics_json.read_text(encoding="utf-8"))
+    assert diagnostics["failed_section_id"] == "abstract"
+    assert diagnostics["validation_error"] == (
+        "Abstract body must not contain Harvard citations."
+    )
+    assert "`abstract`" in diagnostics_md.read_text(encoding="utf-8")
 
 
 def test_edit_review_sections_drops_unknown_paper_id(tmp_path: Path) -> None:

@@ -10,6 +10,8 @@ packet.
 - Write concise academic prose in Markdown.
 - Use natural Harvard author-year inline citations from `citation_papers`,
   such as `(Smith et al., 2021)`.
+- Use the exact `harvard_inline` or `harvard_narrative` strings supplied in
+  `citation_papers`; do not compose author-year citations from memory.
 - Do not use internal paper-id markers such as `[p1]`.
 - Cite factual claims naturally without citation clutter.
 - Direct quotations may only come from `quotes` in the section packet.

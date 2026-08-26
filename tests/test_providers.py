@@ -76,6 +76,43 @@ def test_openalex_url_uses_query_and_supported_filters() -> None:
     assert "mailto=a%40test" in url
 
 
+def test_openalex_url_prefers_exact_provider_publication_dates() -> None:
+    plan = openalex_plan()
+    plan["filters"]["year_to"] = 2026
+    plan["provider_specific_plan"]["filters"] = [
+        {
+            "name": "from_publication_date",
+            "value": "2020-01-01",
+            "reason": "Exact start date.",
+        },
+        {
+            "name": "to_publication_date",
+            "value": "2026-08-24",
+            "reason": "Exact end date.",
+        },
+    ]
+
+    url = build_openalex_url(plan, page=1, per_page=50, mailto=None)
+
+    assert "from_publication_date%3A2020-01-01" in url
+    assert "to_publication_date%3A2026-08-24" in url
+    assert "to_publication_date%3A2026-12-31" not in url
+
+
+def test_openalex_url_rejects_malformed_provider_publication_date() -> None:
+    plan = openalex_plan()
+    plan["provider_specific_plan"]["filters"] = [
+        {
+            "name": "to_publication_date",
+            "value": "2026-8-24",
+            "reason": "Malformed exact end date.",
+        }
+    ]
+
+    with pytest.raises(ValueError, match="must use YYYY-MM-DD"):
+        build_openalex_url(plan, page=1, per_page=50, mailto=None)
+
+
 def test_openalex_url_uses_api_key_from_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

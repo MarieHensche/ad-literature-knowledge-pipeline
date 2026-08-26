@@ -27,6 +27,23 @@ USER_AGENT = "ad-literature-knowledge-pipeline/0.1"
 OPENALEX_FETCH_RETRIES = 6
 OPENALEX_RETRY_SLEEP_SECONDS = 1.0
 OPENALEX_TRANSIENT_HTTP_CODES = {500, 502, 503, 504}
+PROVIDER_FILTER_ALIASES = {
+    "from_publication_date": "from_publication_date",
+    "to_publication_date": "to_publication_date",
+    "publication_year": "publication_year",
+    "open_access": "open_access.is_oa",
+    "open_access_only": "open_access.is_oa",
+    "open_access.is_oa": "open_access.is_oa",
+    "type": "type",
+    "language": "language",
+    "has_abstract": "has_abstract",
+    "has_full_text": "has_fulltext",
+    "has_fulltext": "has_fulltext",
+    "has_pdf_url": "has_pdf_url",
+    "has_content_pdf": "has_content.pdf",
+    "has_content.pdf": "has_content.pdf",
+}
+DATE_PROVIDER_FILTERS = {"from_publication_date", "to_publication_date"}
 
 
 def normalize_doi(value: object) -> str:
@@ -202,40 +219,119 @@ def full_text_locations_from_work(work: dict[str, object]) -> list[dict[str, obj
     return deduped
 
 
-def active_filter_list_from_plan(plan: dict[str, object]) -> list[str]:
-    filters = plan.get("filters")
-    if not isinstance(filters, dict):
+def clean_provider_filter_value(value: object) -> str:
+    return str(value or "").replace(",", " ").strip()
+
+
+def validate_provider_date_filter(name: str, value: str) -> None:
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"provider_specific_plan filter {name} must use YYYY-MM-DD: {value}"
+        ) from exc
+
+
+def normalize_bool_provider_filter_value(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"true", "false"}:
+        return normalized
+    return value
+
+
+def provider_specific_filter_list_from_plan(
+    plan: dict[str, object],
+) -> list[str]:
+    provider_plan = plan.get("provider_specific_plan")
+    if not isinstance(provider_plan, dict):
+        return []
+
+    provider_filters = provider_plan.get("filters")
+    if not isinstance(provider_filters, list):
         return []
 
     openalex_filters = []
+    seen = set()
+    for item in provider_filters:
+        if not isinstance(item, dict):
+            continue
+
+        raw_name = str(item.get("name") or "").strip()
+        name = PROVIDER_FILTER_ALIASES.get(raw_name)
+        if not name:
+            continue
+
+        value = clean_provider_filter_value(item.get("value"))
+        if not value:
+            continue
+
+        if name in DATE_PROVIDER_FILTERS:
+            validate_provider_date_filter(name, value)
+        else:
+            value = normalize_bool_provider_filter_value(value)
+
+        openalex_filter = f"{name}:{value}"
+        if openalex_filter in seen:
+            continue
+        openalex_filters.append(openalex_filter)
+        seen.add(openalex_filter)
+
+    return openalex_filters
+
+
+def filter_names(filters: list[str]) -> set[str]:
+    return {item.split(":", 1)[0] for item in filters if ":" in item}
+
+
+def active_filter_list_from_plan(plan: dict[str, object]) -> list[str]:
+    filters = plan.get("filters")
+    if not isinstance(filters, dict):
+        return provider_specific_filter_list_from_plan(plan)
+
+    openalex_filters = provider_specific_filter_list_from_plan(plan)
+    active_names = filter_names(openalex_filters)
 
     year_from = filters.get("year_from")
     year_to = filters.get("year_to")
 
-    if isinstance(year_from, int):
+    if (
+        isinstance(year_from, int)
+        and "from_publication_date" not in active_names
+        and "publication_year" not in active_names
+    ):
         openalex_filters.append(f"from_publication_date:{year_from}-01-01")
 
-    if isinstance(year_to, int):
+    if (
+        isinstance(year_to, int)
+        and "to_publication_date" not in active_names
+        and "publication_year" not in active_names
+    ):
         openalex_filters.append(f"to_publication_date:{year_to}-12-31")
 
     language = filters.get("language")
-    if isinstance(language, str) and language:
+    if isinstance(language, str) and language and "language" not in active_names:
         openalex_filters.append(f"language:{language}")
 
     has_abstract = filters.get("has_abstract")
-    if isinstance(has_abstract, bool):
+    if isinstance(has_abstract, bool) and "has_abstract" not in active_names:
         openalex_filters.append(f"has_abstract:{str(has_abstract).lower()}")
 
-    if filters.get("open_access_only") is True:
+    if (
+        filters.get("open_access_only") is True
+        and "open_access.is_oa" not in active_names
+    ):
         openalex_filters.append("open_access.is_oa:true")
 
-    if filters.get("has_full_text") is True:
+    if filters.get("has_full_text") is True and "has_fulltext" not in active_names:
         openalex_filters.append("has_fulltext:true")
 
-    if filters.get("has_pdf_url") is True:
+    if filters.get("has_pdf_url") is True and "has_pdf_url" not in active_names:
         openalex_filters.append("has_pdf_url:true")
 
-    if filters.get("has_content_pdf") is True:
+    if (
+        filters.get("has_content_pdf") is True
+        and "has_content.pdf" not in active_names
+    ):
         openalex_filters.append("has_content.pdf:true")
 
     publication_types = filters.get("publication_types")
@@ -243,10 +339,11 @@ def active_filter_list_from_plan(plan: dict[str, object]) -> list[str]:
         isinstance(publication_types, list)
         and "review" in publication_types
         and filters.get("exclude_reviews") is not True
+        and "type" not in active_names
     ):
         openalex_filters.append("type:review")
 
-    if filters.get("exclude_reviews") is True:
+    if filters.get("exclude_reviews") is True and "type" not in active_names:
         openalex_filters.append("type:!review")
 
     return openalex_filters

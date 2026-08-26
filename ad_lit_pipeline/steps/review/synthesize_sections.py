@@ -82,50 +82,60 @@ def validate_section_response(
     cited_paper_ids = response.get("cited_paper_ids")
     if not isinstance(cited_paper_ids, list):
         raise ValueError("cited_paper_ids must be a list.")
-    repaired_cited_ids = []
-    for paper_id in cited_paper_ids:
-        resolved_id = resolve_paper_id(paper_id, known_paper_ids)
-        if resolved_id not in known_paper_ids:
-            validation_warnings.append(
-                f"Dropped cited_paper_ids paper_id {paper_id!r} from review "
-                f"section {section_id!r}: not present in section evidence."
-            )
-            continue
-        if resolved_id not in repaired_cited_ids:
-            repaired_cited_ids.append(resolved_id)
-    response["cited_paper_ids"] = repaired_cited_ids
-
-    for group_name in ["citation_support", "quote_uses"]:
-        group = response.get(group_name)
-        if not isinstance(group, list):
-            raise ValueError(f"{group_name} must be a list.")
-        repaired_group = []
-        for item in group:
-            if not isinstance(item, dict):
-                raise ValueError(f"{group_name} items must be objects.")
-            paper_id = str(item.get("paper_id") or "")
-            resolved_id = resolve_paper_id(paper_id, known_paper_ids)
-            if not resolved_id or resolved_id not in known_paper_ids:
+    is_abstract = section.get("section_type") == "abstract"
+    if is_abstract:
+        for group_name in ["cited_paper_ids", "citation_support", "quote_uses"]:
+            group = response.get(group_name)
+            if not isinstance(group, list):
+                raise ValueError(f"{group_name} must be a list.")
+            if group:
                 validation_warnings.append(
-                    f"Dropped {group_name} item for paper_id {paper_id!r} from "
-                    f"review section {section_id!r}: not present in section "
-                    "evidence."
+                    f"Dropped {len(group)} {group_name} item(s) from abstract "
+                    f"section {section_id!r}: abstracts must not contain "
+                    "citations or direct quotation metadata."
+                )
+            response[group_name] = []
+    else:
+        repaired_cited_ids = []
+        for paper_id in cited_paper_ids:
+            resolved_id = resolve_paper_id(paper_id, known_paper_ids)
+            if resolved_id not in known_paper_ids:
+                validation_warnings.append(
+                    f"Dropped cited_paper_ids paper_id {paper_id!r} from review "
+                    f"section {section_id!r}: not present in section evidence."
                 )
                 continue
-            item["paper_id"] = resolved_id
-            repaired_group.append(item)
-            if resolved_id not in response["cited_paper_ids"]:
-                response["cited_paper_ids"].append(resolved_id)
-        response[group_name] = repaired_group
+            if resolved_id not in repaired_cited_ids:
+                repaired_cited_ids.append(resolved_id)
+        response["cited_paper_ids"] = repaired_cited_ids
+
+        for group_name in ["citation_support", "quote_uses"]:
+            group = response.get(group_name)
+            if not isinstance(group, list):
+                raise ValueError(f"{group_name} must be a list.")
+            repaired_group = []
+            for item in group:
+                if not isinstance(item, dict):
+                    raise ValueError(f"{group_name} items must be objects.")
+                paper_id = str(item.get("paper_id") or "")
+                resolved_id = resolve_paper_id(paper_id, known_paper_ids)
+                if not resolved_id or resolved_id not in known_paper_ids:
+                    validation_warnings.append(
+                        f"Dropped {group_name} item for paper_id {paper_id!r} from "
+                        f"review section {section_id!r}: not present in section "
+                        "evidence."
+                    )
+                    continue
+                item["paper_id"] = resolved_id
+                repaired_group.append(item)
+                if resolved_id not in response["cited_paper_ids"]:
+                    response["cited_paper_ids"].append(resolved_id)
+            response[group_name] = repaired_group
 
     for key in ["chapter_id", "chapter_label", "heading_level"]:
         response[key] = section.get(key, "" if key != "heading_level" else 1)
 
-    if section.get("section_type") == "abstract":
-        if response["cited_paper_ids"] or response.get("citation_support"):
-            raise ValueError("Abstract must not contain citations.")
-        if response.get("quote_uses"):
-            raise ValueError("Abstract must not contain direct quotations.")
+    if is_abstract:
         body = str(response.get("body_markdown") or "")
         if ABSTRACT_INLINE_CITATION_PATTERN.search(
             body

@@ -33,9 +33,15 @@ def test_run_pipeline_explain_lists_steps() -> None:
     assert "normalize_metadata" in result.stdout
     assert "calibrate_topic_contract" in result.stdout
     assert "export_mantis" in result.stdout
+    assert "export_knowledge_sources" in result.stdout
+    assert "export_knowledge_evidence_excerpts" in result.stdout
+    assert "extract_knowledge_findings" in result.stdout
     assert "normalize_review_config" in result.stdout
     assert "assemble_literature_review" in result.stdout
     assert "example_mantis_ready.csv" in result.stdout
+    assert "example_sources.jsonl" in result.stdout
+    assert "example_evidence_excerpts.jsonl" in result.stdout
+    assert "example_findings.jsonl" in result.stdout
     assert "example_literature_review.md" in result.stdout
 
 
@@ -77,9 +83,79 @@ def test_run_pipeline_dry_run_skips_calibration_by_default() -> None:
 
     assert "Would run step: prepare_full_text" in result.stdout
     assert "Would run step: calibrate_topic_contract" not in result.stdout
+    assert "Would run step: export_knowledge_sources" not in result.stdout
+    assert "Would run step: export_knowledge_evidence_excerpts" not in result.stdout
+    assert "Would run step: extract_knowledge_findings" not in result.stdout
     assert "Would run step: normalize_tagging_config" in result.stdout
     assert "Would run step: normalize_review_config" not in result.stdout
     assert "Would run step: assemble_literature_review" not in result.stdout
+
+
+def test_run_pipeline_dry_run_can_opt_into_knowledge_exports() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--export-knowledge",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-knowledge-dry-run",
+    )
+
+    assert "Would run step: prepare_full_text" in result.stdout
+    assert "Would run step: export_knowledge_sources" in result.stdout
+    assert "Would run step: export_knowledge_evidence_excerpts" in result.stdout
+    assert "Would run step: extract_knowledge_findings" not in result.stdout
+    assert "Would run step: normalize_tagging_config" in result.stdout
+    assert result.stdout.index("prepare_full_text") < result.stdout.index(
+        "export_knowledge_sources"
+    )
+    assert result.stdout.index("export_knowledge_sources") < result.stdout.index(
+        "export_knowledge_evidence_excerpts"
+    )
+    assert result.stdout.index(
+        "export_knowledge_evidence_excerpts"
+    ) < result.stdout.index("normalize_tagging_config")
+
+
+def test_run_pipeline_dry_run_can_opt_into_knowledge_findings() -> None:
+    result = run_script(
+        "scripts/run_pipeline.py",
+        "run",
+        "--papers",
+        "data/raw/example_papers.csv",
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+        "--collection",
+        "example",
+        "--extract-knowledge-findings",
+        "--dry-run",
+        "--run-id",
+        "pytest-main-knowledge-findings-dry-run",
+    )
+
+    assert "Would run step: prepare_full_text" in result.stdout
+    assert "Would run step: export_knowledge_sources" in result.stdout
+    assert "Would run step: export_knowledge_evidence_excerpts" in result.stdout
+    assert "Would run step: extract_knowledge_findings" in result.stdout
+    assert "Would run step: normalize_tagging_config" in result.stdout
+    assert result.stdout.index("prepare_full_text") < result.stdout.index(
+        "export_knowledge_sources"
+    )
+    assert result.stdout.index("export_knowledge_sources") < result.stdout.index(
+        "export_knowledge_evidence_excerpts"
+    )
+    assert result.stdout.index(
+        "export_knowledge_evidence_excerpts"
+    ) < result.stdout.index("extract_knowledge_findings")
+    assert result.stdout.index("extract_knowledge_findings") < result.stdout.index(
+        "normalize_tagging_config"
+    )
 
 
 def test_run_pipeline_dry_run_can_opt_into_calibration() -> None:

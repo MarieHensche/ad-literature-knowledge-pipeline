@@ -225,5 +225,29 @@ def test_abstract_rejects_citations() -> None:
     response = section_payload()
     response["section_id"] = "abstract"
 
-    with pytest.raises(ValueError, match="Abstract must not contain citations"):
+    with pytest.raises(ValueError, match="Abstract body must not contain Harvard citations"):
         validate_section_response(section, response)
+
+
+def test_abstract_drops_citation_and_quote_metadata_when_body_is_clean() -> None:
+    section = {
+        "section_id": "abstract",
+        "section_type": "abstract",
+        "paper_ids": ["p1"],
+    }
+    response = section_payload()
+    response["section_id"] = "abstract"
+    response["body_markdown"] = (
+        "This narrative review summarizes evidence about AI-enabled early "
+        "detection and diagnosis without citing individual papers."
+    )
+    warnings = []
+
+    validated = validate_section_response(section, response, warnings)
+
+    assert validated["cited_paper_ids"] == []
+    assert validated["citation_support"] == []
+    assert validated["quote_uses"] == []
+    assert any("Dropped 1 cited_paper_ids item" in warning for warning in warnings)
+    assert any("Dropped 1 citation_support item" in warning for warning in warnings)
+    assert any("Dropped 1 quote_uses item" in warning for warning in warnings)
