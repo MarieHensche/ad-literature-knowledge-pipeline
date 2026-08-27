@@ -7,8 +7,9 @@ whenever a schema, provider, scientific-validity rule, or pipeline order changes
 
 This is the canonical plan for extending the existing literature knowledge
 pipeline into a domain-adaptable, provenance-preserving, scientifically
-defensible gap-discovery system. Update progress in this file rather than
-creating disconnected plans.
+defensible gap-discovery system. Its required terminal delivery artifacts are
+versioned Mantis projections of the paper/evidence landscape and verified gap
+dossiers. Update progress in this file rather than creating disconnected plans.
 
 ## How To Use This Plan
 
@@ -17,8 +18,12 @@ creating disconnected plans.
 - Record important scope decisions and deviations in the decision log at the end.
 - Do not call a gap scientifically validated merely because its software step is
   implemented.
-- Preserve the existing CLI and Mantis/review workflows while the knowledge layer
-  is introduced behind compatible adapters.
+- Treat Mantis as a required downstream exploration and delivery consumer, not
+  as the scientific source of truth. Preserve the current CSV/download/import
+  route while adding explicit export profiles, contract tests, and an optional
+  authenticated publisher.
+- Assess every durable schema change for its Mantis projection and version that
+  projection whenever its contract changes.
 
 Status markers:
 
@@ -35,22 +40,29 @@ Status markers:
 4. **Discovery**
 5. **Validation**
 
+Mantis delivery crosses these stages and is not a sixth scientific stage. The
+canonical evidence, verification, and judgment records remain local,
+versioned, and independently auditable.
+
 ## Stage 1: Foundation — First Ten Sub-Steps
 
-- [ ] 1. Freeze and document the current passing baseline, representative demo
-  corpus, and expected artifacts.
+- [ ] 1. Freeze the clean Git baseline, a fresh non-network test result, a new
+  small copyright-safe synthetic corpus independent of historical demo
+  artifacts, and expected outputs including the current Mantis CSV.
 - [ ] 2. Define precise scientific terminology, especially `gap candidate`,
   `corpus-sparse`, `as of`, `supported`, `refuted`, and `uncertain`.
 - [ ] 3. Define versioned contracts for every durable corpus, evidence, graph,
-  gap, scoring, and judgment record.
+  gap, scoring, judgment, Mantis export-profile, and Mantis publication-receipt
+  record.
 - [ ] 4. Add cross-artifact referential validation and a documented schema
   migration policy.
 - [ ] 5. Extend run provenance with code, environment, command, prompt, schema,
   model, contract, provider, and snapshot information.
 - [ ] 6. Make pipeline assembly and step dependencies a single source of truth
   shared by the CLI and UI.
-- [ ] 7. Preserve compatibility for existing collection, tagging, review, and
-  Mantis workflows through explicit adapters and regression tests.
+- [ ] 7. Preserve compatibility for collection, tagging, review, and the legacy
+  Mantis CSV through regression tests; add explicit versioned Mantis paper and
+  gap profiles plus a feature-gated publication adapter.
 - [ ] 8. Move domain-specific research vocabulary and heuristics from Python into
   topic contracts or portable policy files.
 - [ ] 9. Reconcile documentation and retire stale scaffolding that contradicts
@@ -94,10 +106,12 @@ strengthened with the temporal provenance needed for a temporal evidence graph.
 The software should also prepare a validated human–AI protocol, but proving that
 researchers make better decisions is an external, longitudinal research effort.
 
-The audit underlying this plan included the working-tree knowledge
-implementation under `ad_lit_pipeline/knowledge/` and
-`ad_lit_pipeline/steps/knowledge/`. At the time of the audit, the complete test
-suite passed with 295 tests.
+The initial audit included the knowledge implementation under
+`ad_lit_pipeline/knowledge/` and `ad_lit_pipeline/steps/knowledge/`. The new
+implementation baseline starts from clean commit `dd1fbc3`; Step 1.1 must
+re-establish the test total after the recent cleanup rather than carrying the
+historical count of 295 forward. Historical demo measurements below are
+diagnostic observations only, not the Step 1.1 fixture or acceptance baseline.
 
 ## Current Implemented System
 
@@ -113,12 +127,19 @@ Research question / topic contract
         +-- Full-text availability and extraction
         +-- Canonical paper CSV
                 |
-                +-- Topic tagging -> audit -> Mantis export
+                +-- Topic tagging -> audit
+                |       +-- Legacy paper Mantis CSV -> manual import
                 +-- Review labels -> evidence map -> literature review
                 +-- Optional knowledge export
                         +-- Source records
                         +-- Evidence excerpts
                         +-- Finding records
+                        +-- Not currently delivered to Mantis
+
+Future verified and ranked gap dossiers
+        +-- Versioned paper/evidence and gap Mantis projections
+                +-- Deterministic CSV fallback
+                +-- Optional authenticated map publication
 ```
 
 The final vision stages—relationship construction, gap generation,
@@ -137,6 +158,106 @@ complete executable pipeline branches.
 | Three-way ranking | Absent | Feasible after verification |
 | Prospective validation | Generic run infrastructure only | Software feasible; actual study external |
 | Cross-domain benchmark | Absent | Harness feasible; gold data expensive |
+| Mantis terminal delivery | Heuristic paper CSV and manual import link only | Strongly feasible through explicit profiles, CSV fallback, and optional publication |
+
+## Mantis As The Required Terminal Consumer
+
+### What Mantis Adds
+
+Mantis is well suited to the final exploration layer: it embeds records into
+semantic maps, exposes clusters and categories, preserves links back to context,
+and supports CSV/XLSX ingestion, a developer CLI, MCP tools, and a Python SDK.
+Those capabilities complement this pipeline, but they do not establish whether
+a claim or gap is scientifically valid.
+
+The canonical scientific system of record therefore remains the versioned
+JSONL/SQLite artifacts, exact passages, verification attempts, countersearches,
+scores, and judgment events. Mantis receives deterministic projections of those
+records and provides an interactive research landscape.
+
+### Current Repository State
+
+- `export_mantis` runs at the end of the current tagging branch and produces a
+  paper CSV with `title`, `categoric`, `semantic`, `paper_id`, `year`, `doi`, and
+  inferred extra fields.
+- It does not publish a space or map. The UI only downloads the file and opens
+  the signed-in Mantis import page.
+- Extra fields are inferred from CSV column order, and `categoric` can fall back
+  to the first arbitrary non-empty inferred field.
+- No explicit Mantis field/type profile, profile version, publication receipt,
+  idempotency rule, SDK/CLI adapter, or live import test exists.
+- Knowledge findings, evidence passages, relationships, verification results,
+  counterevidence, gap candidates, and the three scores are not exported.
+
+The public integration surface audited on 2026-08-26 has two important
+constraints. `mantisai-cli` 3.7.0 uses a developer API key and can upload a CSV
+as a map, but does not expose completion polling or a demonstrated stable
+refresh/upsert contract. `Mantis_SDK` source version 0.13.0 supports typed space
+creation and stable map IDs, but requires `pandas` even for CSV paths and its
+public package/release story is ambiguous. Do not add either as an unpinned core
+runtime dependency.
+
+### Required Projection Contracts
+
+Use two separate projections—preferably two maps in one project space—because a
+paper/evidence record and a gap dossier are different semantic units:
+
+| Projection | One Mantis point represents | Required content |
+| --- | --- | --- |
+| Paper/evidence | One stable scholarly work or verified claim view | Stable work/version IDs, title, semantic evidence text, snapshot/cutoff, source type, study metadata, topic categories, verification state, and resolvable provenance links |
+| Gap dossier | One deduplicated, counterverified gap candidate version | Gap title and rationale, gap class, status, snapshot/cutoff, support and counterevidence links, countersearch status, coverage, uncertainty, and separate novelty/importance/feasibility scores |
+
+Every profile must explicitly declare record kind, source schema version,
+ordered output fields, Mantis data type, null and multivalue policy, semantic
+text construction, and compatibility version. Never infer fields from input
+column position.
+
+Preferred Mantis type mapping:
+
+| Mantis type | Pipeline use |
+| --- | --- |
+| `Title` | Human-readable paper, claim, or gap title |
+| `Semantic` | Evidence-grounded claim text or gap description/rationale used for embedding |
+| `Categoric` | Record kind, gap class, status, domain, study design, population, and controlled tags |
+| `Numeric` | Evidence counts, coverage, uncertainty, and the three separate scores |
+| `Date` | Publication, snapshot, cutoff, verification, and publication dates |
+| `Links` | DOI/source, exact evidence, counterevidence, and local dossier links |
+| `Connection` | Optional graph relations only after an authenticated compatibility spike proves the serializer and UI behavior |
+
+### Delivery Strategy
+
+1. Always create deterministic CSV files and a versioned Mantis profile locally.
+2. Preserve the legacy paper CSV until compatibility tests permit a deliberate
+   migration.
+3. Add `publish_mantis` only after export. Keep it authenticated, optional for
+   offline/test runs, retryable, and governed by an explicit duplicate/upsert
+   policy before calling it idempotent.
+4. Prefer a first integration spike through the public Mantis CLI because its
+   current implementation uploads CSV with developer-key authentication and
+   avoids adding `pandas`. Although its help advertises XLSX, treat CSV as the
+   verified boundary. Evaluate the Python SDK later for typed refresh,
+   annotations, or writeback.
+5. Record profile version, input hash, tool/version, non-secret host, space ID,
+   map ID, stable Mantis URIs when available, status, and errors in an immutable
+   publication receipt. Never record cookies, developer keys, or other secrets.
+6. Mock publication in the normal suite and keep signed-in import/publish and
+   round-trip checks explicitly opt-in.
+7. Keep structured expert judgments in the local append-only protocol unless a
+   tested Mantis writeback adapter can capture the same immutable events.
+8. Do not let live Mantis availability block the scientific pipeline; preserve
+   validated local outputs and record publication failure visibly.
+
+Access to the main Mantis repository or a signed-in developer account is useful
+before implementing publication and writeback, but is not required for Step 1.1.
+
+Public references frozen for this planning decision:
+
+- [Mantis platform overview](https://home.withmantis.com/)
+- [Mantis SDK at audited commit `850d4d40`](https://github.com/KellisLab/Mantis_SDK/tree/850d4d40e8cedb85ef93dad1c8b2a97ec0caeace)
+- [Mantis CLI at audited commit `cca630e7`](https://github.com/KellisLab/mantis-cli/tree/cca630e7fa869fecf6f55ce0361efa93031f18f9)
+
+Re-audit the public API and pinned tool versions before implementing live
+publication because both repositories are active.
 
 ---
 
@@ -197,6 +318,8 @@ complete executable pipeline branches.
 - Additional provider adapters with mocked contract tests.
 - Structured licensing, retraction, and access metadata.
 - First-class source-type and study-design normalization.
+- A Mantis paper projection that retains stable work/version IDs, corpus
+  snapshot, cutoff, source type, scope state, and resolvable provenance links.
 
 Recommended provider order:
 
@@ -274,6 +397,10 @@ Add provenance-bearing relations for:
 Use JSONL as the portable exchange format and SQLite as the initial query and
 integrity layer. A graph database is not required for the first version.
 
+Mantis maps and optional `Connection` fields are read-only projections for
+exploration. They must not replace canonical nodes, edges, foreign-key checks,
+or temporal queries in JSONL/SQLite.
+
 ### Extreme Or Impossible Guarantees
 
 - A universal ontology requiring no domain adaptation.
@@ -297,9 +424,10 @@ in this corpus snapshot, not globally nonexistent.
 - Citation-linked review sections for explicit gaps and future directions.
 - Conservative instructions that reject generic calls for more research.
 
-The audited demo evidence map contained 30 labeled papers, with explicit future
-work/gaps in 10, key findings in 19, limitations in 15, and direct quotations in
-11. These are useful inputs, but no multi-signal gap engine combines them.
+A historical audit artifact—not the Step 1.1 baseline—contained 30 labeled
+papers, with explicit future work/gaps in 10, key findings in 19, limitations in
+15, and direct quotations in 11. These were useful diagnostics, but no
+multi-signal gap engine combines them.
 
 ### Feasible Extensions
 
@@ -318,6 +446,10 @@ work/gaps in 10, key findings in 19, limitations in 15, and direct quotations in
 Every generator should be deterministic or rule-driven and emit a `GapSignal`.
 An LLM may normalize, structure, phrase, or explain a gap, but must not be the
 sole reason it exists.
+
+Mantis-facing gap records must have stable IDs and explicit gap type, status,
+coverage, and uncertainty fields. Proposed or unverified candidates must never
+appear as established gaps merely because they are visible on a map.
 
 ### Extreme Or Impossible Guarantees
 
@@ -353,7 +485,7 @@ sole reason it exists.
   claim.
 - The same LLM creates a finding and assigns its confidence/evidence strength.
 
-Audited demo characteristics:
+Historical audit characteristics—not current acceptance fixtures:
 
 - 100 Source records;
 - 53 sources with evidence excerpts;
@@ -382,6 +514,8 @@ self-evaluation bias. It is not calibrated scientific validation.
 10. Run countersearches using normalized entities, aliases, synonyms, acronyms,
     citations, and adjacent literatures.
 11. Record every search, result, limitation, and cutoff date.
+12. Require every Mantis gap point to link to exact support, counterevidence,
+    countersearch status, and verification state.
 
 ### Extreme Or Impossible Guarantees
 
@@ -423,11 +557,15 @@ knowledge or gap workspace.
 - Blinded evaluation mode.
 - Append-only judgment logs with candidate version, user, protocol, timestamp,
   and rationale.
+- Published Mantis space/map links and status for semantic landscape
+  exploration.
 
 ### Extreme Or External Requirements
 
-The UI cannot create expert ground truth. Recruitment, adjudication, governance,
-and sustained expert participation are external requirements.
+The UI cannot create expert ground truth. Mantis interactions also do not become
+evaluation judgments unless an explicit, tested writeback path records them in
+the append-only protocol. Recruitment, adjudication, governance, and sustained
+expert participation are external requirements.
 
 ## 6. Novelty, Importance, And Feasibility Ranking
 
@@ -469,6 +607,8 @@ Feasibility can use:
 
 The three scores must always remain separately visible. A configurable composite
 may sort candidates, but must not replace the individual dimensions.
+Their Mantis projection must use separate numeric fields; it must not collapse
+them into one category, one model-confidence value, or an unexplained composite.
 
 ### Extreme Or Invalid Claims
 
@@ -496,6 +636,8 @@ pauses, the local UI, review decisions, and trace-like artifacts.
 - DOI, grant, and protocol links.
 - Deidentified exports.
 - Predeclared metrics.
+- Frozen Mantis profile, source hash, space ID, map ID, and candidate-version
+  references in each expert task package.
 
 ### External Or Extreme Requirements
 
@@ -515,7 +657,8 @@ The software can prepare this contribution but cannot establish it on its own.
 - Tests cover importers, providers, screening, prompts, LLM schemas, review
   steps, UI behavior, and the first knowledge records.
 - LLM tests use reproducible fake clients.
-- The audited suite passes 295 tests.
+- A historical audited suite passed 295 tests; Step 1.1 must record the fresh
+  clean-HEAD total after recent repository cleanup.
 
 This is engineering validation, not a scientific benchmark.
 
@@ -532,6 +675,8 @@ This is engineering validation, not a scientific benchmark.
 - Contradictory-literature cases.
 - Domain contracts and frozen benchmark runs.
 - Baseline systems.
+- Deterministic Mantis profile/export compatibility fixtures and an opt-in live
+  import/publish smoke check.
 
 Required metrics:
 
@@ -546,6 +691,10 @@ Required metrics:
 - Brier score and expected calibration error;
 - expert agreement;
 - median decision time and time saved.
+
+If Mantis-assisted exploration changes what experts see or how they work, treat
+it as an explicit benchmark or study condition rather than an invisible UI
+detail.
 
 ### Extreme Or Expensive Requirements
 
@@ -616,6 +765,8 @@ is incomplete until the controlled expert study actually runs.
   not functionality.
 - [ ] Use one shared source-type classifier.
 - [ ] Unify overlapping review-label and knowledge-finding extraction.
+- [ ] Prevent proposed or unverified gaps from being presented in Mantis without
+  an explicit verification state, coverage, and uncertainty.
 
 ## Priority 1: Architecture And Reproducibility
 
@@ -629,6 +780,10 @@ is incomplete until the controlled expert study actually runs.
 - [ ] Move domain-specific heuristics from Python into contracts/policies.
 - [ ] Reconcile or retire obsolete review scaffolding.
 - [ ] Document optional knowledge-layer CLI behavior.
+- [ ] Replace column-order-derived Mantis fields and arbitrary category fallback
+  with versioned paper/evidence and gap-dossier export profiles.
+- [ ] Add Mantis publication receipts and explicit terminal-step dependencies.
+- [ ] Keep Mantis credentials out of manifests, traces, logs, and artifacts.
 
 ## Priority 2: Scalability And Maintainability
 
@@ -638,6 +793,8 @@ is incomplete until the controlled expert study actually runs.
 - [ ] Add bounded concurrency, caching, rate handling, and cost accounting.
 - [ ] Separate checked-in example artifacts from live generated artifacts.
 - [ ] Add CI.
+- [ ] Add mocked Mantis publisher tests, an opt-in live round-trip smoke test, and
+  incremental/idempotent publication support.
 
 ---
 
@@ -649,20 +806,27 @@ Goal: make later comparisons trustworthy.
 
 Instructions:
 
-1. Preserve the current knowledge implementation in a coherent source change,
-   separately from generated demo artifacts.
-2. Record the 295-test baseline.
-3. Freeze a small representative demo corpus and expected artifacts.
-4. Define `gap candidate`, `corpus-sparse`, `as of`, and the difference between
+1. Record the clean branch, commit SHA, environment, and baseline commands.
+2. Run the complete non-network suite and record its fresh result; do not assume
+   the historical total of 295.
+3. Create a small synthetic, copyright-safe corpus independent of historical
+   demo artifacts and freeze its expected current outputs, including the legacy
+   Mantis CSV.
+4. Add golden and structural assertions for that Mantis CSV before deliberately
+   migrating its contract.
+5. Define `gap candidate`, `corpus-sparse`, `as of`, and the difference between
    extraction confidence and scientific confidence.
-5. Update README and technical documentation to match implemented behavior.
-6. Retire or update stale review scaffolding.
-7. Add CI for the non-network test suite.
+6. Update README and technical documentation to match implemented behavior.
+7. Retire or update stale review scaffolding.
+8. Add CI for the non-network test suite.
 
 Exit gate:
 
-- Existing CLI and Mantis behavior remains unchanged.
-- All existing tests pass.
+- The clean baseline SHA and fresh test result are recorded.
+- The new synthetic fixture and expected outputs are reproducible and do not
+  depend on removed or historical demo artifacts.
+- Existing CLI behavior and the current Mantis CSV remain unchanged.
+- All existing tests pass, and the Mantis fixture output is deterministic.
 - Generated artifacts are not accidentally mixed with source changes.
 
 ## Phase 1 — Define Versioned Data And Gap Contracts
@@ -688,6 +852,8 @@ Implement versioned contracts for:
 - `GapScore`
 - `ExpertJudgment`
 - `OutcomeEvent`
+- `MantisExportProfile`
+- `MantisPublicationReceipt`
 
 Required common fields:
 
@@ -700,6 +866,13 @@ Required common fields:
 - provenance;
 - status;
 - validation warnings.
+
+`MantisExportProfile` must additionally define record kind, source contract and
+schema version, ordered output fields, one explicit Mantis type per retained
+column, null/multivalue policy, semantic text construction, and compatibility
+version. `MantisPublicationReceipt` must record the source hash, profile/tool
+version, non-secret host, space/map identifiers, publication time and status,
+and retry/error details without credentials.
 
 Define operational rules for every gap class: generating evidence, minimum
 support, refuting evidence, coverage assumptions, open-world limitations, and
@@ -729,6 +902,9 @@ Instructions:
 6. Filter knowledge exports by scope or carry explicit scope state.
 7. Consolidate source-type classification.
 8. Make snapshot artifacts immutable or content-addressed.
+9. Require each Mantis projection to retain stable record/work/version IDs,
+   snapshot, cutoff, scope/status, and resolvable provenance instead of
+   flattening essential context into free-form notes.
 
 Exit gate:
 
@@ -750,12 +926,22 @@ Instructions:
 6. Validate dependencies before execution.
 7. Add idempotency and compatible-output checks.
 8. Keep scripts thin.
+9. Make deterministic, profile-driven Mantis CSVs required terminal artifacts.
+10. Add an optional authenticated `publish_mantis` step immediately after each
+    relevant export; publication failure must preserve the validated local
+    artifacts and produce a clear warning/receipt.
+11. Record profile/hash/tool/space/map metadata and never credentials.
+12. Keep the legacy paper export as a compatibility branch. Run the eventual
+    gap publication only after verification, counterretrieval, deduplication,
+    and ranking.
 
 Exit gate:
 
 - CLI and UI select identical steps for identical options.
 - Every downstream result traces to code/config/model/corpus versions.
 - Resume cannot combine incompatible snapshots.
+- CLI and UI agree on export and optional publication order, and an offline run
+  always ends with usable deterministic Mantis CSV artifacts.
 
 ## Phase 4 — Generalize Provider Integration
 
@@ -800,7 +986,8 @@ Exit gate:
 
 - Every evidence span resolves to a document snapshot.
 - Sampled quotations match the source after documented normalization.
-- The demo does not collapse all evidence into single `body` excerpts.
+- The new synthetic baseline fixture does not collapse all evidence into single
+  `body` excerpts.
 
 ## Phase 6 — Unify Entity, Claim, And Review Extraction
 
@@ -816,7 +1003,9 @@ Instructions:
    method, measurement, design, context, sample, estimates, and spans.
 5. Represent negative, null, mixed, and inconclusive findings explicitly.
 6. Generate review labels from canonical entities/claims.
-7. Keep Mantis and review adapters backward-compatible.
+7. Preserve the legacy paper CSV while adding explicit canonical
+   claim/evidence-to-Mantis mapping; do not let Mantis-specific shapes become
+   canonical scientific records.
 8. Preserve the old review path until parity tests pass.
 
 Exit gate:
@@ -862,6 +1051,9 @@ Instructions:
 5. Mark relations as asserted, extracted, inferred, or human-reviewed.
 6. Add temporal fields and `as_of` graph queries.
 7. Keep graph-database export optional.
+8. Add an optional Mantis relationship projection only after the native
+   `Connection` encoding and target-resolution behavior are confirmed; stable
+   IDs and provenance links remain the safe initial representation.
 
 Exit gate:
 
@@ -933,6 +1125,12 @@ Instructions:
 8. Delay calibration claims until expert labels exist.
 9. Later measure Brier score, expected calibration error, rank correlation, and
    top-k acceptance by type/domain.
+10. Emit a versioned gap-dossier Mantis projection with separate gap class,
+    verification state, coverage, uncertainty, novelty, importance,
+    feasibility, support, counterevidence, countersearch, and provenance fields.
+11. Prefer one project space with separate paper/evidence and gap-dossier maps;
+    keep the two profiles independently versioned because their semantic units
+    differ.
 
 Exit gate:
 
@@ -957,6 +1155,10 @@ Instructions:
 8. Support blinding.
 9. Export analysis-ready annotations.
 10. Compare contracts/cutoffs side by side.
+11. Show Mantis publication status and stable space/map links, while retaining a
+    downloadable CSV fallback and immutable publication receipt.
+12. Do not count Mantis interactions as expert judgments unless tested writeback
+    captures the required append-only protocol events.
 
 Exit gate:
 
@@ -1022,6 +1224,8 @@ Instructions:
 8. Monitor provider failures, extraction quality, orphan references, and
    verification rates.
 9. Define trace retention and sensitive-data policies.
+10. Add incremental/idempotent Mantis synchronization, rate handling,
+    completion/failure monitoring, and republishing only for affected records.
 
 ---
 
@@ -1044,6 +1248,9 @@ The first release should implement:
 8. A gap-dossier UI with expert accept/reject/already-known judgments.
 9. An Alzheimer-focused benchmark.
 10. One second-domain demonstration using only a new topic contract.
+11. One Mantis project space with independently versioned paper/evidence and
+    verified gap-dossier maps, deterministic CSV fallbacks, and immutable
+    publication receipts.
 
 This release is useful and defensible without attempting exhaustive providers,
 patent normalization, a universal ontology, or a completed prospective study.
@@ -1070,6 +1277,15 @@ At every plan review, answer and record:
 - [ ] Did domain logic enter Python that belongs in a topic contract?
 - [ ] Do CLI, UI, documentation, and registry describe the same pipeline?
 - [ ] Is the project claiming more scientific validation than the evidence permits?
+- [ ] Does every terminal paper/gap artifact have a deterministic, versioned
+  Mantis projection?
+- [ ] Does each projection match its declared Mantis field/type profile without
+  relying on column order?
+- [ ] Are input hashes and space/map IDs recorded without credentials?
+- [ ] Does the synthetic fixture still import or publish successfully in the
+  opt-in live check?
+- [ ] Is Mantis presented as an exploration layer rather than scientific
+  validation?
 
 # Decision Log
 
@@ -1077,5 +1293,6 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-08-26 | Make Mantis a required terminal consumer while keeping deterministic local CSVs and canonical evidence artifacts authoritative; authenticated publication remains feature-gated. | Mantis is a strong semantic exploration and delivery layer, but availability or map generation cannot determine scientific validity. | Add explicit paper/evidence and gap-dossier profiles, publication receipts, mocked publisher tests, and an opt-in live round-trip test. |
+| 2026-08-26 | Use a new synthetic, copyright-safe fixture for Step 1.1 instead of historical demo artifacts. | The historical demo test was removed and the new clean baseline must be small, deterministic, and purpose-built for current and Mantis contracts. | Re-measure the clean-HEAD suite and freeze new expected artifacts before feature work. |
 | 2026-08-26 | Use the portable gap ontology as the primary contribution, temporal provenance as supporting infrastructure, and prospective validation as a later study. | Best fit with the implemented pipeline and achievable scientific novelty. | Complete Foundation, Corpus, and Evidence stages before sophisticated gap ranking. |
-
