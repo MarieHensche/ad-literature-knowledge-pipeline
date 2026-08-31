@@ -69,7 +69,7 @@ versioned, and independently auditable.
   topic contracts or portable policy files.
 - [x] 9. Reconcile documentation and retire stale scaffolding that contradicts
   the implemented system.
-- [~] 10. Add continuous integration and require the baseline and new contract
+- [x] 10. Add continuous integration and require the baseline and new contract
   tests to pass before later stages proceed.
 
 Stage 1 is complete only when its exit gates in the roadmap pass. Completing the
@@ -479,7 +479,7 @@ This completes Step 1.9. Step 1.10 must add continuous integration for the
 offline suite and make the Foundation contracts required checks before later
 stages proceed.
 
-### Step 1.10 Implementation Record — Hosted Verification Passed; Protection Pending
+### Step 1.10 Completion Record
 
 - Workflow: `.github/workflows/foundation-ci.yml` runs on every push, pull
   request, and manual dispatch. Concurrency cancels superseded runs for the same
@@ -522,22 +522,24 @@ stages proceed.
   then reconciled with `dev061602` in merge commit `ceede85`. Pull request
   [#2](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/pull/2)
   is open against `dev061602` and is mergeable. Its
-  [Foundation CI run](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/actions/runs/33373428426)
+  [latest pre-completion-record Foundation CI run](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/actions/runs/33373623958)
   passed the Python 3.11 and 3.12 jobs and the stable `foundation-gate`.
-- Branch protection remains blocked by the repository's current GitHub plan.
-  Both the repository-ruleset and classic branch-protection APIs return HTTP 403
-  with: "Upgrade to GitHub Pro or make this repository public to enable this
-  feature." Do not change this step to `[x]`, mark Stage 1 complete, or add a
-  completion decision until the owner upgrades the plan or deliberately makes
-  the repository public and `foundation-gate` is configured as required.
+- Required-check enforcement: after the owner deliberately made the repository
+  public, active repository
+  [ruleset 21912442](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/rules/21912442)
+  was created for `refs/heads/dev061602`. It requires `foundation-gate` from the
+  GitHub Actions integration, requires the branch to be up to date, and has no
+  bypass actors. GitHub's branch-rules API confirms that the rule applies to
+  `dev061602`.
 
-Step 1.10 is implemented and hosted CI is verified, but it is not yet complete.
-Foundation remains open until branch protection requires `foundation-gate`.
+This completes Step 1.10 and the Foundation stage. Later implementation phases
+must retain the stable `foundation-gate` or deliberately record and review any
+replacement before changing the required rule.
 
 ### Foundation Corrective Hardening Record
 
-The post-implementation audit identified six verification gaps. They are now
-resolved without changing the branch-protection boundary above:
+The post-implementation audit identified six verification gaps. They were
+resolved before the hosted gate and required-check configuration above:
 
 - Run identity is immutable: a pre-existing run directory is rejected unless
   `--resume` is explicit, and the previous manifest remains byte-identical.
@@ -563,8 +565,8 @@ resolved without changing the branch-protection boundary above:
 Corrective verification passes 613 offline tests on Python 3.11.9 with
 `PYTHONHASHSEED=101` and Python 3.12.2 with `PYTHONHASHSEED=1201`. Compilation
 and `git diff --check` are clean. Hosted Step 1.10 verification now passes on
-the pushed branch and pull request; branch-protection configuration remains
-pending for the GitHub-plan reason recorded above.
+the pushed branch and pull request, and the required `foundation-gate` rule is
+active on `dev061602`.
 
 ---
 
@@ -1305,7 +1307,7 @@ is incomplete until the controlled expert study actually runs.
 - [ ] Reuse LLM clients.
 - [ ] Add bounded concurrency, caching, rate handling, and cost accounting.
 - [ ] Separate checked-in example artifacts from live generated artifacts.
-- [~] Add CI; implementation is present and local/hosted verification is pending.
+- [x] Add CI with local/hosted matrix verification and a required stable gate.
 - [x] Add mocked Mantis publisher tests.
 - [ ] Add an opt-in live round-trip smoke test and incremental/idempotent
   publication support.
@@ -1819,6 +1821,7 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-08-31 | Complete Step 1.10 and Foundation after the Python 3.11/3.12 hosted matrix and stable `foundation-gate` passed on the pushed branch and PR, then require that check on `dev061602` through active repository ruleset 21912442 with no bypass actors. | Local-only verification cannot establish that the committed workflow runs correctly on GitHub or prevent later unverified branch updates. | PR #2 is mergeable and green. Later phases must keep the stable gate required or record and review a deliberate replacement. |
 | 2026-08-28 | Complete Step 1.9 with one truthful documentation hierarchy, removal of the obsolete review scaffold, a visibly superseded bootstrap plan, explicit preliminary-versus-v1 scientific boundaries, truthful collection-calibration help, local-link and registry documentation tests, and deterministic literal replacement-target extraction. | Contradictory scaffolding and milestone-era documentation could make implemented review steps look unavailable, preliminary knowledge look verified, or compatibility-only calibration look active. Full verification also exposed a hash-seed-dependent equivalent-word choice. | Step 1.10 can add CI against a documented 43-step, ten-pipeline boundary and the complete offline suite. Collection calibration activation, production v1 record emission, and later scientific pipeline behavior remain separate decisions. |
 | 2026-08-27 | Complete Step 1.8 with strict topic-structure policy `1.0.0`, semantic policy identity, generic structural code, profile-driven research vocabulary, automatic or explicit profile selection, shared prompt/runtime guidance, and generated-contract provenance. | Domain adaptability is not credible while named research concepts and parallel prompt heuristics remain embedded in Python. A strict external policy makes the boundary reviewable, portable, testable, and reproducible without weakening legacy behavior. | Step 1.9 reconciles documentation and stale scaffolding. Future domains add or version profiles in policy data rather than changing Python; material policy semantics require a new version and hash. |
 | 2026-08-27 | Complete Step 1.7 with three compatibility-v1 Mantis profiles, deterministic audited projections, a separate optional delivery pipeline, exact external CLI 3.7.0 gating, private/non-activating create semantics, and immutable sanitized receipts. | Mantis is valuable for semantic interpretation, but only verified scientific units may enter verified views and remote availability must not control the local pipeline. | The default and legacy exporter remain unchanged. Step 1.8 moves topic logic into contracts. A live disposable-space smoke, native Connection, refresh/upsert, interpretation capture, and expert writeback require later explicit authorization and compatibility evidence. |
