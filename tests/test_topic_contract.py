@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ad_lit_pipeline.topics.contract import (
+    explicit_replacement_targets,
     generated_tagging_quality_issue_records,
     generated_tagging_quality_issues,
     generated_tagging_quality_warnings,
@@ -928,6 +929,12 @@ def test_generated_topic_structure_rejects_buried_replacement_target() -> None:
         "`concrete`" in issue and "main topic id or label" in issue
         for issue in issues
     )
+
+
+def test_explicit_replacement_target_preserves_user_word_order() -> None:
+    assert explicit_replacement_targets(
+        "Could a source replace concrete in certain applications?"
+    ) == ["concrete"]
 
 
 def test_generated_topic_structure_accepts_replacement_target_main_topic() -> None:

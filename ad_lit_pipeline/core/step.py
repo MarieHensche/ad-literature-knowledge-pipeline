@@ -14,6 +14,24 @@ class StepSpec:
     outputs: list[str]
     uses_llm: bool = False
     description: str = ""
+    dependencies: tuple[str, ...] = ()
+    capabilities: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("StepSpec name must be non-empty.")
+        dependencies = tuple(self.dependencies)
+        capabilities = frozenset(self.capabilities)
+        if self.name in dependencies:
+            raise ValueError(f"Step {self.name!r} cannot depend on itself.")
+        if len(dependencies) != len(set(dependencies)):
+            raise ValueError(f"Step {self.name!r} has duplicate dependencies.")
+        if any(not item.strip() for item in dependencies):
+            raise ValueError(f"Step {self.name!r} has an empty dependency name.")
+        if any(not item.strip() for item in capabilities):
+            raise ValueError(f"Step {self.name!r} has an empty capability name.")
+        object.__setattr__(self, "dependencies", dependencies)
+        object.__setattr__(self, "capabilities", capabilities)
 
 
 @dataclass
@@ -34,4 +52,3 @@ class StepResult:
     def succeeded(self) -> bool:
         """Return whether the step completed without an error."""
         return self.error is None
-

@@ -1,0 +1,50 @@
+{
+  "records_checked": 20,
+  "record_artifacts_checked": 0,
+  "local_files_verified": 0,
+  "is_valid": true,
+  "error_count": 0,
+  "warning_count": 4,
+  "issues": [
+    {
+      "severity": "warning",
+      "code": "remote_artifact_not_checked",
+      "message": "Remote artifact 'https://example.invalid/artifacts/fixture.pdf' was not fetched during offline validation.",
+      "record_id": "doc_111ebbda6b9f780a61526eccb8140803b4a73719c7ecc706025a2847b4c19df8",
+      "record_type": "document",
+      "field_path": "artifact_uri",
+      "artifact_path": null,
+      "line_number": null
+    },
+    {
+      "severity": "warning",
+      "code": "remote_artifact_not_checked",
+      "message": "Remote artifact 'https://example.invalid/artifacts/mantis.csv' was not fetched during offline validation.",
+      "record_id": "mreceipt_03a63aae66e3207d2d2d982ff508c19a07f95e79e3823aa31f9f831c0d2ab0d1",
+      "record_type": "mantis_publication_receipt",
+      "field_path": "source_artifact_reference.reference",
+      "artifact_path": null,
+      "line_number": null
+    },
+    {
+      "severity": "warning",
+      "code": "passage_representation_not_checked",
+      "message": "Exact document occurrence was not checked because no verified pipeline.text_representation artifact is available.",
+      "record_id": "passage_5e7b07342467e30a880c499752ea90b50c55b282845589af2f69b740d3405c9a",
+      "record_type": "passage",
+      "field_path": "locator",
+      "artifact_path": null,
+      "line_number": null
+    },
+    {
+      "severity": "warning",
+      "code": "remote_artifact_not_checked",
+      "message": "Remote artifact 'https://example.invalid/artifacts/openalex-W-FIXTURE-001.json' was not fetched during offline validation.",
+      "record_id": "prov_adb4c4d902f3c0ce91abe67e4beefe6558b6cbb423affe13bb1aa2d6485427b3",
+      "record_type": "provider_record",
+      "field_path": "raw_record_uri",
+      "artifact_path": null,
+      "line_number": null
+    }
+  ]
+}

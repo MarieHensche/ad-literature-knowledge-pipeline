@@ -1,0 +1,4 @@
+title,semantic,point_id,work_id,source_version_id,work_kind,source_type,lifecycle_status,publication_date,availability_date,venue,identifiers,snapshot_id,snapshot_as_of,paper_scope
+Synthetic External Validation Study,"Synthetic External Validation Study
+
+A fictional result and bounded future-work request.",srcv_6df395b4658fbfbac6288d9dea0eaf792c8a7d19f209cbfba22379d3a0723086,work_80e85f09609fbbe86012130997f5d929e5a87973ba24ee26436f054f269f5ab7,srcv_6df395b4658fbfbac6288d9dea0eaf792c8a7d19f209cbfba22379d3a0723086,research_article,primary_study,active,2025-04-01,2025-04-01,Synthetic Methods Journal,https://doi.org/10.0000/step1.3.fixture,snap_dadb5447f6ae83448ba7a9b54ad774e3396c94f76d3a507695b26f718667ab23,2026-08-27,not_available_per_paper_in_contract_v1

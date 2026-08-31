@@ -10,9 +10,13 @@ from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.jsonl_io import write_jsonl
-from ad_lit_pipeline.providers.base import CandidateProvider
+from ad_lit_pipeline.providers.base import CandidateProvider, candidate_provider_dates
 from ad_lit_pipeline.providers.openalex import OpenAlexProvider
 from ad_lit_pipeline.topics.contract import collection_from_contract, load_topic_contract
+from ad_lit_pipeline.topics.policy import (
+    default_topic_structure_policy,
+    policy_abbreviations,
+)
 
 
 STEP = StepSpec(
@@ -71,9 +75,12 @@ def normalize_text(value: object) -> str:
 
 
 def meaningful_tokens(value: object) -> set[str]:
+    abbreviations = policy_abbreviations(default_topic_structure_policy())
     tokens = set()
     for token in normalize_text(value).split():
-        if token not in STOPWORDS and (len(token) >= 3 or token == "ai"):
+        if token not in STOPWORDS and (
+            len(token) >= 3 or token in abbreviations
+        ):
             tokens.add(token)
     return tokens
 
@@ -437,6 +444,7 @@ def run(
         },
         metadata={
             "provider": provider.name,
+            "provider_dates": candidate_provider_dates(candidates),
             "search_queries": len(plan["search_queries"]),
             "max_review_overviews": max_results,
             "review_pool_size": pool_size,

@@ -1,0 +1,84 @@
+{
+  "fixture_id": "record_contracts_v1",
+  "fixture_version": "1.0.0",
+  "record_schema_version": "1.0.0",
+  "scientific_validity_policy_version": "1.0.0",
+  "gap_ontology_version": "1.0.0",
+  "copyright_status": "entirely synthetic",
+  "record_count": 20,
+  "record_types": [
+    "corpus_snapshot",
+    "scholarly_work",
+    "source_version",
+    "provider_record",
+    "access_location",
+    "document",
+    "passage",
+    "entity",
+    "claim",
+    "claim_evidence",
+    "relationship",
+    "gap_signal",
+    "gap_candidate",
+    "verification_attempt",
+    "gap_score",
+    "expert_judgment",
+    "outcome_event",
+    "mantis_export_profile",
+    "mantis_interpretation",
+    "mantis_publication_receipt"
+  ],
+  "files": {
+    "records.jsonl": {
+      "sha256": "46113db11bddfd39eef0ecd264080914789961fcda6921ed483742dc8dfae8ee",
+      "purpose": "One coherent valid example of every v1 record type"
+    },
+    "integrity_report.json": {
+      "sha256": "28ffb95a4b5ce05ddc8694f64fe13dcf98b46f0e70e8d6ca04adbbccd7d08df7",
+      "purpose": "Expected offline collection-integrity result with explicit not-checked warnings"
+    },
+    "../../../record_contract_fixtures.py": {
+      "sha256": "ff9b24f145372606413f48622832909bba8cc1c9bae75208fce84b2ad781c44d",
+      "purpose": "Deterministic fixture builder and invalid-case mutation base"
+    }
+  },
+  "policy_hashes": {
+    "gap_ontology_v1.yaml": "123a1521e9d497b525a7d91a5cd837ea7d076d357849c316ea3daf857859a916",
+    "scientific_validity_v1.yaml": "56a8cf24ade04bcb07d46a5f09d39d3e9c12e5db1c292d21e12d8aaf319e6bdf"
+  },
+  "invalid_case_coverage": [
+    "missing required field",
+    "unknown core field",
+    "invalid extension namespace or value",
+    "stale deterministic identity",
+    "non-UTC or invalid timestamp",
+    "unsafe unknown-availability eligibility",
+    "bad passage hash or coordinates",
+    "unsupported claim evidence",
+    "contradiction without comparable counterclaim",
+    "non-deterministic or ontology-mismatched gap signal",
+    "candidate without signal or valid transition",
+    "reassessment without a new candidate version",
+    "novelty/importance/feasibility conflation",
+    "composite score without an explicit versioned rule",
+    "Mantis interpretation treated as evidence",
+    "Mantis candidate creation without an independent signal",
+    "invalid Mantis Title/Semantic/Connection profile",
+    "Mantis credential-like host or incomplete success receipt",
+    "orphan, duplicate, and competing record identities",
+    "snapshot membership omission and unauthorized cross-snapshot reference",
+    "ownership, evidence-span, temporal-eligibility, and cycle mismatch",
+    "local artifact hash, size, path, and exact passage occurrence mismatch",
+    "missing explicit schema-migration path"
+  ],
+  "validation_boundary": {
+    "step_1_3": "Record-local syntax, types, semantic conditions, IDs, hashes, within-record chronology, policy versions, and scientific boundaries",
+    "step_1_4": "Implemented collection-wide existence, ownership, snapshot closure, lineage, collision, chronology, artifact, and passage-offset validation; migrations require an explicit registered path and a future atomic collection migrator"
+  },
+  "notes": [
+    "The fixture is not evidence and contains no real paper text or personal data.",
+    "Syntactically valid orphan references are intentionally accepted locally so Step 1.3 does not pretend to perform Step 1.4 checks.",
+    "Remote fixture artifacts are never fetched by offline validation and therefore produce explicit not-checked warnings.",
+    "The records are not wired into the current production pipeline or legacy Mantis CSV exporter."
+  ]
+}

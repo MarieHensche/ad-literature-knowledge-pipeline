@@ -8,7 +8,7 @@ from ad_lit_pipeline.core.errors import UnsupportedProviderError
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.json_io import read_json_object
 from ad_lit_pipeline.io.jsonl_io import write_jsonl
-from ad_lit_pipeline.providers.base import CandidateProvider
+from ad_lit_pipeline.providers.base import CandidateProvider, candidate_provider_dates
 from ad_lit_pipeline.providers.openalex import OpenAlexProvider
 
 
@@ -139,6 +139,7 @@ def run(
             "per_page": resolved_per_page,
             "provider_max_per_page": provider_max_per_page(provider),
             "search_queries": search_query_count,
+            "provider_dates": candidate_provider_dates(candidates),
             "fetch_diagnostics": diagnostics,
         },
     )

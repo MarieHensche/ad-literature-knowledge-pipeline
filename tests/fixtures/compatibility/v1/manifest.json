@@ -1,0 +1,35 @@
+{
+  "manifest_version": "1.0.0",
+  "fixture_id": "step_1_7_compatibility_matrix_v1",
+  "legacy_export": {
+    "input": "tests/fixtures/synthetic_baseline/v1/extraction_filled.csv",
+    "expected": "tests/fixtures/synthetic_baseline/v1/expected/mantis_ready.csv",
+    "sha256": "d870a082fa2473addd9dbfe984b0a22588ed07c9dc7ba82cebed523c9c075088",
+    "rows": 5
+  },
+  "registry": {
+    "steps": 43,
+    "pipelines": 10,
+    "default_main": [
+      "normalize_metadata",
+      "screen_scope",
+      "prepare_full_text",
+      "normalize_tagging_config",
+      "generate_tagging_rules",
+      "tag_papers",
+      "audit_extraction",
+      "export_mantis"
+    ],
+    "optional_mantis_delivery": [
+      "export_mantis_views",
+      "publish_mantis_views"
+    ]
+  },
+  "compatibility_guarantees": [
+    "The legacy export_mantis implementation and parsed CSV contract are unchanged.",
+    "The default main pipeline still ends at legacy export_mantis.",
+    "The new Mantis delivery pipeline is optional and separately registered.",
+    "Mantis publication is not reachable without an explicit publish feature gate.",
+    "No live Mantis service or OpenAI call is required by the regression suite."
+  ]
+}

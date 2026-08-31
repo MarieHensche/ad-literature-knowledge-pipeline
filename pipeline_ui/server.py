@@ -28,9 +28,14 @@ from ad_lit_pipeline.core.artifacts import main_pipeline_artifacts
 from ad_lit_pipeline.core.registry import (
     COLLECTION_PIPELINE,
     COLLECTION_WITH_CONTRACT_PIPELINE,
+    CollectionPipelineOptions,
     CONTRACT_BOOTSTRAP_PIPELINE,
     MAIN_PIPELINE,
+    MainPipelineOptions,
     REVIEW_PIPELINE,
+    STEP_CATALOG,
+    assemble_collection_pipeline,
+    assemble_main_pipeline,
 )
 
 
@@ -193,11 +198,15 @@ def collection_step_names(
     generate_contract: bool,
     contract_bootstrap_only: bool,
 ) -> list[str]:
-    if contract_bootstrap_only:
-        return CONTRACT_BOOTSTRAP_PIPELINE
-    if generate_contract:
-        return COLLECTION_WITH_CONTRACT_PIPELINE
-    return COLLECTION_PIPELINE
+    return list(
+        assemble_collection_pipeline(
+            CollectionPipelineOptions(
+                generate_topic_contract=generate_contract,
+                topic_contract_supplied=not generate_contract,
+                contract_bootstrap_only=contract_bootstrap_only,
+            )
+        )
+    )
 
 
 def main_step_names(
@@ -205,42 +214,15 @@ def main_step_names(
     generate_review: bool = False,
     review_review_label_values: bool = False,
 ) -> list[str]:
-    pipeline = list(MAIN_PIPELINE)
-    if review_tagging_categories:
-        insertion_index = pipeline.index("normalize_tagging_config")
-        pipeline = [
-            *pipeline[:insertion_index],
-            "review_tagging_categories",
-            *pipeline[insertion_index:],
-        ]
-    if generate_review:
-        insertion_index = pipeline.index("prepare_full_text") + 1
-        pipeline = [
-            *pipeline[:insertion_index],
-            "filter_review_papers",
-            *pipeline[insertion_index:],
-        ]
-        insertion_index = pipeline.index("tag_papers")
-        pipeline = [
-            *pipeline[:insertion_index],
-            "normalize_review_config",
-            *pipeline[insertion_index:],
-            "normalize_review_label_values",
-            "validate_review_labels",
-            "build_review_coverage_report",
-            "build_review_evidence_map",
-            "synthesize_review_sections",
-            "edit_review_sections",
-            "assemble_literature_review",
-        ]
-        if review_review_label_values:
-            insertion_index = pipeline.index("validate_review_labels")
-            pipeline = [
-                *pipeline[:insertion_index],
-                "review_review_label_values",
-                *pipeline[insertion_index:],
-            ]
-    return pipeline
+    return list(
+        assemble_main_pipeline(
+            MainPipelineOptions(
+                review_tagging_categories=review_tagging_categories,
+                generate_review=generate_review,
+                review_review_label_values=review_review_label_values,
+            )
+        )
+    )
 
 
 def with_valid_collection_step_options(
@@ -671,6 +653,17 @@ def app_config(root: Path = ROOT) -> dict[str, Any]:
             "review": REVIEW_PIPELINE,
             "collection": COLLECTION_PIPELINE,
             "collectionWithContract": COLLECTION_WITH_CONTRACT_PIPELINE,
+        },
+        "stepCatalog": {
+            name: {
+                "inputs": spec.inputs,
+                "outputs": spec.outputs,
+                "usesLlm": spec.uses_llm,
+                "description": spec.description,
+                "dependencies": spec.dependencies,
+                "capabilities": sorted(spec.capabilities),
+            }
+            for name, spec in STEP_CATALOG.items()
         },
         "defaults": {
             "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),

@@ -690,6 +690,11 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     ] == {"category_id": "adaptation_strategy", "values": ["heat_action_plan"]}
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert "climate_change" in contract["topic_structure"]["secondary_topics"]
+    assert contract["topic_policy"]["policy_id"] == "topic_structure"
+    assert contract["topic_policy"]["policy_version"] == "1.0.0"
+    assert len(contract["topic_policy"]["policy_sha256"]) == 64
+    assert contract["topic_policy"]["profile_ids"] == []
+    assert result.metadata["topic_policy"] == contract["topic_policy"]
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
 
@@ -2339,6 +2344,11 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert result.row_counts["review_full_texts_topic_eligible"] == 1
     assert result.row_counts["review_full_texts_selected"] == 1
     assert result.row_counts["tagging_categories"] == 6
+    assert refined["topic_policy"]["profile_ids"] == [
+        "computational_methods",
+        "alzheimer_disease",
+    ]
+    assert result.metadata["topic_policy"] == refined["topic_policy"]
     assert result.warnings == [
         (
             "Ignored review/overview seed papers without extracted full text; "

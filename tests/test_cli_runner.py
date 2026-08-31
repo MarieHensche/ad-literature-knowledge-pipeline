@@ -1,20 +1,32 @@
 from __future__ import annotations
 
 import csv
+import json
 import subprocess
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from ad_lit_pipeline.cli.run_collection import candidate_search_budget
 from ad_lit_pipeline.cli.run_pipeline import prepare_papers_csv
+from ad_lit_pipeline.core.manifest import MANIFEST_SCHEMA_VERSION
+from ad_lit_pipeline.core.provenance import REDACTED, RUN_PROVENANCE_SCHEMA_VERSION
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RUN_IDS: dict[str, str] = {}
 
 
 def run_script(*args: str) -> subprocess.CompletedProcess[str]:
+    command_args = list(args)
+    if "--run-id" in command_args:
+        index = command_args.index("--run-id") + 1
+        requested = command_args[index]
+        resolved = f"{requested}-{uuid4().hex}"
+        command_args[index] = resolved
+        RUN_IDS[requested] = resolved
     return subprocess.run(
-        [sys.executable, *args],
+        [sys.executable, *command_args],
         cwd=ROOT,
         check=True,
         text=True,
@@ -64,6 +76,19 @@ def test_run_pipeline_dry_run_selects_only_step() -> None:
 
     assert "Would run step: normalize_metadata" in result.stdout
     assert "Would run step: screen_scope" not in result.stdout
+    manifest = json.loads(
+        (ROOT / "runs" / RUN_IDS["pytest-main-dry-run"] / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["manifest_schema_version"] == MANIFEST_SCHEMA_VERSION
+    assert manifest["attempts"][0]["status"] == "dry_run"
+    assert manifest["provenance"]["schema_version"] == (
+        RUN_PROVENANCE_SCHEMA_VERSION
+    )
+    assert manifest["provenance"]["invocation"]["selected_steps"] == [
+        "normalize_metadata"
+    ]
 
 
 def test_run_pipeline_dry_run_skips_calibration_by_default() -> None:
@@ -464,6 +489,23 @@ def test_run_collection_with_contract_does_not_require_topic() -> None:
 
     assert "Would run step: plan_search" in result.stdout
     assert "generate_topic_contract" not in result.stdout
+    manifest = json.loads(
+        (
+            ROOT
+            / "runs"
+            / RUN_IDS["pytest-existing-contract-dry-run"]
+            / "manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    serialized = json.dumps(manifest)
+    assert "tester@example.com" not in serialized
+    assert REDACTED in serialized
+    assert manifest["provenance"]["invocation"]["selected_steps"] == [
+        "plan_search"
+    ]
+    assert [
+        provider["name"] for provider in manifest["provenance"]["providers"]
+    ] == ["openalex"]
 
 
 def test_run_collection_with_contract_can_start_at_review_refinement() -> None:
@@ -491,6 +533,7 @@ def test_run_collection_with_contract_can_start_at_review_refinement() -> None:
 
 
 def test_run_collection_requires_topic_when_generating_contract() -> None:
+    run_id = f"pytest-missing-topic-{uuid4().hex}"
     result = subprocess.run(
         [
             sys.executable,
@@ -502,7 +545,7 @@ def test_run_collection_requires_topic_when_generating_contract() -> None:
             "generate_topic_contract",
             "--dry-run",
             "--run-id",
-            "pytest-missing-topic",
+            run_id,
         ],
         cwd=ROOT,
         text=True,

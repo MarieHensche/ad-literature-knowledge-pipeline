@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from dotenv import load_dotenv
@@ -11,15 +12,27 @@ from ad_lit_pipeline.core.artifacts import (
     knowledge_artifacts,
     main_pipeline_artifacts,
 )
-from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
+from ad_lit_pipeline.core.manifest import (
+    ManifestRecorder,
+    recorded_selected_steps,
+    resume_step_from_manifest,
+    resume_steps_from_manifest,
+)
+from ad_lit_pipeline.core.provenance import build_run_provenance
 from ad_lit_pipeline.core.registry import (
     KNOWLEDGE_FINDINGS_PIPELINE,
     KNOWLEDGE_PIPELINE,
     MAIN_PIPELINE,
-    MAIN_PIPELINE_WITH_CALIBRATION,
+    MainPipelineOptions,
     REVIEW_PIPELINE,
+    assemble_main_pipeline,
 )
-from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
+from ad_lit_pipeline.core.runner import (
+    attempt_trace_dir,
+    default_trace_dir,
+    run_selected_steps,
+    select_steps,
+)
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.export import mantis
 from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
@@ -131,52 +144,19 @@ def explain(collection: str) -> None:
 
 def selected_main_pipeline(args: argparse.Namespace) -> list[str]:
     requested_step = args.only_step or args.from_step
-    if args.calibrate_topic_contract or requested_step == "calibrate_topic_contract":
-        pipeline = MAIN_PIPELINE_WITH_CALIBRATION
-    else:
-        pipeline = MAIN_PIPELINE
-
-    if args.review_tagging_categories or requested_step == "review_tagging_categories":
-        pipeline = pipeline_with_tagging_review(pipeline)
-
-    if review_steps_requested(args, requested_step):
-        pipeline = pipeline_with_review_generation(pipeline, args, requested_step)
-
-    if knowledge_findings_requested(args, requested_step):
-        pipeline = pipeline_with_knowledge_findings(pipeline)
-    elif knowledge_steps_requested(args, requested_step):
-        pipeline = pipeline_with_knowledge_exports(pipeline)
-
-    return pipeline
-
-
-def knowledge_steps_requested(
-    args: argparse.Namespace,
-    requested_step: str | None,
-) -> bool:
-    return args.export_knowledge or requested_step in KNOWLEDGE_PIPELINE
-
-
-def knowledge_findings_requested(
-    args: argparse.Namespace,
-    requested_step: str | None,
-) -> bool:
-    return (
-        args.extract_knowledge_findings
-        or requested_step == KNOWLEDGE_FINDINGS_PIPELINE[-1]
-    )
-
-
-def review_steps_requested(
-    args: argparse.Namespace,
-    requested_step: str | None,
-) -> bool:
-    review_steps = {*REVIEW_PIPELINE, "review_review_label_values"}
-    return (
-        args.generate_review
-        or args.extract_review_labels
-        or args.review_review_label_values
-        or requested_step in review_steps
+    return list(
+        assemble_main_pipeline(
+            MainPipelineOptions(
+                calibrate_topic_contract=args.calibrate_topic_contract,
+                review_tagging_categories=args.review_tagging_categories,
+                export_knowledge=args.export_knowledge,
+                extract_knowledge_findings=args.extract_knowledge_findings,
+                extract_review_labels=args.extract_review_labels,
+                generate_review=args.generate_review,
+                review_review_label_values=args.review_review_label_values,
+                requested_step=requested_step,
+            )
+        )
     )
 
 
@@ -186,103 +166,6 @@ def review_label_extraction_enabled(args: argparse.Namespace) -> bool:
         or args.extract_review_labels
         or args.review_review_label_values
     )
-
-
-def pipeline_with_knowledge_exports(pipeline: list[str]) -> list[str]:
-    """Insert knowledge exports immediately after full-text preparation."""
-    if all(step in pipeline for step in KNOWLEDGE_PIPELINE):
-        return list(pipeline)
-
-    insertion_index = pipeline.index("prepare_full_text") + 1
-    return [
-        *pipeline[:insertion_index],
-        *KNOWLEDGE_PIPELINE,
-        *pipeline[insertion_index:],
-    ]
-
-
-def pipeline_with_knowledge_findings(pipeline: list[str]) -> list[str]:
-    """Insert knowledge exports and finding extraction after full text."""
-    pipeline = pipeline_with_knowledge_exports(pipeline)
-    if "extract_knowledge_findings" in pipeline:
-        return list(pipeline)
-
-    insertion_index = pipeline.index("export_knowledge_evidence_excerpts") + 1
-    return [
-        *pipeline[:insertion_index],
-        "extract_knowledge_findings",
-        *pipeline[insertion_index:],
-    ]
-
-
-def pipeline_with_tagging_review(pipeline: list[str]) -> list[str]:
-    """Insert the human review step before category normalization."""
-    if "review_tagging_categories" in pipeline:
-        return list(pipeline)
-    insertion_index = pipeline.index("normalize_tagging_config")
-    return [
-        *pipeline[:insertion_index],
-        "review_tagging_categories",
-        *pipeline[insertion_index:],
-    ]
-
-
-def pipeline_with_review_generation(
-    pipeline: list[str],
-    args: argparse.Namespace,
-    requested_step: str | None,
-) -> list[str]:
-    """Insert efficient review extraction and append optional synthesis steps."""
-    if requested_step == "extract_review_labels":
-        return [*pipeline, "filter_review_papers", "extract_review_labels"]
-
-    if (
-        "filter_review_papers" not in pipeline
-        and "prepare_full_text" in pipeline
-    ):
-        insertion_index = pipeline.index("prepare_full_text") + 1
-        pipeline = [
-            *pipeline[:insertion_index],
-            "filter_review_papers",
-            *pipeline[insertion_index:],
-        ]
-
-    if (
-        "normalize_review_config" not in pipeline
-        and "tag_papers" in pipeline
-    ):
-        insertion_index = pipeline.index("tag_papers")
-        pipeline = [
-            *pipeline[:insertion_index],
-            "normalize_review_config",
-            *pipeline[insertion_index:],
-        ]
-
-    if args.extract_review_labels and not args.generate_review:
-        return pipeline
-
-    review_pipeline = [
-        "normalize_review_label_values",
-        "validate_review_labels",
-        "build_review_coverage_report",
-        "build_review_evidence_map",
-        "synthesize_review_sections",
-        "edit_review_sections",
-        "assemble_literature_review",
-    ]
-
-    if (
-        args.review_review_label_values
-        or requested_step == "review_review_label_values"
-    ) and "review_review_label_values" not in review_pipeline:
-        insertion_index = review_pipeline.index("validate_review_labels")
-        review_pipeline = [
-            *review_pipeline[:insertion_index],
-            "review_review_label_values",
-            *review_pipeline[insertion_index:],
-        ]
-
-    return [*pipeline, *review_pipeline]
 
 
 def build_step_functions(
@@ -464,28 +347,65 @@ def run_full_pipeline(args: argparse.Namespace) -> None:
     if not args.topic_contract:
         raise ValueError("run requires --topic-contract")
 
+    resume_manifest_path: Path | None = None
     if args.resume:
         if not args.run_id:
             raise ValueError("--resume requires --run-id")
-        resume_from = resume_step_from_manifest(
-            Path("runs") / args.run_id / "manifest.json"
-        )
-        if resume_from is None:
-            print("Nothing to resume; previous manifest has no failed step.")
+        if args.dry_run:
+            raise ValueError("--resume cannot be combined with --dry-run")
+        if args.only_step or args.from_step:
+            raise ValueError(
+                "--resume uses the original selected steps and cannot be combined "
+                "with --only-step or --from-step"
+            )
+        resume_manifest_path = Path("runs") / args.run_id / "manifest.json"
+        resume_payload = ManifestRecorder.load(resume_manifest_path)
+        resume_from = resume_step_from_manifest(resume_manifest_path)
+        if resume_from is None and (
+            resume_payload.get("status") in {"succeeded", "dry_run"}
+            or recorded_selected_steps(resume_payload) is None
+        ):
+            print("Nothing to resume; the original selection has no incomplete step.")
             return
-        args.from_step = resume_from
+        if resume_from is not None:
+            args.from_step = resume_from
 
     topic_contract_path = Path(args.topic_contract)
     model = args.model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    pipeline = selected_main_pipeline(args)
+    selected = select_steps(
+        pipeline,
+        args.only_step,
+        args.from_step,
+    )
+    if resume_manifest_path is not None:
+        selected = resume_steps_from_manifest(
+            resume_manifest_path,
+            fallback_steps=selected,
+        )
+    provenance = build_run_provenance(
+        project_root=Path.cwd(),
+        argv=sys.argv,
+        options=vars(args),
+        selected_steps=selected,
+        pipeline_steps=pipeline,
+        topic_contract_path=topic_contract_path,
+        model=model,
+    )
     manifest = ManifestRecorder.create(
         collection=args.collection,
         pipeline_name="main",
         run_id=args.run_id,
         topic_contract_path=topic_contract_path,
         model=model,
+        provenance=provenance,
+        resume=args.resume,
     )
-    trace_dir = Path(args.trace_dir) if args.trace_dir else default_trace_dir(manifest)
-    selected = select_steps(selected_main_pipeline(args), args.only_step, args.from_step)
+    trace_dir = (
+        attempt_trace_dir(manifest, Path(args.trace_dir))
+        if args.trace_dir
+        else default_trace_dir(manifest)
+    )
     step_functions = build_step_functions(args, trace_dir)
 
     if args.dry_run:
@@ -602,8 +522,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--calibrate-topic-contract",
         action="store_true",
         help=(
-            "Opt into legacy main-pipeline contract calibration. New collection "
-            "runs calibrate the contract before exporting papers."
+            "Opt into legacy main-pipeline contract calibration against "
+            "selected included primary-paper full texts."
         ),
     )
     run_parser.add_argument(

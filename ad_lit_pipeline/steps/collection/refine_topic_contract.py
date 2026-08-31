@@ -46,6 +46,13 @@ from ad_lit_pipeline.topics.contract import (
     validate_generated_topic_structure_quality,
     validate_topic_contract,
 )
+from ad_lit_pipeline.topics.policy import (
+    attach_topic_policy_reference,
+    default_topic_structure_policy,
+    policy_abbreviations,
+    render_topic_policy_guidance,
+    selected_profile_ids,
+)
 
 
 STEP = StepSpec(
@@ -97,104 +104,6 @@ IGNORED_OFF_TOPIC_REVIEWS_WARNING = (
 MAX_REVIEW_FULL_TEXT_EVIDENCE_CHARS = 16_000
 MIN_REVIEW_TITLE_TOPIC_TOKENS = 2
 MAX_REVIEW_TITLE_PHRASE_NGRAM = 4
-
-GENERIC_REVIEW_TOPIC_TOKENS = {
-    "abstract",
-    "academic",
-    "adaptive",
-    "affects",
-    "algorithmic",
-    "analyses",
-    "analysis",
-    "analyzing",
-    "application",
-    "applications",
-    "approach",
-    "approaches",
-    "aspect",
-    "aspects",
-    "assess",
-    "assessing",
-    "artificial",
-    "automated",
-    "based",
-    "borderline",
-    "chatbot",
-    "chatbots",
-    "chatgpt",
-    "clearly",
-    "deep",
-    "directly",
-    "discuss",
-    "effect",
-    "effects",
-    "effectiveness",
-    "evidence",
-    "empirical",
-    "exclude",
-    "explore",
-    "exploring",
-    "focused",
-    "focus",
-    "generative",
-    "impact",
-    "impacts",
-    "include",
-    "implementation",
-    "indicate",
-    "indicates",
-    "investigate",
-    "investigates",
-    "intelligent",
-    "intelligence",
-    "language",
-    "large",
-    "learning",
-    "literature",
-    "llm",
-    "machine",
-    "method",
-    "methodologies",
-    "methods",
-    "meta",
-    "model",
-    "models",
-    "outcome",
-    "outcomes",
-    "paper",
-    "papers",
-    "performance",
-    "platform",
-    "platforms",
-    "processes",
-    "only",
-    "related",
-    "relevant",
-    "research",
-    "role",
-    "review",
-    "reviews",
-    "smart",
-    "study",
-    "studies",
-    "studying",
-    "subtopics",
-    "summarizing",
-    "support",
-    "supported",
-    "supporting",
-    "systematic",
-    "system",
-    "systems",
-    "technology",
-    "technologies",
-    "they",
-    "title",
-    "tool",
-    "tools",
-    "unrelated",
-}
-
 
 class TaggingRepairError(ValueError):
     """Repair failure that preserves trace paths from the repair LLM call."""
@@ -282,6 +191,10 @@ def deduplicate_review_overviews(
 
 def topic_specific_terms(topic_contract: dict[str, Any]) -> set[str]:
     """Return contract terms specific enough to gate review relevance."""
+    review_topic_stopwords = (
+        default_topic_structure_policy().review_topic_stopwords
+    )
+    abbreviations = policy_abbreviations(default_topic_structure_policy())
     texts = []
     research_topic = topic_contract.get("research_topic", {})
     if isinstance(research_topic, dict):
@@ -329,8 +242,8 @@ def topic_specific_terms(topic_contract: dict[str, Any]) -> set[str]:
     return {
         token
         for token in tokens
-        if (len(token) >= 4 or token == "ai")
-        and token not in GENERIC_REVIEW_TOPIC_TOKENS
+        if (len(token) >= 4 or token in abbreviations)
+        and token not in review_topic_stopwords
     }
 
 
@@ -682,6 +595,13 @@ def call_llm(
     trace_writer: LLMTraceWriter | None = None,
     max_review_overviews: int = DEFAULT_MAX_REVIEWS,
 ) -> tuple[dict[str, Any], list[Path]]:
+    policy = default_topic_structure_policy()
+    profile_ids = selected_profile_ids(
+        policy,
+        current_contract,
+        topic_description,
+    )
+    policy_guidance = render_topic_policy_guidance(policy, profile_ids)
     selected_reviews = select_review_overviews_with_full_text(
         current_contract,
         review_overviews,
@@ -702,7 +622,11 @@ def call_llm(
         attempt_prompt = (
             prompt
             if last_error is None
-            else prompt_with_validation_feedback(prompt, last_error)
+            else prompt_with_validation_feedback(
+                prompt,
+                last_error,
+                policy_guidance=policy_guidance,
+            )
         )
         call_id = (
             "contract_refinement"
@@ -723,18 +647,24 @@ def call_llm(
             trace_paths.extend(result.trace_paths.as_list())
 
         try:
-            proposed_contract = contract_from_model_payload(result.parsed)
-            validate_topic_contract(proposed_contract)
+            proposed_contract = contract_from_model_payload(
+                result.parsed,
+                policy=policy,
+                profile_ids=profile_ids,
+            )
+            validate_topic_contract(proposed_contract, policy)
             contract = merge_refined_tagging(
                 current_contract,
                 proposed_contract,
                 include_topic_structure=True,
             )
-            validate_topic_contract(contract)
+            attach_topic_policy_reference(contract, policy, profile_ids)
+            validate_topic_contract(contract, policy)
             validate_generated_topic_structure_quality(
                 contract,
                 label="Refined topic contract",
                 topic_description=topic_description,
+                policy=policy,
             )
         except ValueError as error:
             last_error = error
@@ -770,6 +700,11 @@ def call_llm(
                         client=client,
                         trace_writer=trace_writer,
                         call_id=repair_call_id,
+                    )
+                    attach_topic_policy_reference(
+                        repaired_contract,
+                        policy,
+                        profile_ids,
                     )
                     trace_paths.extend(repair_trace_paths)
                     return repaired_contract, trace_paths
@@ -864,6 +799,7 @@ def run(
         metadata={
             "topic_id": contract["topic_id"],
             "title": contract["research_topic"]["title"],
+            "topic_policy": deepcopy(contract["topic_policy"]),
         },
     )
 

@@ -56,59 +56,24 @@ def test_generate_topic_contract_prompt_discourages_narrow_screening() -> None:
         template,
     )
 
-    assert "borderline or tangentially relevant candidates are included" in prompt
-    assert "collection.search_queries" in prompt
     assert "discovery-focused topic contract" in prompt
-    assert "tagging categories in this first contract are provisional" in prompt.lower()
-    assert "final extraction ontology" in prompt
-    assert "Include at least one provisional tagging category" in prompt
-    assert "do not create any root\n  focus selector" in prompt
-    assert "examples only" in prompt
-    assert "`applies_when`" in prompt
-    assert "common abbreviations or acronyms" in prompt
-    assert "Make main topics broad enough for title screening" in prompt
-    assert "least 4 focused `terms`" in prompt
-    assert "Do not pad term lists" in prompt
-    assert "`retrieval_terms`" in prompt
-    assert "`matching_terms`" in prompt
-    assert "`secondary_topic_id`" in prompt
-    assert "Keep secondary replacements as separate semantic groups" in prompt
-    assert "`title`, `abstract`, or `title_or_abstract`" in prompt
-    assert "mandatory core concept for title screening" in prompt
-    assert "categories may use those ids directly" in prompt.lower()
-    assert "Could X be used to" in prompt
-    assert "Do not anchor on the application" in prompt
-    assert "Each main topic must represent exactly one\n    conceptual area" in prompt
-    assert "instead of `ai_in_school`" in prompt
-    assert "Terms inside a main topic must name only that one component" in prompt
-    assert "Set the anchor main topic's `field` to `title`" in prompt
-    assert "Keep `retrieval_terms` component-pure" in prompt
-    assert "Do not create a secondary topic that simply repeats" in prompt
-    assert "genuinely adjacent sibling directions" in prompt
-    assert "machine_learning` and `deep_learning`" in prompt
-    assert "Do not use `abstract` for generated main topics" in prompt
-    assert "Setting, context, or population components should use `title`" in prompt
-    assert "domain-specific named variants" in prompt
-    assert "attention and" in prompt
-    assert "memory should use separate" in prompt
-    assert "broad criterion or motivation" in prompt
-    assert "concrete replacement, comparator" in prompt
-    assert "alternative to a concrete target" in prompt
-    assert "not only a broad `building_materials` topic" in prompt
-    assert "separate `fungi`, `building_materials`, and" in prompt
-    assert "Keep replacement/comparator topics component-pure" in prompt
-    assert "`cement substitute`" in prompt
-    assert "Keep application/domain topics concrete" in prompt
-    assert "`construction technology`" in prompt
-    assert "preserve that\n  wording in the main topic id/label" in prompt
-    assert "`construction_products` or `building_products`" in prompt
-    assert "`structural integrity`, `construction" in prompt
-    assert "`building techniques`" in prompt
-    assert "performance metrics" in prompt
+    assert "Versioned topic-structure policy guidance" in prompt
+    assert "Policy: topic_structure 1.0.0" in prompt
     assert "climate change affect human health" in prompt
-    assert "at least 6 knowledge tagging categories" not in prompt
-    assert "mental distribution check" not in prompt
-    assert "no single value should be so broad" not in prompt
+    assert "mandatory," in prompt
+    assert "non-replaceable core concept" in prompt
+    assert "Each main topic must represent exactly one conceptual area" in prompt
+    assert "at least four focused `terms`" in prompt
+    assert "`retrieval_terms` must contain at most twelve" in prompt
+    assert "secondary_topic_id" in prompt
+    assert "adjacent sibling" in prompt
+    assert "Borderline or tangentially relevant candidates are" in prompt
+    assert "collection.search_queries" in prompt
+    assert "provisional examples only" in prompt
+    assert "Include at least one provisional tagging category" in prompt
+    assert "`applies_when`" in prompt
+    assert "Alzheimer" not in prompt
+    assert "Parkinson" not in prompt
 
 
 def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -> None:
@@ -136,51 +101,25 @@ def test_refine_topic_contract_prompt_requests_multiple_knowledge_categories() -
     assert "full_text_evidence" in prompt
     assert "Define tagging categories and allowed values only from `full_text_evidence`" in prompt
     assert "Do not use titles, abstracts, query metadata" in prompt
-    assert "at least 6 knowledge tagging categories" in prompt
-    assert "Do not create a root focus selector" in prompt
-    assert "Tag papers directly with topic-specific categories" in prompt
-    assert "topic_structure.main_topics" in prompt
-    assert "mandatory core concept for title screening" in prompt
-    assert "improve recall without weakening topical fit" in prompt
-    assert "Could X be used to" in prompt
-    assert "Do not anchor on the application" in prompt
-    assert "Each main topic must represent exactly one conceptual area" in prompt
-    assert "Bad examples: `ai_in_school`" in prompt
-    assert "Terms inside a main topic must name only that one component" in prompt
-    assert "Set the anchor main topic's `field` to `title`" in prompt
-    assert "Keep `retrieval_terms` component-pure" in prompt
-    assert "Do not create a secondary topic that simply repeats" in prompt
-    assert "genuinely adjacent sibling directions" in prompt
-    assert "machine_learning` and `deep_learning`" in prompt
-    assert "Do not use `abstract` for generated main topics" in prompt
-    assert "Setting, context, or population components should use `title`" in prompt
-    assert "multiple outcomes, targets, signals" in prompt
-    assert "broad criterion or motivation" in prompt
-    assert "alternative to a concrete target" in prompt
-    assert "not only a broad `building_materials` topic" in prompt
-    assert "separate `fungi`, `building_materials`, and" in prompt
-    assert "Keep replacement/comparator topics component-pure" in prompt
-    assert "`cement substitute`" in prompt
-    assert "Keep application/domain topics concrete" in prompt
-    assert "`construction technology`" in prompt
-    assert "preserve that\n    wording in the main topic id/label" in prompt
-    assert "`construction_products` or\n    `building_products`" in prompt
-    assert "`structural integrity`, `construction" in prompt
-    assert "`building techniques`" in prompt
-    assert "whole-question" in prompt
-    assert "effect_of_x" in prompt
+    assert "at least six topic-specific knowledge categories" in prompt
+    assert "root focus selector" in prompt
+    assert "whole-question category" in prompt
     assert "mental distribution check" in prompt
     assert "conditional sub-categories" in prompt
-    assert "Do not add `unclear`, `mixed_or_unclear`, `not_reported`, or `other`" in prompt
-    assert "generic boilerplate categories" in prompt
-    assert "generic method or participant buckets" in prompt
-    assert "topic-specific id and values" in prompt
-    assert "multiple allowed values" in prompt
+    assert "`unclear`" in prompt
+    assert "`mixed_or_unclear`" in prompt
+    assert "`not_reported`" in prompt
+    assert "generic method/participant" in prompt
+    assert "multiple" in prompt
+    assert "concrete allowed values" in prompt
     assert "`applies_when`" in prompt
-    assert "may refine only `topic_structure` and `tagging.categories`" in prompt
-    assert "know-how" not in prompt
+    assert "may refine only" in prompt
+    assert "`topic_structure` and" in prompt
+    assert "`tagging.categories`" in prompt
     assert "imagined primary papers" in prompt
     assert "If no extracted review full-text evidence is available" in prompt
+    assert "Policy: topic_structure 1.0.0" in prompt
+    assert "Profile `alzheimer_disease`" in prompt
 
 
 def test_calibrate_topic_contract_prompt_uses_primary_full_text_evidence() -> None:
@@ -269,28 +208,14 @@ def test_repair_topic_structure_prompt_is_structure_only() -> None:
         ],
     )
 
-    assert "Return only a complete repaired `topic_structure` JSON object" in prompt
-    assert "Do not return a full topic contract" in prompt
-    assert "source/tool/intervention/material should be\n  the anchor" in prompt
-    assert "not the application, outcome, or replacement goal" in prompt
+    assert "Return a corrected `topic_structure` object only" in prompt
+    assert "Do not return or change any" in prompt
+    assert "other contract section" in prompt
+    assert "non-replaceable title-screening concept" in prompt
     assert "adjacent sibling directions" in prompt
-    assert "not narrower internal\n  subtypes" in prompt
-    assert "Do not use `abstract` for generated main topics" in prompt
-    assert "Setting, context, or population components should use `title`" in prompt
-    assert "explicit paired concepts are buried" in prompt
-    assert "broad criterion or motivation topic" in prompt
-    assert "replacement target is not a main topic" in prompt
-    assert "do not leave\n  `concrete` only inside terms" in prompt
-    assert "replacement/comparator topic has criterion" in prompt
-    assert "concrete replacement, concrete\n  alternative, cement substitute" in prompt
-    assert "replacement application/domain is not a main" in prompt
-    assert "application/domain topic has generic terms" in prompt
-    assert "application/domain topic or secondary group has" in prompt
-    assert "`structural integrity`, `construction innovations`" in prompt
-    assert "application/domain secondary group has criterion" in prompt
-    assert "`construction_products`, `building_products`" in prompt
-    assert "missing secondary topic is an application/domain topic" in prompt
-    assert "without a fallback after removing invalid green" in prompt
+    assert "not aliases" in prompt
+    assert "Policy: topic_structure 1.0.0" in prompt
+    assert "Profile `computational_methods`" in prompt
     assert "school" in prompt
     assert "missing_secondary_topic" in prompt
 

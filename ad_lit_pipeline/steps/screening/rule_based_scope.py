@@ -12,6 +12,10 @@ from ad_lit_pipeline.topics.contract import (
     load_topic_contract,
     rule_based_screening_from_contract,
 )
+from ad_lit_pipeline.topics.policy import (
+    TopicStructurePolicy,
+    default_topic_structure_policy,
+)
 
 
 STEP = StepSpec(
@@ -38,29 +42,6 @@ def text_for_screening(row: dict[str, str]) -> str:
         ]
     )
 
-
-KNOWN_ABBREVIATIONS = {
-    "artificial intelligence": ["ai"],
-    "machine learning": ["ml"],
-    "deep learning": ["dl"],
-    "natural language processing": ["nlp"],
-    "large language model": ["llm"],
-    "large language models": ["llm", "llms"],
-    "electric vehicle": ["ev"],
-    "electric vehicles": ["ev", "evs"],
-    "greenhouse gas": ["ghg"],
-    "greenhouse gases": ["ghg", "ghgs"],
-    "particulate matter": ["pm"],
-    "nitrogen oxide": ["nox"],
-    "nitrogen oxides": ["nox"],
-    "grade point average": ["gpa"],
-    "urban heat island": ["uhi"],
-    "urban heat islands": ["uhi"],
-    "internet of things": ["iot"],
-    "virtual reality": ["vr"],
-    "augmented reality": ["ar"],
-    "randomized controlled trial": ["rct"],
-}
 
 STOPWORDS = {
     "a",
@@ -113,13 +94,20 @@ def acronym_for_tokens(tokens: list[str]) -> str:
     return "".join(token[0] for token in tokens if token and token not in STOPWORDS)
 
 
-def term_variants(term: str) -> list[str]:
+def term_variants(
+    term: str,
+    policy: TopicStructurePolicy | None = None,
+) -> list[str]:
     normalized = normalize_text(term)
     if not normalized:
         return []
 
     variants = [normalized]
-    variants.extend(KNOWN_ABBREVIATIONS.get(normalized, []))
+    active_policy = policy or default_topic_structure_policy()
+    variants.extend(active_policy.screening_abbreviations.get(normalized, ()))
+    for group in active_policy.surface_form_groups:
+        if normalized in group.full_forms:
+            variants.extend(sorted(group.abbreviations))
 
     tokens = meaningful_tokens(normalized)
     acronym = acronym_for_tokens(tokens)

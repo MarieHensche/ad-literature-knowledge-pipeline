@@ -1,0 +1,157 @@
+{
+  "manifest_version": "1.0.0",
+  "baseline_id": "step_1_1_synthetic_v1",
+  "step": "1.1",
+  "status": "complete",
+  "recorded_date": "2026-08-26",
+  "purpose": "Freeze a copyright-safe behavioral baseline for the current paper-to-Mantis export boundary before changing contracts or exporter behavior.",
+  "repository": {
+    "head": "dd1fbc3d9faa727d9a472ffe709046a6fb10b397",
+    "checkout": "detached_head",
+    "branches_containing_head": [
+      "dev061602",
+      "origin/dev061602"
+    ],
+    "code_baseline_clean": true,
+    "preexisting_planning_change": "docs/gap_discovery_implementation_plan.md",
+    "requirements_sha256": "1c38fb16506c8f6ab0fba9fdebaaf6fb05e5e46fa290b2d65ab3b296376435fc"
+  },
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python": "3.12.13",
+    "packages": {
+      "PyYAML": "6.0.3",
+      "openai": "3.3.1",
+      "pypdf": "6.16.2",
+      "python-dotenv": "1.2.3",
+      "pytest": "9.1.1"
+    }
+  },
+  "commands": {
+    "install": ".venv/bin/python -m pip install -r requirements.txt pytest",
+    "test": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider",
+    "regenerate_mantis_candidate": ".venv/bin/python scripts/export_mantis_ready.py --input tests/fixtures/synthetic_baseline/v1/extraction_filled.csv --output /tmp/step_1_1_mantis_ready.csv"
+  },
+  "pre_step_regression": {
+    "status": "passed",
+    "tests_passed": 295,
+    "duration_seconds": 5.07,
+    "network_required": false
+  },
+  "post_step_regression": {
+    "status": "passed",
+    "tests_passed": 297,
+    "duration_seconds": 4.12,
+    "network_required": false
+  },
+  "fixture": {
+    "copyright_status": "All titles, abstracts, claims, identifiers, authors, venues, and URLs are fictional and purpose-written for tests.",
+    "record_count": 8,
+    "files": {
+      "papers.csv": {
+        "sha256": "eb0a9c8beb549ac6753060e4b2ff5c44eee257b35e77053076b03c81c966420d",
+        "rows": 8
+      },
+      "extraction_filled.csv": {
+        "sha256": "42f8a025e109d4cdea6bc5ddfcb87ccaca6cb0950ea83c0e39a9e9be7ab00100",
+        "rows": 8
+      },
+      "expected/mantis_ready.csv": {
+        "sha256": "d870a082fa2473addd9dbfe984b0a22588ed07c9dc7ba82cebed523c9c075088",
+        "rows": 5
+      }
+    },
+    "cases": [
+      {
+        "paper_id": "synthetic_ad_001",
+        "result_pattern": "positive",
+        "scope": "core_topic",
+        "expected_mantis": "export"
+      },
+      {
+        "paper_id": "synthetic_ad_002",
+        "result_pattern": "opposing_direction",
+        "scope": "core_topic",
+        "expected_mantis": "export"
+      },
+      {
+        "paper_id": "synthetic_ad_003",
+        "result_pattern": "null",
+        "scope": "core_topic",
+        "expected_mantis": "export"
+      },
+      {
+        "paper_id": "synthetic_ad_004",
+        "result_pattern": "mixed_transfer",
+        "scope": "core_topic",
+        "expected_mantis": "export"
+      },
+      {
+        "paper_id": "synthetic_ad_005",
+        "result_pattern": "claim_missing_title_fallback",
+        "scope": "adjacent_but_relevant",
+        "expected_mantis": "export"
+      },
+      {
+        "paper_id": "synthetic_ad_006",
+        "result_pattern": "out_of_scope",
+        "scope": "out_of_scope",
+        "expected_mantis": "skip"
+      },
+      {
+        "paper_id": "synthetic_ad_007",
+        "result_pattern": "ambiguous",
+        "scope": "mixed_or_unclear",
+        "expected_mantis": "skip"
+      },
+      {
+        "paper_id": "synthetic_ad_008",
+        "result_pattern": "insufficient_reporting",
+        "scope": "unclear",
+        "expected_mantis": "skip"
+      }
+    ]
+  },
+  "expected_mantis": {
+    "input_rows": 8,
+    "mantis_rows": 5,
+    "skipped_not_mantis_relevant": 3,
+    "exported_ids": [
+      "synthetic_ad_001",
+      "synthetic_ad_002",
+      "synthetic_ad_003",
+      "synthetic_ad_004",
+      "synthetic_ad_005"
+    ],
+    "columns": [
+      "title",
+      "categoric",
+      "semantic",
+      "paper_id",
+      "year",
+      "doi",
+      "research_target",
+      "main_topic_category",
+      "population_scope",
+      "baseline_phase",
+      "comparison_group_category",
+      "representation_type",
+      "evidence_modality_family",
+      "signal_category",
+      "dataset_source_type",
+      "extraction_basis",
+      "knowledge_confidence",
+      "review_status"
+    ]
+  },
+  "known_baseline_limitations": [
+    "Tag columns are inferred from their position after main_knowledge_claim.",
+    "Positive, opposing, null, and mixed result direction exists only in semantic prose.",
+    "Ordinary metadata and provenance before main_knowledge_claim are dropped except for the six core fields.",
+    "Filtering is exact and case-sensitive and is disabled when main_topic_category is absent.",
+    "No Mantis field-type profile or profile version is emitted.",
+    "No evidence passage, verification result, source hash, or gap dossier reaches Mantis.",
+    "The current exporter writes a CSV but does not publish or round-trip a Mantis map.",
+    "pytest is needed for development but is not declared in requirements.txt."
+  ]
+}

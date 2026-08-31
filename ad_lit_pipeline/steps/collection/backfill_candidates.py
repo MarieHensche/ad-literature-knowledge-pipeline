@@ -8,6 +8,7 @@ from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.csv_io import read_csv_rows, write_csv_rows
 from ad_lit_pipeline.io.json_io import read_json_object
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
+from ad_lit_pipeline.providers.base import candidate_provider_dates
 from ad_lit_pipeline.steps.collection import (
     deduplicate,
     fetch_candidates,
@@ -654,6 +655,7 @@ def run(
             "require_full_text_availability": full_text_required,
             "fetch_diagnostics_by_round": diagnostics_by_round,
             "fetch_diagnostics": diagnostics_by_round[-1] if diagnostics_by_round else {},
+            "provider_dates": candidate_provider_dates(combined_deduped),
         },
     )
 

@@ -4,10 +4,11 @@
 
 Read this file before coding in this branch.
 
-This repository is a research pipeline for turning Alzheimer-related literature
-metadata into structured knowledge tags and a Mantis-ready CSV. The project has
-already been refactored: `scripts/` should remain a compatibility and CLI layer,
-while reusable behavior belongs in `ad_lit_pipeline/`.
+This repository is a domain-adaptable research pipeline, with an Alzheimer
+default topic contract, for turning literature metadata into structured
+knowledge tags and Mantis-ready outputs. The project has already been
+refactored: `scripts/` should remain a compatibility and CLI layer, while
+reusable behavior belongs in `ad_lit_pipeline/`.
 
 ## Core Rules
 
@@ -183,3 +184,7 @@ pytest tests/test_llm_steps.py
 
 Tests that touch external services must use fakes or mocks.
 
+The GitHub Actions Foundation gate runs the complete suite on Python 3.11 and
+3.12 with outbound sockets blocked during tests. Keep
+`.github/workflows/foundation-ci.yml` and `docs/continuous_integration.md` in
+sync; do not add secrets or live-service tests to `foundation-gate`.

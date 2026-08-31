@@ -108,6 +108,17 @@ class OpenAIResponsesClient:
 
                 trace_paths = None
                 if trace_writer is not None:
+                    response_metadata = {}
+                    if isinstance(raw_response, dict):
+                        for key in (
+                            "id",
+                            "model",
+                            "created_at",
+                            "service_tier",
+                            "usage",
+                        ):
+                            if key in raw_response:
+                                response_metadata[key] = raw_response[key]
                     trace_paths = trace_writer.write_trace(
                         step_name=step_name,
                         call_id=call_id,
@@ -118,6 +129,14 @@ class OpenAIResponsesClient:
                         schema=schema,
                         raw_response=raw_response,
                         parsed_response=parsed,
+                        request_parameters={
+                            "api": "responses",
+                            "response_format": "json_schema",
+                            "timeout_seconds": self.timeout_seconds,
+                            "sdk_max_retries": self.max_retries,
+                            "application_json_decode_attempts": 2,
+                        },
+                        response_metadata=response_metadata,
                     )
 
                 return LLMResult(parsed=parsed, raw_response=raw_response, trace_paths=trace_paths)
@@ -216,6 +235,10 @@ class StaticJSONClient:
                 schema=schema,
                 raw_response=raw_response,
                 parsed_response=parsed,
+                request_parameters={
+                    "client": "static_json",
+                    "response_format": "json_schema",
+                },
             )
 
         return LLMResult(parsed=parsed, raw_response=raw_response, trace_paths=trace_paths)

@@ -7,6 +7,11 @@ from string import Template
 from typing import Any
 
 from ad_lit_pipeline.topics.matching import topic_match_spec_from_contract
+from ad_lit_pipeline.topics.policy import (
+    default_topic_structure_policy,
+    render_topic_policy_guidance,
+    selected_profile_ids,
+)
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -120,11 +125,21 @@ def render_generate_topic_contract_prompt(
     topic_description: str,
     base_contract: dict[str, Any],
 ) -> str:
+    policy = default_topic_structure_policy()
+    profile_ids = selected_profile_ids(
+        policy,
+        base_contract,
+        topic_description,
+    )
     return render_template(
         "generate_topic_contract.md",
         {
             "topic_description": topic_description,
             "base_contract_json": json_block(base_contract),
+            "topic_policy_guidance": render_topic_policy_guidance(
+                policy,
+                profile_ids,
+            ),
         },
     )
 
@@ -150,6 +165,12 @@ def render_refine_topic_contract_prompt(
     current_contract: dict[str, Any],
     review_overviews: list[dict[str, Any]],
 ) -> str:
+    policy = default_topic_structure_policy()
+    profile_ids = selected_profile_ids(
+        policy,
+        current_contract,
+        topic_description,
+    )
     return render_template(
         "refine_topic_contract_from_reviews.md",
         {
@@ -158,6 +179,10 @@ def render_refine_topic_contract_prompt(
                 refinement_context_contract(current_contract)
             ),
             "review_overviews_json": json_block(review_overviews),
+            "topic_policy_guidance": render_topic_policy_guidance(
+                policy,
+                profile_ids,
+            ),
         },
     )
 
@@ -189,13 +214,27 @@ def render_repair_topic_structure_prompt(
     topic_description: str,
     topic_structure: dict[str, Any],
     validation_issues: list[dict[str, Any]],
+    topic_policy: dict[str, Any] | None = None,
 ) -> str:
+    policy = default_topic_structure_policy()
+    profile_ids = selected_profile_ids(
+        policy,
+        {
+            "topic_structure": topic_structure,
+            **({"topic_policy": topic_policy} if topic_policy is not None else {}),
+        },
+        topic_description,
+    )
     return render_template(
         "repair_topic_structure.md",
         {
             "topic_description": topic_description,
             "topic_structure_json": json_block(topic_structure),
             "validation_issues_json": json_block(validation_issues),
+            "topic_policy_guidance": render_topic_policy_guidance(
+                policy,
+                profile_ids,
+            ),
         },
     )
 

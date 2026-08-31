@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+TRACE_SCHEMA_VERSION = "1.0.0"
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,14 @@ def write_json(path: Path, payload: Any) -> None:
     )
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class LLMTraceWriter:
     """Write prompt, response, schema, and metadata files for LLM calls."""
 
@@ -61,6 +73,8 @@ class LLMTraceWriter:
         raw_response: Any,
         parsed_response: Any,
         validation: dict[str, Any] | None = None,
+        request_parameters: dict[str, Any] | None = None,
+        response_metadata: dict[str, Any] | None = None,
     ) -> LLMTracePaths:
         prefix = self.trace_dir / f"{safe_name(step_name)}_{safe_name(call_id)}"
         paths = LLMTracePaths(
@@ -72,19 +86,52 @@ class LLMTraceWriter:
             metadata=Path(f"{prefix}_metadata.json"),
         )
 
+        existing = [path for path in paths.as_list() if path.exists()]
+        if existing:
+            raise FileExistsError(
+                "Refusing to overwrite an existing LLM trace for "
+                f"{step_name!r}/{call_id!r}: {existing[0]}"
+            )
+
         paths.system_message.write_text(system_message, encoding="utf-8")
         paths.prompt.write_text(prompt, encoding="utf-8")
         write_json(paths.schema, schema)
         write_json(paths.raw_response, raw_response)
         write_json(paths.parsed_response, parsed_response)
+        artifacts = {
+            "system_message": {
+                "path": str(paths.system_message),
+                "sha256": file_sha256(paths.system_message),
+            },
+            "prompt": {
+                "path": str(paths.prompt),
+                "sha256": file_sha256(paths.prompt),
+            },
+            "schema": {
+                "path": str(paths.schema),
+                "sha256": file_sha256(paths.schema),
+            },
+            "raw_response": {
+                "path": str(paths.raw_response),
+                "sha256": file_sha256(paths.raw_response),
+            },
+            "parsed_response": {
+                "path": str(paths.parsed_response),
+                "sha256": file_sha256(paths.parsed_response),
+            },
+        }
         write_json(
             paths.metadata,
             {
+                "trace_schema_version": TRACE_SCHEMA_VERSION,
                 "step_name": step_name,
                 "call_id": call_id,
                 "model": model,
                 "schema_name": schema_name,
+                "request_parameters": request_parameters or {},
+                "response_metadata": response_metadata or {},
                 "validation": validation or {},
+                "artifacts": artifacts,
             },
         )
         return paths
