@@ -1,7 +1,7 @@
 # Gap-Discovery System: Living Implementation Plan
 
 Status: active planning document  
-Last reviewed: 2026-08-28
+Last reviewed: 2026-08-31
 Review cadence: review at the start and end of every implementation phase, and
 whenever a schema, provider, scientific-validity rule, or pipeline order changes.
 
@@ -479,7 +479,7 @@ This completes Step 1.9. Step 1.10 must add continuous integration for the
 offline suite and make the Foundation contracts required checks before later
 stages proceed.
 
-### Step 1.10 Implementation Record — Verification Pending
+### Step 1.10 Implementation Record — Hosted Verification Passed; Protection Pending
 
 - Workflow: `.github/workflows/foundation-ci.yml` runs on every push, pull
   request, and manual dispatch. Concurrency cancels superseded runs for the same
@@ -518,18 +518,26 @@ stages proceed.
   The complete guarded suite passes 597 tests on Python 3.11.9 with
   `PYTHONHASHSEED=101` and Python 3.12.2 with `PYTHONHASHSEED=1201`.
   Compilation and `git diff --check` are clean.
-- Hosted verification remains pending. Do not change this step to `[x]`, mark
-  Stage 1 complete, or add a completion decision until the workflow is committed
-  and pushed, both GitHub matrix entries pass, and the stable `foundation-gate`
-  result is available. Branch protection must still be configured separately.
+- Hosted verification passed on 2026-08-31. The branch was pushed at `f062f11`,
+  then reconciled with `dev061602` in merge commit `ceede85`. Pull request
+  [#2](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/pull/2)
+  is open against `dev061602` and is mergeable. Its
+  [Foundation CI run](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/actions/runs/33373428426)
+  passed the Python 3.11 and 3.12 jobs and the stable `foundation-gate`.
+- Branch protection remains blocked by the repository's current GitHub plan.
+  Both the repository-ruleset and classic branch-protection APIs return HTTP 403
+  with: "Upgrade to GitHub Pro or make this repository public to enable this
+  feature." Do not change this step to `[x]`, mark Stage 1 complete, or add a
+  completion decision until the owner upgrades the plan or deliberately makes
+  the repository public and `foundation-gate` is configured as required.
 
-Step 1.10 is implemented but not yet complete. Foundation remains open until
-the verification gate above is satisfied.
+Step 1.10 is implemented and hosted CI is verified, but it is not yet complete.
+Foundation remains open until branch protection requires `foundation-gate`.
 
 ### Foundation Corrective Hardening Record
 
 The post-implementation audit identified six verification gaps. They are now
-resolved locally without changing the hosted-verification boundary above:
+resolved without changing the branch-protection boundary above:
 
 - Run identity is immutable: a pre-existing run directory is rejected unless
   `--resume` is explicit, and the previous manifest remains byte-identical.
@@ -554,9 +562,9 @@ resolved locally without changing the hosted-verification boundary above:
 
 Corrective verification passes 613 offline tests on Python 3.11.9 with
 `PYTHONHASHSEED=101` and Python 3.12.2 with `PYTHONHASHSEED=1201`. Compilation
-and `git diff --check` are clean. Hosted Step 1.10 verification, commit/push,
-and branch-protection configuration remain pending and are not implied by this
-local result.
+and `git diff --check` are clean. Hosted Step 1.10 verification now passes on
+the pushed branch and pull request; branch-protection configuration remains
+pending for the GitHub-plan reason recorded above.
 
 ---
 
