@@ -4,11 +4,13 @@ import argparse
 import csv
 import html
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.topics.contract import (
+    collection_from_contract,
     load_topic_contract,
     rule_based_screening_from_contract,
 )
@@ -31,7 +33,18 @@ SCOPE_COLUMNS = [
     "scope_reason",
     "scope_matched_include_terms",
     "scope_matched_exclude_terms",
+    "scope_publication_window_status",
 ]
+
+PUBLICATION_WINDOW_REJECTION_STATUSES = {
+    "before_publication_window",
+    "after_publication_window",
+    "invalid_publication_date",
+    "publication_date_year_mismatch",
+    "missing_publication_date",
+    "missing_exact_boundary_date",
+    "publication_window_constraint_mismatch",
+}
 
 
 def text_for_screening(row: dict[str, str]) -> str:
@@ -127,27 +140,37 @@ def contains_phrase(text: str, phrase: str) -> bool:
     return bool(re.search(rf"(^| ){re.escape(phrase)}( |$)", text))
 
 
-def token_overlap_matches(text_tokens: set[str], term: str) -> bool:
-    tokens = meaningful_tokens(term)
-    if len(tokens) < 2:
+def token_sequence_matches(text_tokens: list[str], term: str) -> bool:
+    """Match a stem-normalized phrase without claiming partial-token matches.
+
+    Screening decisions are deliberately recall-oriented, but the recorded
+    explanation must remain literal.  Treating two generic words from a
+    three-word term as the full configured phrase produced misleading evidence
+    such as reporting ``prodromal Alzheimer's disease`` when ``prodromal`` was
+    absent.  Stop words may differ, while every meaningful term token must be
+    present contiguously and in order.
+    """
+    term_tokens = meaningful_tokens(term)
+    if not term_tokens:
         return False
+    width = len(term_tokens)
+    return any(
+        text_tokens[index : index + width] == term_tokens
+        for index in range(len(text_tokens) - width + 1)
+    )
 
-    matched = sum(1 for token in tokens if token in text_tokens)
-    required = len(tokens) if len(tokens) == 2 else max(2, int(len(tokens) * 0.67))
-    return matched >= required
 
-
-def term_matches(text: str, text_tokens: set[str], term: str, similar: bool) -> bool:
+def term_matches(text: str, text_tokens: list[str], term: str, similar: bool) -> bool:
     for variant in term_variants(term):
         if contains_phrase(text, variant):
             return True
 
-    return similar and token_overlap_matches(text_tokens, term)
+    return similar and token_sequence_matches(text_tokens, term)
 
 
 def matched_terms(text: str, terms: list[str], similar: bool = True) -> list[str]:
     normalized_text = normalize_text(text)
-    text_tokens = {normalize_token(token) for token in normalized_text.split()}
+    text_tokens = meaningful_tokens(normalized_text)
     return [
         term
         for term in terms
@@ -155,17 +178,89 @@ def matched_terms(text: str, terms: list[str], similar: bool = True) -> list[str
     ]
 
 
+def publication_window_status(
+    row: dict[str, str],
+    publication_window: dict[str, str] | None,
+) -> str:
+    row_start = row.get("corpus_publication_window_start", "").strip()
+    row_end = row.get("corpus_publication_window_end", "").strip()
+    row_inclusive = row.get("corpus_publication_window_inclusive", "").strip()
+    if bool(row_start) != bool(row_end):
+        return "publication_window_constraint_mismatch"
+    if row_start and row_inclusive.casefold() not in {"", "1", "true", "yes"}:
+        return "publication_window_constraint_mismatch"
+
+    row_window = (
+        {"start": row_start, "end": row_end}
+        if row_start and row_end
+        else None
+    )
+    if publication_window is not None and row_window is not None:
+        if row_window != publication_window:
+            return "publication_window_constraint_mismatch"
+    effective_window = publication_window or row_window
+    if effective_window is None:
+        return "not_configured"
+
+    try:
+        start = date.fromisoformat(effective_window["start"])
+        end = date.fromisoformat(effective_window["end"])
+    except (KeyError, ValueError):
+        return "publication_window_constraint_mismatch"
+    if start > end:
+        return "publication_window_constraint_mismatch"
+    raw_date = row.get("publication_date", "").strip()
+    if raw_date:
+        try:
+            published = date.fromisoformat(raw_date)
+        except ValueError:
+            return "invalid_publication_date"
+        raw_year = row.get("year", "").strip()
+        if raw_year and (
+            re.fullmatch(r"\d{4}", raw_year) is None
+            or int(raw_year) != published.year
+        ):
+            return "publication_date_year_mismatch"
+        if published < start:
+            return "before_publication_window"
+        if published > end:
+            return "after_publication_window"
+        return "eligible_exact_date"
+
+    year_match = re.fullmatch(r"\d{4}", row.get("year", "").strip())
+    if year_match is None:
+        return "missing_publication_date"
+    year = int(year_match.group(0))
+    year_start = date(year, 1, 1)
+    year_end = date(year, 12, 31)
+    if year_end < start:
+        return "before_publication_window"
+    if year_start > end:
+        return "after_publication_window"
+    if year_start >= start and year_end <= end:
+        return "eligible_whole_year"
+    return "missing_exact_boundary_date"
+
+
 def decide_scope(
     row: dict[str, str],
     include_terms: list[str],
     exclude_terms: list[str],
     exclude_wins: bool = True,
+    publication_window: dict[str, str] | None = None,
 ) -> dict[str, str]:
     text = text_for_screening(row)
     matched_exclude = matched_terms(text, exclude_terms, similar=False)
     matched_include = matched_terms(text, include_terms, similar=True)
+    date_status = publication_window_status(row, publication_window)
 
-    if matched_exclude and (exclude_wins or not matched_include):
+    if date_status in PUBLICATION_WINDOW_REJECTION_STATUSES:
+        decision = "exclude_or_route_elsewhere"
+        reason = (
+            "Publication-window constraint not satisfied: "
+            f"{date_status}"
+        )
+    elif matched_exclude and (exclude_wins or not matched_include):
         decision = "exclude_or_route_elsewhere"
         reason = (
             f"Matched exclude term(s): {', '.join(matched_exclude)}; "
@@ -183,6 +278,7 @@ def decide_scope(
         "scope_reason": reason,
         "scope_matched_include_terms": "; ".join(matched_include),
         "scope_matched_exclude_terms": "; ".join(matched_exclude),
+        "scope_publication_window_status": date_status,
     }
 
 
@@ -216,7 +312,13 @@ def write_rows(
 
 def settings_from_contract(topic_contract_path: Path) -> dict[str, Any]:
     contract = load_topic_contract(topic_contract_path)
-    return rule_based_screening_from_contract(contract)
+    settings = rule_based_screening_from_contract(contract)
+    collection = collection_from_contract(contract)
+    publication_window = collection.get("publication_window")
+    settings["publication_window"] = (
+        dict(publication_window) if isinstance(publication_window, dict) else None
+    )
+    return settings
 
 
 def screen_rows(
@@ -224,13 +326,20 @@ def screen_rows(
     include_terms: list[str],
     exclude_terms: list[str],
     exclude_wins: bool,
+    publication_window: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
     screened_rows = []
     for row in rows:
         screened_rows.append(
             {
                 **row,
-                **decide_scope(row, include_terms, exclude_terms, exclude_wins),
+                **decide_scope(
+                    row,
+                    include_terms,
+                    exclude_terms,
+                    exclude_wins,
+                    publication_window,
+                ),
             }
         )
     return screened_rows
@@ -248,8 +357,20 @@ def run(
         list(settings["include_terms"]),
         list(settings["exclude_terms"]),
         bool(settings["exclude_wins"]),
+        settings.get("publication_window"),
     )
     write_rows(output_path, screened_rows, output_columns(fieldnames))
+    carried_windows = sorted(
+        {
+            (
+                row.get("corpus_publication_window_start", "").strip(),
+                row.get("corpus_publication_window_end", "").strip(),
+            )
+            for row in rows
+            if row.get("corpus_publication_window_start", "").strip()
+            or row.get("corpus_publication_window_end", "").strip()
+        }
+    )
 
     return StepResult(
         step_name=STEP.name,
@@ -258,7 +379,31 @@ def run(
             "topic_contract_yaml": topic_contract_path,
         },
         outputs={"scope_screened_csv": output_path},
-        row_counts={"papers_screened": len(screened_rows)},
+        row_counts={
+            "papers_screened": len(screened_rows),
+            "scope_included": sum(
+                row.get("scope_decision") == "include"
+                for row in screened_rows
+            ),
+            "scope_excluded_or_routed": sum(
+                row.get("scope_decision") == "exclude_or_route_elsewhere"
+                for row in screened_rows
+            ),
+            "publication_window_rejections": sum(
+                row.get("scope_publication_window_status")
+                in PUBLICATION_WINDOW_REJECTION_STATUSES
+                for row in screened_rows
+            ),
+        },
+        metadata={
+            "topic_contract_publication_window": settings.get(
+                "publication_window"
+            ),
+            "carried_corpus_publication_windows": [
+                {"start": start, "end": end}
+                for start, end in carried_windows
+            ],
+        },
     )
 
 

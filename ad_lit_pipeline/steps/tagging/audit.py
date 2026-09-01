@@ -7,6 +7,16 @@ from collections import Counter
 from pathlib import Path
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.steps.tagging.evidence_policy import (
+    TAGGING_EVIDENCE_BASIS_COLUMN,
+    TAGGING_ERROR_COLUMN,
+    TAGGING_EVIDENCE_NONE,
+    TAGGING_STATUS_COLUMN,
+    TAGGING_STATUS_FAILED,
+    TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE,
+    TAGGING_STATUS_TAGGED,
+    VALID_TAGGING_EVIDENCE_BASES,
+)
 
 
 STEP = StepSpec(
@@ -128,6 +138,123 @@ def audit_row(
 ) -> list[dict[str, str]]:
     issues = []
     paper_id = row.get("paper_id", "")
+    tagging_status = row.get(TAGGING_STATUS_COLUMN, "").strip()
+    evidence_basis = row.get(TAGGING_EVIDENCE_BASIS_COLUMN, "").strip()
+    tagging_error = row.get(TAGGING_ERROR_COLUMN, "").strip()
+    has_status_schema = TAGGING_STATUS_COLUMN in row
+
+    if has_status_schema and tagging_status not in {
+        TAGGING_STATUS_TAGGED,
+        TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE,
+        TAGGING_STATUS_FAILED,
+    }:
+        issues.append(
+            {
+                "paper_id": paper_id,
+                "field": TAGGING_STATUS_COLUMN,
+                "value": tagging_status,
+                "issue": "invalid_or_missing_tagging_status",
+            }
+        )
+
+    if tagging_status == TAGGING_STATUS_TAGGED:
+        if evidence_basis not in VALID_TAGGING_EVIDENCE_BASES:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": TAGGING_EVIDENCE_BASIS_COLUMN,
+                    "value": evidence_basis,
+                    "issue": "tagged_without_usable_evidence",
+                }
+            )
+        if tagging_error:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": TAGGING_ERROR_COLUMN,
+                    "value": tagging_error,
+                    "issue": "tagged_row_has_error",
+                }
+            )
+        if not row.get("main_knowledge_claim", "").strip():
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": "main_knowledge_claim",
+                    "value": "",
+                    "issue": "tagged_row_missing_claim",
+                }
+            )
+
+    if tagging_status in {
+        TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE,
+        TAGGING_STATUS_FAILED,
+    }:
+        expected_basis = (
+            TAGGING_EVIDENCE_NONE
+            if tagging_status == TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE
+            else None
+        )
+        if expected_basis is not None and evidence_basis != expected_basis:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": TAGGING_EVIDENCE_BASIS_COLUMN,
+                    "value": evidence_basis,
+                    "issue": "skipped_row_has_invalid_evidence_basis",
+                }
+            )
+        if tagging_status == TAGGING_STATUS_FAILED and (
+            evidence_basis not in VALID_TAGGING_EVIDENCE_BASES
+        ):
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": TAGGING_EVIDENCE_BASIS_COLUMN,
+                    "value": evidence_basis,
+                    "issue": "failed_row_has_invalid_evidence_basis",
+                }
+            )
+        if not tagging_error:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": TAGGING_ERROR_COLUMN,
+                    "value": "",
+                    "issue": "non_tagged_row_missing_error",
+                }
+            )
+        stale_fields = []
+        if row.get("main_knowledge_claim", "").strip():
+            stale_fields.append("main_knowledge_claim")
+        stale_fields.extend(
+            category_id
+            for category_id in allowed
+            if split_values(row.get(category_id, ""))
+        )
+        for field in stale_fields:
+            issues.append(
+                {
+                    "paper_id": paper_id,
+                    "field": field,
+                    "value": row.get(field, ""),
+                    "issue": "non_tagged_row_has_stale_extraction",
+                }
+            )
+        issues.append(
+            {
+                "paper_id": paper_id,
+                "field": TAGGING_EVIDENCE_BASIS_COLUMN,
+                "value": evidence_basis or TAGGING_EVIDENCE_NONE,
+                "issue": (
+                    "tagging_skipped_insufficient_evidence"
+                    if tagging_status
+                    == TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE
+                    else "tagging_failed"
+                ),
+            }
+        )
+        return issues
 
     for category_id, allowed_values in allowed.items():
         values = split_values(row.get(category_id, ""))
@@ -190,7 +317,13 @@ def audit_distribution(
     config: dict[str, object],
     rules: dict[str, dict[str, object]],
 ) -> list[dict[str, str]]:
-    if len(rows) < MIN_ROWS_FOR_DISTRIBUTION_WARNING:
+    tagged_rows = [
+        row
+        for row in rows
+        if TAGGING_STATUS_COLUMN not in row
+        or row.get(TAGGING_STATUS_COLUMN, "").strip() == TAGGING_STATUS_TAGGED
+    ]
+    if len(tagged_rows) < MIN_ROWS_FOR_DISTRIBUTION_WARNING:
         return []
 
     issues = []
@@ -202,7 +335,7 @@ def audit_distribution(
 
         dependency = applies_when_for_category(category_id, category, rules)
         applicable_rows = [
-            row for row in rows if row_category_applies(row, dependency)
+            row for row in tagged_rows if row_category_applies(row, dependency)
         ]
         applicable_count = len(applicable_rows)
         if applicable_count < MIN_ROWS_FOR_DISTRIBUTION_WARNING:

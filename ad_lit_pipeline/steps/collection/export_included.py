@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.records.ids import canonical_json
 from ad_lit_pipeline.steps.collection import verify_full_text_availability
 from ad_lit_pipeline.topics.matching import (
     format_secondary_group_value_map,
@@ -32,6 +34,44 @@ OUTPUT_COLUMNS = [
     "venue",
     "url",
     "source",
+    "provider",
+    "provider_id",
+    "publication_date",
+    "corpus_publication_window_start",
+    "corpus_publication_window_end",
+    "corpus_publication_window_inclusive",
+    "provider_record_updated_at",
+    "provider_source_type",
+    "provider_crossref_type",
+    "language",
+    "is_retracted",
+    "cited_by_count",
+    "source_rank",
+    "retrieval_date",
+    "retrieved_at",
+    "source_query",
+    "source_query_index",
+    "source_query_rank",
+    "source_query_reason",
+    "source_query_url",
+    "retrieval_group_id",
+    "retrieval_tier",
+    "retrieval_query_id",
+    "retrieval_logical_query_id",
+    "retrieval_iteration",
+    "retrieval_phase",
+    "dedupe_key",
+    "duplicate_count",
+    "in_fetch_duplicate_count",
+    "duplicate_provenance_json",
+    "in_fetch_duplicate_provenance_json",
+    "retrieval_query_blocks_json",
+    "full_text_locations_json",
+    "candidate_observation_sha256",
+    "raw_record_sha256",
+    "raw_record_source_path",
+    "raw_record_source_line",
+    "raw_record_source_file_sha256",
     "full_text_path",
     "full_text_availability_status",
     "full_text_availability_source",
@@ -44,6 +84,11 @@ OUTPUT_COLUMNS = [
     "full_text_availability_error",
     "notes",
 ]
+
+_SOURCE_PATH_KEY = "_raw_record_source_path"
+_SOURCE_LINE_KEY = "_raw_record_source_line"
+_SOURCE_FILE_HASH_KEY = "_raw_record_source_file_sha256"
+_OBSERVATION_HASH_KEY = "_candidate_observation_sha256"
 
 AVAILABILITY_OUTPUT_COLUMNS = [
     "full_text_availability_status",
@@ -60,6 +105,7 @@ AVAILABILITY_OUTPUT_COLUMNS = [
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows = []
+    source_file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     with path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             line = line.strip()
@@ -70,6 +116,12 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
             if not isinstance(row, dict):
                 raise ValueError(f"Expected JSON object in {path}:{line_number}")
 
+            row[_OBSERVATION_HASH_KEY] = hashlib.sha256(
+                canonical_json(row).encode("utf-8")
+            ).hexdigest()
+            row[_SOURCE_PATH_KEY] = str(path)
+            row[_SOURCE_LINE_KEY] = line_number
+            row[_SOURCE_FILE_HASH_KEY] = source_file_hash
             rows.append(row)
 
     return rows
@@ -187,6 +239,103 @@ def make_notes(candidate: dict[str, Any], screening: dict[str, str]) -> str:
     return "; ".join(str(note) for note in notes if str(note).strip())
 
 
+def scalar_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def raw_record(candidate: dict[str, Any]) -> dict[str, Any]:
+    value = candidate.get("raw_record")
+    return value if isinstance(value, dict) else {}
+
+
+def raw_record_sha256(candidate: dict[str, Any]) -> str:
+    record = raw_record(candidate)
+    if not record:
+        return ""
+    payload = canonical_json(record).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def structured_provenance_fields(candidate: dict[str, Any]) -> dict[str, str]:
+    raw = raw_record(candidate)
+    return {
+        "provider": scalar_text(candidate.get("provider")),
+        "provider_id": scalar_text(candidate.get("provider_id")),
+        "publication_date": scalar_text(
+            candidate.get("publication_date") or raw.get("publication_date")
+        ),
+        "corpus_publication_window_start": scalar_text(
+            candidate.get("corpus_publication_window_start")
+        ),
+        "corpus_publication_window_end": scalar_text(
+            candidate.get("corpus_publication_window_end")
+        ),
+        "corpus_publication_window_inclusive": scalar_text(
+            candidate.get("corpus_publication_window_inclusive")
+        ),
+        "provider_record_updated_at": scalar_text(
+            candidate.get("provider_record_updated_at")
+            or raw.get("updated_date")
+            or raw.get("updated_at")
+        ),
+        "provider_source_type": scalar_text(
+            candidate.get("source_type") or raw.get("type")
+        ),
+        "provider_crossref_type": scalar_text(
+            candidate.get("crossref_type") or raw.get("type_crossref")
+        ),
+        "language": scalar_text(candidate.get("language") or raw.get("language")),
+        "is_retracted": scalar_text(raw.get("is_retracted")),
+        "cited_by_count": scalar_text(raw.get("cited_by_count")),
+        "source_rank": scalar_text(candidate.get("rank")),
+        "retrieval_date": scalar_text(candidate.get("retrieval_date")),
+        "retrieved_at": scalar_text(candidate.get("retrieved_at")),
+        "source_query": scalar_text(candidate.get("query")),
+        "source_query_index": scalar_text(candidate.get("query_index")),
+        "source_query_rank": scalar_text(candidate.get("query_rank")),
+        "source_query_reason": scalar_text(candidate.get("query_reason")),
+        "source_query_url": scalar_text(candidate.get("query_url")),
+        "retrieval_group_id": scalar_text(candidate.get("retrieval_group_id")),
+        "retrieval_tier": scalar_text(candidate.get("retrieval_tier")),
+        "retrieval_query_id": scalar_text(candidate.get("retrieval_query_id")),
+        "retrieval_logical_query_id": scalar_text(
+            candidate.get("retrieval_logical_query_id")
+        ),
+        "retrieval_iteration": scalar_text(candidate.get("retrieval_iteration")),
+        "retrieval_phase": scalar_text(candidate.get("retrieval_phase")),
+        "dedupe_key": scalar_text(candidate.get("dedupe_key")),
+        "duplicate_count": scalar_text(candidate.get("duplicate_count")),
+        "in_fetch_duplicate_count": scalar_text(
+            candidate.get("in_fetch_duplicate_count")
+        ),
+        "duplicate_provenance_json": canonical_json(
+            candidate.get("duplicate_provenance") or []
+        ),
+        "in_fetch_duplicate_provenance_json": canonical_json(
+            candidate.get("in_fetch_duplicate_provenance") or []
+        ),
+        "retrieval_query_blocks_json": canonical_json(
+            candidate.get("retrieval_query_blocks") or []
+        ),
+        "full_text_locations_json": canonical_json(
+            candidate.get("full_text_locations") or []
+        ),
+        "candidate_observation_sha256": scalar_text(
+            candidate.get(_OBSERVATION_HASH_KEY)
+        ),
+        "raw_record_sha256": raw_record_sha256(candidate),
+        "raw_record_source_path": scalar_text(candidate.get(_SOURCE_PATH_KEY)),
+        "raw_record_source_line": scalar_text(candidate.get(_SOURCE_LINE_KEY)),
+        "raw_record_source_file_sha256": scalar_text(
+            candidate.get(_SOURCE_FILE_HASH_KEY)
+        ),
+    }
+
+
 def candidate_to_canonical_row(
     candidate: dict[str, Any],
     screening: dict[str, str],
@@ -206,6 +355,7 @@ def candidate_to_canonical_row(
         "venue": str(candidate.get("venue") or ""),
         "url": str(candidate.get("url") or ""),
         "source": f"collected:{candidate.get('provider', '')}",
+        **structured_provenance_fields(candidate),
         "full_text_path": "",
         **availability_fields,
         "notes": make_notes(candidate, screening),

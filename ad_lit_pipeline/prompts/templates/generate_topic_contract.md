@@ -75,10 +75,15 @@ Discovery and screening rules:
 - `rule_based_screening.include_terms` must contain useful broad topic
   vocabulary; keep exclusion precedence aligned with the requested scope.
 - Preserve the providers available in the base template.
+- Set `collection.publication_window` to exact inclusive `start` and `end`
+  dates in `YYYY-MM-DD` form only when the user states both boundaries;
+  otherwise set it to null. Never infer exact dates that the user did not give.
 - Add at least three complementary `collection.search_queries` with a concise
   reason for each query.
 
 Bootstrap tagging rules:
+- Set `tagging.evidence_policy` explicitly. Use `abstract_or_full_text` unless
+  the user requires identity-verified extracted full text for every tag.
 - Tagging categories in this first contract are provisional examples only, not
   the final extraction ontology.
 - Include at least one provisional tagging category with multiple concrete

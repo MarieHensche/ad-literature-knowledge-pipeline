@@ -1,7 +1,7 @@
 # Gap-Discovery System: Living Implementation Plan
 
 Status: active planning document  
-Last reviewed: 2026-08-31
+Last reviewed: 2026-09-01
 Review cadence: review at the start and end of every implementation phase, and
 whenever a schema, provider, scientific-validity rule, or pipeline order changes.
 
@@ -568,6 +568,128 @@ and `git diff --check` are clean. Hosted Step 1.10 verification now passes on
 the pushed branch and pull request, and the required `foundation-gate` rule is
 active on `dev061602`.
 
+### Post-Foundation Live Pipeline Audit — 2026-09-01
+
+A five-paper OpenAlex smoke run for artificial intelligence in Alzheimer
+disease research exposed issues that the hermetic Foundation suite was not
+designed to prove. The historical generated artifacts are retained as audit
+evidence, but they must not be treated as corrected outputs:
+
+- All five provider records had publication dates inside 2020-01-01 through
+  2026-06-19. The exact dates had been inserted into the generated search plan
+  after `plan_search`, however, so the plan no longer matched its manifest hash.
+  The topic contract itself did not carry the boundary.
+- Collection reached the target after one tier-0 query. The plan contained
+  other query text, but those variants were not executed. This proves a live
+  integration smoke only, not search coverage or corpus completeness.
+- Five full-text locators were reachable. Three produced text that matches the
+  requested paper, one paper had neither usable extracted text nor a usable
+  abstract, and one landing page linked to a different ADNI acknowledgements
+  PDF. The old run nevertheless tagged all five and exported all five to the
+  legacy Mantis CSV.
+- The 31 extraction-audit entries were small-sample distribution warnings. They
+  do not validate the tags or the scientific adequacy of the corpus.
+- A repeated live LLM run preserved exact request/response traces but changed
+  claim wording and 17 tag cells. Trace reproducibility is implemented;
+  semantic determinism of a remote generative model is not.
+
+Corrective implementation now makes the temporal and evidence boundaries
+machine-enforced:
+
+- `collection.publication_window` is an optional exact inclusive contract
+  field. Planning overwrites conflicting date filters, provider responses and
+  backfill are checked again, the effective window is carried with each
+  candidate, and main-pipeline scope screening rejects outside, missing,
+  invalid, boundary-ambiguous, or contract/corpus-mismatched dates.
+- Canonical collection CSVs retain structured provider/query/tier/rank/time,
+  duplicate-observation, publication/update/type/language/retraction/citation,
+  full-text-location, raw-record hash/location, source-file hash, and candidate
+  observation fields. Metadata normalization preserves unknown columns.
+- Full-text availability remains discovery metadata. Preparation keeps the
+  original locator separate from the resolved document, preserves section
+  boundaries, records hashes and extraction-engine metadata, and accepts remote
+  text for tagging only after front-matter DOI or compact ordered-title identity
+  verification.
+- Tagging has explicit `tagged`, `skipped_insufficient_evidence`, and `failed`
+  states plus `abstract`, `full_text`, or `none` evidence basis. The topic
+  contract can require full text. Non-tagged rows and errors are retained for
+  audit, their claim/tag fields are cleared, and the legacy Mantis exporter
+  excludes them or fails if none are eligible.
+- Recorded scope-match explanations now require the complete meaningful phrase
+  rather than reporting configured qualifiers that were absent from the paper.
+
+These changes are corrective hardening of the current paper pipeline, not
+completion of Phase 2. There is still no canonical immutable `CorpusSnapshot`,
+work/version lineage, complete content-addressed provider-page archive,
+production v1 record emission, or `as_of` query semantics. Old manifests and
+artifacts are not rewritten. The corrected implementation and its fresh live
+verification are recorded below. A new hosted Python 3.11/3.12 result remains
+required after the correction set is approved, committed, and pushed.
+
+### P2.0 Stabilization Completion Record — Local And Live
+
+P2.0 closes the compatibility-pipeline defects exposed by the first live smoke
+without beginning Phase 2 production record emission. The correction set is
+locally implemented and verified:
+
+- Static verification passes: package, UI, scripts, and tests compile, and
+  `git diff --check` reports no whitespace errors.
+- The complete socket-blocked offline suite passes all 641 tests on Python
+  3.12.2 with both fixed CI hash seeds: `PYTHONHASHSEED=101` in 10.23 seconds
+  and `PYTHONHASHSEED=1201` in 10.14 seconds.
+- Both collection and main-pipeline dry runs selected only the intended steps
+  before any provider or OpenAI call.
+- Fresh live collection run
+  `p20-stabilization-collection-live-20260901` succeeded from an unedited plan.
+  Its topic contract supplied the exact inclusive 2020-01-01 through
+  2026-06-19 window. The plan hash is
+  `9948497f8b5d8b7136ae1ec82c42a3edb977a4b69860866d35e5a51c5adc662b`;
+  all five retained OpenAlex records have exact in-window dates, structured
+  provider/query provenance, and verified full-text locators; and no record was
+  rejected by the publication-window checks.
+- Retrieval stopped correctly when five unique tier-0 candidates were found.
+  The manifest explicitly reports one of two planned execution queries run and
+  warns `executed=1 planned=2`. The result is therefore an integration smoke,
+  not evidence of search coverage or corpus completeness.
+- Fresh live main run `p20-stabilization-main-live-20260901` succeeded for all
+  eight steps. Scope retained five in-window papers. Full-text preparation
+  produced four usable identity-verified documents and one extraction failure.
+  Tagging processed only those four documents, retained the fifth row as
+  `skipped_insufficient_evidence`, and recorded no tagging failure. The audit
+  retained all five rows with the expected single skip issue. The legacy Mantis
+  projection contains four evidence-eligible rows and excludes the skipped row.
+- Manual front-matter inspection confirmed that all four accepted documents
+  match their intended titles, authors, and DOI context. Their recorded text
+  hashes match the extracted files. The failed paper had neither usable
+  extracted text nor an abstract and did not reach tagging or Mantis.
+- The historical wrong-document artifact was rechecked against the production
+  verifier. The real cached ADNI acknowledgements text previously associated
+  with `10.1002/advs.202204717` now returns `matched=false`, status `mismatch`,
+  with only three of ten significant title tokens present. The guarded offline
+  suite also exercises the complete remote-document rejection path.
+- Principal live output hashes are:
+  `124640fac36d71f38d2152b2d3036875d559fdf6a81a5d34d49ef2ca9573367c`
+  for the canonical five-paper CSV,
+  `04eb86214e5503a53c6058c0dda3ad45828c7184758e8e8da9136156264701f6`
+  for prepared full text,
+  `1110c1b2f6801fc3f7595c4d17f5f8b33cc1be348dfddae376472f21c867d442`
+  for tagging output,
+  `f2dfee9f9bd94dfc3039398dfc84d412397be6222876420220628e7eb53b55e4`
+  for the extraction audit, and
+  `4c1d483e0107a4b08e9613959dbfa14183f5c9ce70cd576c620e13273b0d5681`
+  for the four-row Mantis CSV. The run manifests independently record step
+  inputs, outputs, row counts, warnings, contract state, and artifact hashes.
+- P2.0 live artifacts use a dedicated `p20_stabilization_` prefix and are
+  ignored as generated audit data, keeping them out of the source correction
+  set. They remain available locally for inspection.
+
+P2.0's implementation and local/live verification are complete. The correction
+set is deliberately still uncommitted: commit/push approval and the resulting
+hosted Python 3.11/3.12 `foundation-gate` are the final source-control gates.
+They do not authorize or implement Phase 2. Phase 2 starts with the live
+collection-to-record bridge for `ScholarlyWork`, `SourceVersion`,
+`ProviderRecord`, and immutable `CorpusSnapshot` records.
+
 ---
 
 ## Executive Assessment
@@ -793,27 +915,34 @@ or any refresh, native relation, interpretation, or writeback work.
 - Raw OpenAlex records retain publication/update dates, type, identifiers,
   locations, versions, retraction status, concepts, references, and citation
   counts.
+- The canonical CSV now carries provider identity, exact publication date,
+  effective publication window, retrieval and duplicate-observation
+  provenance, selected provider fields, raw-record/observation/source-file
+  hashes, and raw JSONL path/line. Unknown columns survive metadata
+  normalization.
 - Full-text lookup through local files, provider locations, DOI pages,
   Unpaywall, Europe PMC, and CORE.
-- Caching of extracted text.
+- Caching of extracted text with locator/resolved-document separation, document
+  identity state, text hash, extraction engine/version, and preserved section
+  boundaries.
 - Topic-specific include/exclude policies and retrieval vocabulary.
 - Paper and candidate deduplication.
 - Finding enums that permit negative, null, mixed, and inconclusive results.
 
 ### Current Limitations
 
-- The raw corpus is richer than the canonical corpus.
-- Candidate export narrows records to a small CSV and serializes provider ID,
-  retrieval date, query, rank, and screening evidence into a semicolon-delimited
-  `notes` field.
-- Exact publication date, version, citation provenance, retraction state, and
-  provider update dates are discarded downstream.
-- Knowledge Source export therefore receives a transformed source label instead
-  of the true provider identity and can fall back to DOI as `provider_id`.
-- Metadata normalization uses a fixed output column set and can discard useful
-  extra columns from user-provided inputs.
+- The raw OpenAlex object is still richer than the canonical CSV, although its
+  canonical hash and resolvable JSONL location are now retained.
+- Compatibility `notes` and transformed `source` fields remain, but essential
+  retrieval provenance is no longer stored only in that text.
+- Provider source-version identity, corrections, citation-edge provenance, and
+  work-versus-version lineage are not yet normalized as production records.
+- Preliminary Knowledge Source export has not yet been rewired to the strict v1
+  provider/work/version record model.
 - Artifact names remain OpenAlex-specific even though a provider interface exists.
-- Date constraints are not first-class corpus fields in the topic template.
+- Publication windows are first-class; `as_of`, snapshot cutoff, source-type,
+  language, access, version, and negative/null-result policies are not yet a
+  complete corpus-specification contract.
 - Scholarly work identity is not separated from preprint, manuscript, published
   version, correction, or update identities.
 - A `null` finding enum does not mean negative-result repositories or unpublished
@@ -1267,8 +1396,9 @@ is incomplete until the controlled expert study actually runs.
 
 ## Priority 0: Scientific-Validity Blockers
 
-- [ ] Preserve structured provenance across the canonical handoff instead of
-  packing it into `notes`.
+- [x] Preserve structured provider/retrieval provenance across the current
+  canonical paper handoff instead of packing it only into `notes`. Strict v1
+  work/version/snapshot emission remains Phase 2 work.
 - [ ] Replace large pseudo-section excerpts with resolvable, claim-local passages.
 - [ ] Exclude or explicitly mark out-of-scope rows in knowledge exports.
 - [ ] Add semantic claim support checks, not only valid IDs.
@@ -1409,30 +1539,109 @@ Exit gate:
 
 ## Phase 2 — Repair Corpus And Provenance Handoffs
 
-Goal: prevent critical metadata loss.
+Goal: produce one immutable, cutoff-bound corpus whose provider bytes, work and
+version identities, documents, passages, and Mantis paper points are connected
+by strict v1 records without breaking the compatibility CSV workflow.
 
-Instructions:
+P2.0 prerequisite: the compatibility paper CSV now preserves structured
+provider and retrieval provenance, unknown columns survive normalization, exact
+publication windows are enforced, remote document identity is verified, and
+tagging/Mantis eligibility is evidence-gated. That correction set must be
+committed, pushed, and pass the hosted Python 3.11/3.12 `foundation-gate` before
+Phase 2.1 begins.
 
-1. Preserve provider, provider ID, exact publication date, type, version, query,
-   tier, rank, timestamp, raw-record hash/location, license, access, retraction,
-   correction, and citation data.
-2. Preserve unknown input columns unless an explicitly narrow output is required.
-3. Separate work, version, and provider-record identities.
-4. Replace free-form provenance notes with structured records.
-5. Add contract fields for publication window, `as_of`, source types, providers,
-   languages, access, versions, and negative/null-result policy.
-6. Filter knowledge exports by scope or carry explicit scope state.
-7. Consolidate source-type classification.
-8. Make snapshot artifacts immutable or content-addressed.
-9. Require each Mantis projection to retain stable record/work/version IDs,
-   snapshot, cutoff, scope/status, and resolvable provenance instead of
-   flattening essential context into free-form notes.
+### Phase 2.1 — Freeze Corpus And Identity Semantics
+
+- Add the complete corpus specification: inclusive `as_of`, publication and
+  availability rules, allowed source types, providers, languages, versions,
+  access policy, and negative/null-result policy.
+- Implement one shared source-type classifier and deterministic identity order:
+  DOI, stable provider identifier, then an explicitly uncertain metadata
+  fingerprint. Define version, correction, retraction, duplicate, missing-date,
+  and ambiguous-identity behavior without silently guessing.
+- Keep OpenAlex as the first implementation while making the mapping policy
+  provider-neutral.
+
+Exit gate: identical source facts produce identical work/version identity
+projections, and every ambiguous case is retained with an explicit status or
+review route.
+
+### Phase 2.2 — Capture Immutable Provider Evidence
+
+- Store content-addressed raw provider response pages, canonical redacted
+  request hashes, query/group/tier, page or cursor, result order, provider
+  update time, retrieval time, media type, and raw byte hash/URI.
+- Generalize provider-specific artifact filenames and emit the information
+  required by production `ProviderRecord` records without storing credentials.
+
+Exit gate: every retained OpenAlex candidate resolves to the exact archived
+provider bytes and request that produced it, and hash tampering is detected.
+
+### Phase 2.3 — Materialize The Canonical Corpus Snapshot
+
+- Add a registered production step after candidate export that emits
+  `ScholarlyWork`, `SourceVersion`, `ProviderRecord`, `AccessLocation`, and one
+  `CorpusSnapshot` into canonical JSONL plus an integrity report.
+- Record actual rather than planned query coverage, cutoff, contract and plan
+  hashes, included versions, provider records, scope, and open-world
+  limitations. Freeze the snapshot only through atomic write plus strict
+  collection-integrity success.
+
+Exit gate: unchanged inputs produce stable record and snapshot IDs; missing
+references, cutoff violations, competing identities, or artifact mismatches
+prevent freezing.
+
+### Phase 2.4 — Materialize Documents And Resolvable Passages
+
+- Make main-pipeline full-text preparation consume snapshot-backed source and
+  access identities. Emit `Document` only for trusted-local or identity-verified
+  content, with content hash, byte size, license, media type, retrieval time,
+  artifact URI, extraction engine, and status.
+- Convert section-aware text into bounded `Passage` records with stable order,
+  section paths, exact character/page locators, extractor identity, and hashes.
+  Preserve failures as audit data without inventing documents or passages.
+
+Exit gate: every future claim can cite an exact passage whose source version,
+document bytes, text, locator, and hashes validate independently.
+
+### Phase 2.5 — Integrate Snapshot Handoffs And Mantis Papers
+
+- Register the new steps, dependencies, artifacts, CLI/UI assembly, manifest
+  fields, and resume compatibility. Make the main workflow consume the snapshot
+  rather than reconstructing scientific identity from CSV rows.
+- Produce the strict Mantis paper view from production v1 records with stable
+  point/work/version IDs, snapshot and cutoff, included scope/status, and
+  resolvable provenance. Keep verified-claim and verified-gap views empty until
+  later phases genuinely create eligible records, and preserve the legacy CSV
+  path unchanged.
+
+Exit gate: one paper traces without metadata loss from archived OpenAlex bytes
+through provider/work/version/access/document/passage records and the frozen
+snapshot into its deterministic Mantis paper point.
+
+### Phase 2.6 — Regression, Live Acceptance, And Release
+
+- Add a copyright-safe golden snapshot plus adversarial orphan, hash-tamper,
+  cutoff, duplicate, ambiguous-identity, wrong-version, and extraction-failure
+  cases. Compare stable IDs across repeated runs.
+- Run both fixed-seed offline suites, a fresh small OpenAlex collection-to-main
+  smoke, strict integrity validation, and the versioned Mantis paper export.
+  Inspect outputs, update documentation and this plan, then require the hosted
+  Python 3.11/3.12 `foundation-gate` on the committed result.
+
+Exit gate: the live run produces a frozen, integrity-valid corpus snapshot with
+stable identities, no critical provenance loss, and a deterministic Mantis
+paper view. Phase 3 may start only after the committed hosted gate passes.
 
 Exit gate:
 
-- An OpenAlex candidate traces losslessly into Source/SourceVersion.
-- Provider ID, query, publication date, version, and snapshot are structured.
-- Unchanged snapshots produce stable identities.
+- An OpenAlex candidate traces losslessly into `ProviderRecord`,
+  `ScholarlyWork`, `SourceVersion`, `AccessLocation`, `Document`, and `Passage`.
+- Provider ID, executed query, exact dates, version, raw bytes, snapshot,
+  cutoff, scope, access, and limitations remain structured and resolvable.
+- Unchanged snapshots produce stable identities and pass strict integrity.
+- The compatibility CSV remains available, while the production Mantis paper
+  projection consumes strict snapshot-backed records.
 
 ## Phase 3 — Strengthen Reproducibility And Orchestration
 
@@ -1821,6 +2030,8 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-09-01 | Complete P2.0 stabilization locally after two 641-test deterministic offline runs and a fresh live five-paper collection-to-Mantis smoke from an unedited, exact-window plan. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. Obtain separate commit/push approval, require the hosted Python 3.11/3.12 `foundation-gate`, then begin the `ScholarlyWork`/`SourceVersion`/`ProviderRecord`/`CorpusSnapshot` bridge. |
+| 2026-09-01 | Harden the compatibility pipeline after the first live five-paper smoke: exact publication-window enforcement and carriage, structured canonical provenance, remote-document identity verification, explicit tagging evidence/state policy, and evidence-gated legacy Mantis export. | The live run met its requested provider date range but used a post-plan manual edit, retrieved one wrong PDF, tagged one title-only row, and stopped after one tiered query; the old success statuses therefore overstated end-to-end validity. | Retain old artifacts as invalidating audit evidence and perform a fresh run. Treat it only as a smoke, report executed-query coverage, and do not mark Phase 2 complete until immutable snapshots and work/version/provider-record identities exist. |
 | 2026-08-31 | Complete Step 1.10 and Foundation after the Python 3.11/3.12 hosted matrix and stable `foundation-gate` passed on the pushed branch and PR, then require that check on `dev061602` through active repository ruleset 21912442 with no bypass actors. | Local-only verification cannot establish that the committed workflow runs correctly on GitHub or prevent later unverified branch updates. | PR #2 is mergeable and green. Later phases must keep the stable gate required or record and review a deliberate replacement. |
 | 2026-08-28 | Complete Step 1.9 with one truthful documentation hierarchy, removal of the obsolete review scaffold, a visibly superseded bootstrap plan, explicit preliminary-versus-v1 scientific boundaries, truthful collection-calibration help, local-link and registry documentation tests, and deterministic literal replacement-target extraction. | Contradictory scaffolding and milestone-era documentation could make implemented review steps look unavailable, preliminary knowledge look verified, or compatibility-only calibration look active. Full verification also exposed a hash-seed-dependent equivalent-word choice. | Step 1.10 can add CI against a documented 43-step, ten-pipeline boundary and the complete offline suite. Collection calibration activation, production v1 record emission, and later scientific pipeline behavior remain separate decisions. |
 | 2026-08-27 | Complete Step 1.8 with strict topic-structure policy `1.0.0`, semantic policy identity, generic structural code, profile-driven research vocabulary, automatic or explicit profile selection, shared prompt/runtime guidance, and generated-contract provenance. | Domain adaptability is not credible while named research concepts and parallel prompt heuristics remain embedded in Python. A strict external policy makes the boundary reviewable, portable, testable, and reproducible without weakening legacy behavior. | Step 1.9 reconciles documentation and stale scaffolding. Future domains add or version profiles in policy data rather than changing Python; material policy semantics require a new version and hash. |

@@ -290,6 +290,7 @@ candidate_screening:
     learning, learners, instructors, or educational impact
 
 tagging:
+  evidence_policy: abstract_or_full_text
   fallback_policy:
     prefer_unclear_when_allowed: true
     prefer_mixed_or_unclear_when_unclear_missing: true
@@ -385,3 +386,4 @@ collection:
   preferred_provider: openalex
   max_results_default: 25
   exclude_openalex_review_type: false
+  publication_window: null

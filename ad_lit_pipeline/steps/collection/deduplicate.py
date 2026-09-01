@@ -57,7 +57,21 @@ def duplicate_summary(row: dict[str, Any]) -> dict[str, Any]:
         "year": row.get("year", ""),
         "rank": row.get("rank", ""),
         "query": row.get("query", ""),
+        "query_index": row.get("query_index", ""),
+        "query_rank": row.get("query_rank", ""),
+        "query_reason": row.get("query_reason", ""),
+        "query_url": row.get("query_url", ""),
         "retrieval_date": row.get("retrieval_date", ""),
+        "retrieved_at": row.get("retrieved_at", ""),
+        "retrieval_group_id": row.get("retrieval_group_id", ""),
+        "retrieval_tier": row.get("retrieval_tier", ""),
+        "retrieval_query_id": row.get("retrieval_query_id", ""),
+        "retrieval_logical_query_id": row.get(
+            "retrieval_logical_query_id", ""
+        ),
+        "retrieval_iteration": row.get("retrieval_iteration", ""),
+        "retrieval_phase": row.get("retrieval_phase", ""),
+        "retrieval_backfill_round": row.get("retrieval_backfill_round", ""),
     }
 
 

@@ -87,6 +87,8 @@ candidate_screening:
   tangential_topic_policy: include candidates that address one meaningful aspect of the topic
 
 tagging:
+  # Use full_text_required when abstract-only tagging is not acceptable.
+  evidence_policy: abstract_or_full_text
   fallback_policy:
     prefer_unclear_when_allowed: false
     prefer_mixed_or_unclear_when_unclear_missing: false
@@ -119,4 +121,7 @@ collection:
   preferred_provider: openalex
   max_results_default: 50
   exclude_openalex_review_type: false
+  # Optional inclusive exact-date constraint. Use null when the topic has no
+  # publication boundary; otherwise set start/end as YYYY-MM-DD.
+  publication_window: null
   search_queries: []

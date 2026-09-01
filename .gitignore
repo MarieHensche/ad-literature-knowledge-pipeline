@@ -15,7 +15,9 @@ __pycache__/
 
 # Virtual environments
 .venv/
+.venv
 venv/
+venv
 env/
 
 # Secrets
@@ -44,6 +46,11 @@ inputs/full_text/
 outputs/
 reports/generated/
 data/processed/example_*
+# Local P2.0 live-stabilization artifacts are retained as audit evidence but
+# must not be mixed with source changes.
+data/collection_plans/p20_stabilization_*
+data/raw/p20_stabilization_*
+data/processed/p20_stabilization_*
 runs/
 # Logs and temp
 *.log

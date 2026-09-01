@@ -4,7 +4,7 @@ import json
 import math
 import os
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 from urllib.parse import parse_qsl
 from urllib.parse import urlencode
@@ -436,7 +436,7 @@ def redact_openalex_url(url: str) -> str:
     parts = urlsplit(url)
     query = []
     for key, value in parse_qsl(parts.query, keep_blank_values=True):
-        if key == "api_key":
+        if key.casefold() in {"api_key", "mailto", "email"}:
             value = "REDACTED"
         query.append((key, value))
     return urlunsplit(
@@ -514,6 +514,10 @@ def candidate_from_work(
         "doi": normalize_doi(work.get("doi")),
         "title": str(work.get("display_name") or ""),
         "year": work.get("publication_year"),
+        "publication_date": str(work.get("publication_date") or ""),
+        "source_type": str(work.get("type") or ""),
+        "language": str(work.get("language") or ""),
+        "provider_record_updated_at": str(work.get("updated_date") or ""),
         "abstract": abstract,
         "authors": extract_authors(work),
         "venue": extract_venue(work),
@@ -527,6 +531,7 @@ def candidate_from_work(
         "query_reason": query_reason or "",
         "rank": rank,
         "retrieval_date": date.today().isoformat(),
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "query_url": query_url,
         "raw_record": work,
     }
@@ -874,11 +879,32 @@ class OpenAlexProvider:
 
         query_index = 0
         valid_groups = [group for group in query_groups if isinstance(group, dict)]
+
         def group_sort_key(item: dict[str, Any]) -> tuple[int, int]:
             priority = item.get("priority")
             if priority is None:
                 priority = item.get("tier")
             return int(priority or 0), int(item.get("tier") or 0)
+
+        planned_logical_query_count = 0
+        planned_execution_query_count = 0
+        for group in valid_groups:
+            queries = group.get("queries")
+            if not isinstance(queries, list):
+                continue
+            logical_queries = [query for query in queries if isinstance(query, dict)]
+            planned_logical_query_count += len(logical_queries)
+            for query in logical_queries:
+                planned_execution_query_count += len(
+                    execution_queries_for_provider(
+                        query,
+                        self.supports_boolean_query_blocks,
+                    )
+                )
+        diagnostics["planned_logical_query_count"] = planned_logical_query_count
+        diagnostics["planned_execution_query_count"] = (
+            planned_execution_query_count
+        )
 
         for group in sorted(valid_groups, key=group_sort_key):
             if len(candidates) >= target_new_results:
@@ -1079,12 +1105,50 @@ class OpenAlexProvider:
                                             "year": candidate.get("year", ""),
                                             "rank": candidate.get("rank", ""),
                                             "query": candidate.get("query", ""),
+                                            "query_index": candidate.get(
+                                                "query_index",
+                                                "",
+                                            ),
                                             "query_rank": candidate.get(
                                                 "query_rank",
                                                 "",
                                             ),
+                                            "query_reason": candidate.get(
+                                                "query_reason",
+                                                "",
+                                            ),
+                                            "query_url": candidate.get(
+                                                "query_url",
+                                                "",
+                                            ),
+                                            "retrieval_date": candidate.get(
+                                                "retrieval_date",
+                                                "",
+                                            ),
+                                            "retrieved_at": candidate.get(
+                                                "retrieved_at",
+                                                "",
+                                            ),
+                                            "retrieval_group_id": candidate.get(
+                                                "retrieval_group_id",
+                                                "",
+                                            ),
                                             "retrieval_tier": tier,
                                             "retrieval_query_id": query_id,
+                                            "retrieval_logical_query_id": (
+                                                logical_query_id
+                                            ),
+                                            "retrieval_iteration": iteration,
+                                            "retrieval_phase": candidate.get(
+                                                "retrieval_phase",
+                                                "",
+                                            ),
+                                            "retrieval_backfill_round": (
+                                                candidate.get(
+                                                    "retrieval_backfill_round",
+                                                    "",
+                                                )
+                                            ),
                                         }
                                     )
                                 continue
@@ -1140,6 +1204,17 @@ class OpenAlexProvider:
         if isinstance(execution_counts, dict):
             diagnostics["execution_query_count"] = sum(
                 count for count in execution_counts.values() if isinstance(count, int)
+            )
+        query_page_states = diagnostics.get("query_page_states")
+        if isinstance(query_page_states, dict):
+            diagnostics["executed_query_count"] = len(query_page_states)
+            diagnostics["executed_logical_query_count"] = len(
+                {
+                    str(state.get("logical_query_id") or "")
+                    for state in query_page_states.values()
+                    if isinstance(state, dict)
+                }
+                - {""}
             )
         self.last_fetch_diagnostics = diagnostics
         return candidates

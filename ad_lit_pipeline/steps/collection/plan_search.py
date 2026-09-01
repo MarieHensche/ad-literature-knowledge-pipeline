@@ -260,10 +260,12 @@ def enforce_topic_plan_constraints(
         )
 
     exclude_review_type = collection.get("exclude_openalex_review_type") is True
+    publication_window = collection.get("publication_window")
     if (
         missing_abstract_policy != "exclude"
         and not exclude_review_type
         and not require_full_text_availability
+        and publication_window is None
     ):
         return warnings
 
@@ -284,6 +286,66 @@ def enforce_topic_plan_constraints(
     provider_filters = provider_plan.setdefault("filters", [])
     if not isinstance(provider_filters, list):
         raise ValueError("provider_specific_plan.filters must be a list.")
+
+    if isinstance(publication_window, dict):
+        publication_start = str(publication_window["start"])
+        publication_end = str(publication_window["end"])
+        filters["year_from"] = int(publication_start[:4])
+        filters["year_to"] = int(publication_end[:4])
+
+        provider_name = str(provider_plan.get("provider") or "")
+        if provider_name != "openalex":
+            raise ValueError(
+                "Exact collection.publication_window enforcement is not implemented "
+                f"for provider {provider_name or '<missing>'}."
+            )
+
+        date_filter_names = {
+            "from_publication_date",
+            "to_publication_date",
+            "publication_year",
+        }
+        provider_filters[:] = [
+            item
+            for item in provider_filters
+            if not (
+                isinstance(item, dict)
+                and str(item.get("name") or "").strip() in date_filter_names
+            )
+        ]
+        provider_filters.extend(
+            [
+                {
+                    "name": "from_publication_date",
+                    "value": publication_start,
+                    "reason": (
+                        "Exact inclusive lower publication-date boundary from the "
+                        "topic contract."
+                    ),
+                },
+                {
+                    "name": "to_publication_date",
+                    "value": publication_end,
+                    "reason": (
+                        "Exact inclusive upper publication-date boundary from the "
+                        "topic contract."
+                    ),
+                },
+            ]
+        )
+        corpus_constraints = plan.setdefault("corpus_constraints", {})
+        if not isinstance(corpus_constraints, dict):
+            raise ValueError("Plan corpus_constraints must be an object.")
+        corpus_constraints["publication_window"] = {
+            "start": publication_start,
+            "end": publication_end,
+            "inclusive": True,
+            "source": "topic_contract",
+        }
+        warnings.append(
+            "Applied exact inclusive topic-contract publication window: "
+            f"{publication_start} through {publication_end}."
+        )
 
     if require_full_text_availability:
         for key in FULL_TEXT_PREFILTER_KEYS:

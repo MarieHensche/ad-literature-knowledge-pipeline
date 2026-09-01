@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,12 @@ LEGACY_TOPIC_FIT_CATEGORY_ID = "main_topic_category"
 LEGACY_RESEARCH_TARGET_CATEGORY_ID = "research_target"
 REQUIRED_TOPIC_CATEGORY_IDS: tuple[str, ...] = ()
 VALID_CATEGORY_SELECTIONS = {"single", "multi"}
+TAGGING_EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT = "abstract_or_full_text"
+TAGGING_EVIDENCE_POLICY_FULL_TEXT_REQUIRED = "full_text_required"
+VALID_TAGGING_EVIDENCE_POLICIES = {
+    TAGGING_EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT,
+    TAGGING_EVIDENCE_POLICY_FULL_TEXT_REQUIRED,
+}
 GENERATED_TAGGING_MIN_CATEGORIES = 6
 GENERATED_TAG_LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 RETIRED_TAGGING_CATEGORY_IDS = {
@@ -562,6 +569,13 @@ def validate_topic_contract(
         )
 
     tagging = require_mapping(contract.get("tagging"), "tagging")
+    evidence_policy = tagging.get("evidence_policy")
+    if (
+        evidence_policy is not None
+        and evidence_policy not in VALID_TAGGING_EVIDENCE_POLICIES
+    ):
+        allowed = ", ".join(sorted(VALID_TAGGING_EVIDENCE_POLICIES))
+        raise ValueError(f"tagging.evidence_policy must be one of: {allowed}")
     require_mapping(tagging.get("fallback_policy"), "tagging.fallback_policy")
     categories = require_mapping(tagging.get("categories"), "tagging.categories")
     if not categories:
@@ -613,6 +627,47 @@ def validate_topic_contract(
     )
     if preferred_provider not in allowed_providers:
         raise ValueError("collection.preferred_provider must be allowed.")
+
+    publication_window = collection.get("publication_window")
+    if publication_window is not None:
+        publication_window_map = require_mapping(
+            publication_window, "collection.publication_window"
+        )
+        unexpected_keys = sorted(
+            set(publication_window_map).difference({"start", "end"})
+        )
+        if unexpected_keys:
+            raise ValueError(
+                "collection.publication_window contains unsupported field(s): "
+                + ", ".join(unexpected_keys)
+            )
+        start_text = require_non_empty_string(
+            publication_window_map.get("start"),
+            "collection.publication_window.start",
+        )
+        end_text = require_non_empty_string(
+            publication_window_map.get("end"),
+            "collection.publication_window.end",
+        )
+        parsed_dates = []
+        for field_name, value in (("start", start_text), ("end", end_text)):
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+                raise ValueError(
+                    "collection.publication_window."
+                    f"{field_name} must use YYYY-MM-DD."
+                )
+            try:
+                parsed_dates.append(date.fromisoformat(value))
+            except ValueError as exc:
+                raise ValueError(
+                    "collection.publication_window."
+                    f"{field_name} must be a valid calendar date."
+                ) from exc
+        if parsed_dates[0] > parsed_dates[1]:
+            raise ValueError(
+                "collection.publication_window.start must not follow "
+                "collection.publication_window.end."
+            )
 
     if "search_queries" in collection:
         search_queries = require_list(

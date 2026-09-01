@@ -91,7 +91,8 @@ configs/topics/
 
 Topic contracts define the research topic, scope criteria, rule-based screening
 terms, candidate-screening policy, tagging categories, fallback policy, enabled
-providers, and optional seed search queries. Tagging categories are
+providers, an optional exact inclusive publication window, the tagging-evidence
+policy, and optional seed search queries. Tagging categories are
 topic-specific knowledge dimensions. New generated contracts should replace the
 template examples with categories and values inferred from review/overview seed
 papers. Generated/refined contracts require at least six concrete knowledge
@@ -239,6 +240,19 @@ The audit file is written to:
 data/processed/example_extraction_audit.csv
 ```
 
+Full-text availability means a locator was reachable during collection; it does
+not mean the retrieved bytes are the requested paper or contain usable text.
+`prepare_full_text` therefore preserves the original availability fields,
+records the separately resolved document URL/source, verifies remote text
+against front-matter DOI or compact title evidence, retains section boundaries,
+and records text hash and extraction-engine metadata. The default tagging
+policy accepts a usable abstract, trusted local text, or identity-verified
+remote extracted full text.
+Set `tagging.evidence_policy: full_text_required` in the topic contract to
+forbid abstract fallback. Insufficient-evidence and LLM-failed rows remain in
+the extraction CSV with explicit status and error fields, but are not published
+by the legacy Mantis export.
+
 ### Optional Preliminary Knowledge Exports
 
 Add `--export-knowledge` to create deterministic preliminary source and
@@ -346,9 +360,14 @@ python scripts/run_collection.py run \
 ```
 
 The search plan can include multiple executable `search_queries`. OpenAlex is
-called once per query variant, spreading the `--max-results` budget across
-queries. Candidate artifacts preserve the query, query index, query rank, query
-reason, and provider URL so screening decisions can be debugged later.
+called once per query variant only for a legacy plan without `query_groups`.
+When tiered `query_groups` are present, those groups are the executable strategy
+and run in priority order until the requested unique-candidate target is met or
+the groups are exhausted; standalone `search_queries` remain inspection and
+legacy-fallback inputs and are not proof that every variant ran. Candidate
+artifacts preserve the executed query, group, tier, index, rank, reason,
+redacted provider URL, timestamps, duplicate observations, raw-record hashes,
+and exact publication window so retrieval can be audited.
 
 This writes a canonical paper CSV:
 
@@ -484,8 +503,8 @@ For architecture details, see `docs/technical_summary.md`.
   pipeline can either receive `--topic-contract` or create and refine one
   automatically from review/overview seed papers when no contract is supplied.
 - `--tagging-config` is kept for direct legacy config normalization only.
-- If no papers reach LLM tagging, the Mantis export step fails because it
-  requires at least one extraction row.
+- If no papers reach successful evidence-backed tagging, the Mantis export step
+  fails because it requires at least one row whose tagging status is `tagged`.
 - The strict v1 record, integrity, gap-ontology, and scientific-validity layers
   are implemented contracts but are not yet emitted by the production paper
   pipeline.

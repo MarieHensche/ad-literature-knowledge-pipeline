@@ -5,6 +5,13 @@ import csv
 from pathlib import Path
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.steps.tagging.evidence_policy import (
+    TAGGING_EVIDENCE_BASIS_COLUMN,
+    TAGGING_ERROR_COLUMN,
+    TAGGING_STATUS_COLUMN,
+    TAGGING_STATUS_TAGGED,
+    VALID_TAGGING_EVIDENCE_BASES,
+)
 from ad_lit_pipeline.topics.contract import (
     LEGACY_RESEARCH_TARGET_CATEGORY_ID,
     LEGACY_TOPIC_FIT_CATEGORY_ID,
@@ -60,6 +67,19 @@ def selected_values(value: str) -> list[str]:
 
 
 def is_mantis_exportable(row: dict[str, str]) -> bool:
+    if TAGGING_STATUS_COLUMN in row:
+        if row.get(TAGGING_STATUS_COLUMN, "").strip() != TAGGING_STATUS_TAGGED:
+            return False
+        if (
+            row.get(TAGGING_EVIDENCE_BASIS_COLUMN, "").strip()
+            not in VALID_TAGGING_EVIDENCE_BASES
+        ):
+            return False
+        if row.get(TAGGING_ERROR_COLUMN, "").strip():
+            return False
+        if not row.get("main_knowledge_claim", "").strip():
+            return False
+
     if MAIN_TOPIC_CATEGORY_COLUMN not in row:
         return True
 
@@ -137,6 +157,11 @@ def run(input_path: Path, output_path: Path) -> StepResult:
     output_fields = CORE_COLUMNS + tag_fields
 
     exportable_rows = [row for row in rows if is_mantis_exportable(row)]
+    if not exportable_rows:
+        raise ValueError(
+            "No evidence-backed tagged rows are eligible for Mantis export in "
+            f"{input_path}"
+        )
     output_rows = [export_row(row, tag_fields) for row in exportable_rows]
     write_rows(output_path, output_rows, output_fields)
 

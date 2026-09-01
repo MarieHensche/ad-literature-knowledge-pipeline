@@ -70,11 +70,59 @@ def test_topic_contract_template_loads() -> None:
     assert contract["topic_structure"]["anchor_topic_id"] == "primary_topic"
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert contract["collection"]["exclude_openalex_review_type"] is False
+    assert contract["collection"]["publication_window"] is None
     assert contract["collection"]["search_queries"] == []
+    assert contract["tagging"]["evidence_policy"] == "abstract_or_full_text"
     assert "knowledge_goal" not in contract["tagging"]["categories"]
     assert "primary_topic_detail" in contract["tagging"]["categories"]
     assert "secondary_focus_detail" in contract["tagging"]["categories"]
     assert "research_target" not in contract["tagging"]["categories"]
+
+
+def test_topic_contract_accepts_exact_publication_window() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract["collection"]["publication_window"] = {
+        "start": "2020-01-01",
+        "end": "2026-06-19",
+    }
+
+    validate_topic_contract(contract)
+
+
+@pytest.mark.parametrize(
+    ("window", "message"),
+    [
+        (
+            {"start": "2020-1-1", "end": "2026-06-19"},
+            "start must use YYYY-MM-DD",
+        ),
+        (
+            {"start": "2020-02-30", "end": "2026-06-19"},
+            "start must be a valid calendar date",
+        ),
+        (
+            {"start": "2026-06-20", "end": "2026-06-19"},
+            "start must not follow",
+        ),
+    ],
+)
+def test_topic_contract_rejects_invalid_publication_window(
+    window: dict[str, str],
+    message: str,
+) -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract["collection"]["publication_window"] = window
+
+    with pytest.raises(ValueError, match=message):
+        validate_topic_contract(contract)
+
+
+def test_topic_contract_rejects_unknown_tagging_evidence_policy() -> None:
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract["tagging"]["evidence_policy"] = "title_is_enough"
+
+    with pytest.raises(ValueError, match="tagging.evidence_policy must be one of"):
+        validate_topic_contract(contract)
 
 
 def test_topic_contract_converts_to_legacy_tagging_config() -> None:

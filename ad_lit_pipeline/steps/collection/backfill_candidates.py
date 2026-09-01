@@ -201,6 +201,10 @@ def fetch_additional_candidates(
             if dedupe_key(candidate) not in existing_keys
         ][:missing]
 
+    returned_count = len(additional)
+    additional, publication_window_rejections = (
+        fetch_candidates.enforce_candidate_publication_window(additional, plan)
+    )
     diagnostics = getattr(provider, "last_fetch_diagnostics", {})
     if not isinstance(diagnostics, dict):
         diagnostics = {}
@@ -208,6 +212,13 @@ def fetch_additional_candidates(
     diagnostics.setdefault(
         "provider_max_per_page",
         fetch_candidates.provider_max_per_page(provider),
+    )
+    diagnostics["provider_candidates_returned_this_round"] = returned_count
+    diagnostics["publication_window_rejections"] = len(
+        publication_window_rejections
+    )
+    diagnostics["publication_window_rejection_records"] = (
+        publication_window_rejections
     )
     return additional, diagnostics
 
@@ -452,6 +463,7 @@ def run(
     total_backfill_manual_review = 0
     total_backfill_llm_errors = 0
     total_backfill_llm_error_auto_excluded = 0
+    total_publication_window_rejections = 0
     backfill_stop_reason = "target_reached"
 
     combined_availability_rows = initial_availability_rows
@@ -482,6 +494,16 @@ def run(
             sleep_seconds,
             backfill_rounds,
         )
+        round_publication_rejections = int(
+            diagnostics.get("publication_window_rejections") or 0
+        )
+        total_publication_window_rejections += round_publication_rejections
+        if round_publication_rejections:
+            warnings.append(
+                "Rejected backfill candidates that did not prove publication-window "
+                f"eligibility: round={backfill_rounds} "
+                f"rejected={round_publication_rejections}."
+            )
         new_candidates = unseen_candidates(new_candidates, existing_candidates)
         diagnostics["new_candidates_after_seen_filter"] = len(new_candidates)
         diagnostics_by_round.append(diagnostics)
@@ -635,6 +657,7 @@ def run(
             "backfill_manual_review_rows": total_backfill_manual_review,
             "backfill_llm_error_rows": total_backfill_llm_errors,
             "backfill_llm_error_auto_excluded": total_backfill_llm_error_auto_excluded,
+            "publication_window_rejections": total_publication_window_rejections,
             "initial_pending_llm_finalized": initial_finalize_counts.get(
                 "llm_screened",
                 0,

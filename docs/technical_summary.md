@@ -1,6 +1,6 @@
 # Technical Summary
 
-Status: reconciled with the implemented repository on 2026-08-28
+Status: reconciled with the implemented repository on 2026-09-01
 
 This project is a domain-adaptable research-literature pipeline with an
 Alzheimer early-detection default contract. It collects or imports papers,
@@ -168,8 +168,15 @@ plan_search
 
 OpenAlex is the only implemented candidate provider. The planner receives only
 providers enabled by the topic contract, and unsupported providers fail before
-network access. Candidate records preserve provider, query, tier, rank, URL,
-retrieval date, and screening provenance.
+network access. Candidate records preserve provider identity, exact publication
+date, executed query/group/tier/rank, redacted provider URL, retrieval
+timestamps, duplicate observations, selected raw-record fields, canonical
+observation/raw hashes, raw JSONL location/hash, and screening provenance.
+Exact inclusive publication windows are applied to provider requests, checked
+again on returned candidates, carried into the canonical CSV, and enforced
+again during scope screening. Tiered query groups stop when the requested
+unique-candidate target is reached; additional planned query text is not
+evidence that every query ran or that corpus coverage is adequate.
 
 When no contract is supplied, the preceding bootstrap pipeline is added:
 
@@ -205,7 +212,8 @@ Topic contracts define:
 - title-candidate screening policy;
 - main topics, anchor, and secondary replacements;
 - tagging categories, values, dependencies, and fallback policy;
-- enabled providers and search queries; and
+- tagging evidence policy (`abstract_or_full_text` or `full_text_required`);
+- enabled providers, exact optional publication window, and search queries; and
 - optional explicit topic-policy profile selection.
 
 Generated and refined contracts contain a `topic_policy` reference with the
@@ -320,7 +328,22 @@ Full-text preparation prefers configured local paths, then supported open-text
 locations including provider metadata, DOI resolution, Unpaywall, Europe PMC,
 and CORE when configured. Extracted text is cached outside the repository using
 `--full-text-cache-dir` or `AD_LIT_FULL_TEXT_CACHE`; project artifacts retain
-manifests and path metadata.
+manifests and path metadata. Availability locators remain separate from the
+resolved extracted document. Remote extraction must match a DOI in front matter
+or the compact ordered paper title before it becomes usable tagging evidence.
+The manifest records the identity decision, text SHA-256, extraction engine and
+version, extraction-contract version, resolved URL/source/license, and any
+failure. Text cleanup preserves line and section boundaries for evidence
+selection.
+
+Tagging uses an explicit state machine. A row is `tagged` only from a usable
+abstract, trusted local text, or identity-verified remote extracted full text;
+insufficient rows are
+`skipped_insufficient_evidence`, and per-paper model/validation failures are
+`failed`. Both non-tagged states preserve the input row and error while clearing
+claims and category values. Audit checks state consistency. The legacy Mantis
+export accepts only evidence-backed `tagged` rows and fails clearly when none
+are eligible.
 
 LLM calls route through `ad_lit_pipeline/llm/client.py`. Prompts live under
 `ad_lit_pipeline/prompts/templates/`, response schemas are strict, and parsed
@@ -365,6 +388,10 @@ scientific semantics beyond the underlying steps.
   negative-result sources are not integrated.
 - Canonical corpus snapshots and cutoff-bound production records are not yet
   emitted.
+- Work/version identities, immutable content-addressed raw snapshots, complete
+  provider page logs, and `as_of` semantics remain Phase 2/3 work. Current
+  raw-record and observation hashes improve traceability but are not a corpus
+  snapshot.
 - Preliminary findings are not verified v1 claims.
 - Evidence-graph, gap generation, counterretrieval, verification, scoring, and
   expert-judgment workflows are not production steps yet.
@@ -382,9 +409,14 @@ The GitHub Actions workflow is configured to run the complete offline suite on
 Python 3.11 and 3.12 with different fixed hash seeds. The stable aggregate job
 is `foundation-gate`. Dependency installation may use the network; test
 execution blocks outbound TCP connections and receives no external-service
-secrets. Hosted verification remains pending until the workflow is committed
-and pushed. See
+secrets. Hosted Python 3.11/3.12 verification passed on 2026-08-31, and the
+stable gate is required on `dev061602` through repository ruleset 21912442. See
 [continuous integration](continuous_integration.md).
+
+The post-live hardening recorded on 2026-09-01 passes 641 offline tests locally
+on Python 3.12.2 under both fixed hash seeds. It remains uncommitted in the
+Codex worktree, so the 2026-08-31 hosted result does not yet verify these newer
+changes; commit/push must produce a new hosted matrix result before review.
 
 Run focused structural and documentation checks with:
 

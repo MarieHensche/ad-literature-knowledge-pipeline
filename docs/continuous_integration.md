@@ -1,6 +1,6 @@
 # Continuous Integration
 
-Status: implemented; local verification passed, hosted verification pending
+Status: implemented, hosted-verified, and required on `dev061602`
 Workflow: `.github/workflows/foundation-ci.yml`
 Stable required-check name: `foundation-gate`
 
@@ -76,15 +76,18 @@ The `foundation-gate` job depends on the complete Python matrix and succeeds
 only when every matrix job succeeds. Its stable name avoids making branch
 protection depend on matrix display names.
 
-After the workflow exists on GitHub, configure the protected branch or ruleset
-to require this status check:
+Repository ruleset
+[`21912442`](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/rules/21912442)
+requires this status check on `dev061602`:
 
 ```text
 foundation-gate
 ```
 
-That is a GitHub repository setting and is not changed by files in this
-repository. No remote branch-protection setting is modified by Step 1.10.
+The hosted Python 3.11 and 3.12 jobs and the aggregate gate passed on
+2026-08-31. The ruleset requires the branch to be up to date and has no bypass
+actors. Repository rules remain external state: future changes must be checked
+through GitHub rather than inferred from this file.
 
 ## Local Equivalent
 

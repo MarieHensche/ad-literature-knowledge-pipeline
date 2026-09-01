@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ad_lit_pipeline.topics.contract import VALID_TAGGING_EVIDENCE_POLICIES
+
 
 def plan_schema(provider_names: list[str]) -> dict[str, Any]:
     """Build the search-plan schema constrained to enabled providers."""
@@ -349,6 +351,10 @@ def topic_contract_schema(
             "tagging": {
                 "type": "object",
                 "properties": {
+                    "evidence_policy": {
+                        "type": "string",
+                        "enum": sorted(VALID_TAGGING_EVIDENCE_POLICIES),
+                    },
                     "fallback_policy": {
                         "type": "object",
                         "properties": {
@@ -371,7 +377,7 @@ def topic_contract_schema(
                         "items": category_schema,
                     },
                 },
-                "required": ["fallback_policy", "categories"],
+                "required": ["evidence_policy", "fallback_policy", "categories"],
                 "additionalProperties": False,
             },
             "collection": {
@@ -388,6 +394,21 @@ def topic_contract_schema(
                     },
                     "max_results_default": {"type": "integer"},
                     "exclude_openalex_review_type": {"type": "boolean"},
+                    "publication_window": {
+                        "type": ["object", "null"],
+                        "properties": {
+                            "start": {
+                                "type": "string",
+                                "pattern": r"^\d{4}-\d{2}-\d{2}$",
+                            },
+                            "end": {
+                                "type": "string",
+                                "pattern": r"^\d{4}-\d{2}-\d{2}$",
+                            },
+                        },
+                        "required": ["start", "end"],
+                        "additionalProperties": False,
+                    },
                     "search_queries": {
                         "type": "array",
                         "minItems": 3,
@@ -407,6 +428,7 @@ def topic_contract_schema(
                     "preferred_provider",
                     "max_results_default",
                     "exclude_openalex_review_type",
+                    "publication_window",
                     "search_queries",
                 ],
                 "additionalProperties": False,

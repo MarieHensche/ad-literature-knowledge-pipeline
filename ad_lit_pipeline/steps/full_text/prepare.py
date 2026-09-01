@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.metadata
 import json
 import os
 import re
@@ -17,6 +18,15 @@ from urllib.parse import quote, urlencode, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.steps.full_text.evidence import MIN_USABLE_FULL_TEXT_CHARS
+from ad_lit_pipeline.steps.full_text.identity import (
+    IDENTITY_MISMATCH,
+    IDENTITY_TRUSTED_LOCAL,
+    DocumentIdentityMismatch,
+    REMOTE_EXTRACTION_STATUSES,
+    assess_document_identity,
+    requires_remote_identity_validation,
+)
 
 
 STEP = StepSpec(
@@ -28,18 +38,40 @@ STEP = StepSpec(
 )
 
 USER_AGENT = "ad-literature-knowledge-pipeline/0.1"
-MIN_FULL_TEXT_CHARS = 1000
+MIN_FULL_TEXT_CHARS = MIN_USABLE_FULL_TEXT_CHARS
+FULL_TEXT_EXTRACTION_CONTRACT_VERSION = "2.0.0"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 20.0
 
 FULL_TEXT_COLUMNS = [
     "full_text_status",
+    # full_text_source is retained as a compatibility alias for the resolved source.
     "full_text_source",
-    "full_text_url",
-    "full_text_license",
+    "full_text_resolved_source",
+    "full_text_resolved_url",
+    "full_text_resolved_license",
     "full_text_text_path",
     "full_text_chars",
+    "full_text_usable_for_tagging",
+    "full_text_identity_status",
+    "full_text_identity_evidence",
+    "full_text_text_sha256",
+    "full_text_extraction_engine",
+    "full_text_extraction_engine_version",
+    "full_text_extraction_contract_version",
     "full_text_error",
     "full_text_manual_lookup_url",
+]
+
+AVAILABILITY_COLUMNS = [
+    "full_text_availability_status",
+    "full_text_availability_source",
+    "full_text_url",
+    "full_text_url_kind",
+    "full_text_url_checked_at",
+    "full_text_url_content_type",
+    "full_text_license",
+    "full_text_is_open_access",
+    "full_text_availability_error",
 ]
 
 REMOTE_FETCH_ERRORS = (
@@ -55,6 +87,7 @@ MANIFEST_COLUMNS = [
     "paper_id",
     "title",
     "doi",
+    *AVAILABILITY_COLUMNS,
     *FULL_TEXT_COLUMNS,
 ]
 
@@ -74,6 +107,12 @@ class FullTextResult:
     license: str = ""
     text_path: str = ""
     chars: int = 0
+    identity_status: str = ""
+    identity_evidence: str = ""
+    text_sha256: str = ""
+    extraction_engine: str = ""
+    extraction_engine_version: str = ""
+    extraction_contract_version: str = FULL_TEXT_EXTRACTION_CONTRACT_VERSION
     error: str = ""
     manual_lookup_url: str = ""
 
@@ -112,6 +151,36 @@ class SimpleHTMLTextExtractor(HTMLParser):
 
 def clean_whitespace(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
+
+
+def clean_extracted_text(value: str) -> str:
+    """Normalize horizontal whitespace while preserving headings and pages."""
+    lines = [
+        re.sub(r"[ \t\f\v]+", " ", line).strip()
+        for line in value.splitlines()
+    ]
+    output: list[str] = []
+    previous_blank = False
+    for line in lines:
+        if not line:
+            if output and not previous_blank:
+                output.append("")
+            previous_blank = True
+            continue
+        output.append(line)
+        previous_blank = False
+    return "\n".join(output).strip()
+
+
+def text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def package_version(name: str) -> str:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
 
 
 def normalize_doi(value: str) -> str:
@@ -214,7 +283,7 @@ def extract_pdf_text(data: bytes) -> str:
         parts = []
         for page in reader.pages:
             parts.append(page.extract_text() or "")
-        return clean_whitespace("\n\n".join(parts))
+        return clean_extracted_text("\n\n".join(parts))
     except Exception as error:
         raise ValueError(f"Could not extract PDF text: {error}") from error
 
@@ -222,7 +291,7 @@ def extract_pdf_text(data: bytes) -> str:
 def extract_html_text(data: bytes) -> str:
     parser = SimpleHTMLTextExtractor()
     parser.feed(data.decode("utf-8", errors="ignore"))
-    return clean_whitespace(parser.text())
+    return clean_extracted_text(parser.text())
 
 
 def pdf_links_from_html(data: bytes, base_url: str) -> list[str]:
@@ -285,6 +354,15 @@ def extract_local_file(row: dict[str, str], path: Path, cache_dir: Path) -> Full
         url=str(path),
         text_path=str(text_path),
         chars=len(text),
+        identity_status=IDENTITY_TRUSTED_LOCAL,
+        identity_evidence="explicit_local_file",
+        text_sha256=text_sha256(text),
+        extraction_engine=(
+            "pypdf" if path.suffix.lower() == ".pdf" else "local_text"
+        ),
+        extraction_engine_version=(
+            package_version("pypdf") if path.suffix.lower() == ".pdf" else "1"
+        ),
     )
 
 
@@ -301,14 +379,53 @@ def reuse_existing_text(row: dict[str, str]) -> FullTextResult | None:
     if len(text) < MIN_FULL_TEXT_CHARS:
         return None
 
+    if (
+        requires_remote_identity_validation(row)
+        and row.get("full_text_extraction_contract_version", "").strip()
+        != FULL_TEXT_EXTRACTION_CONTRACT_VERSION
+    ):
+        return None
+
+    if requires_remote_identity_validation(row):
+        identity = assess_document_identity(row, text)
+        if not identity.matched:
+            raise DocumentIdentityMismatch(str(path), identity)
+    else:
+        identity = None
+
     return FullTextResult(
         status=row.get("full_text_status") or "existing_text_available",
         source=row.get("full_text_source") or "existing_text_path",
-        url=row.get("full_text_url", ""),
-        license=row.get("full_text_license", ""),
+        url=row.get("full_text_resolved_url") or row.get("full_text_url", ""),
+        license=(
+            row.get("full_text_resolved_license")
+            or row.get("full_text_license", "")
+        ),
         text_path=str(path),
         chars=len(text),
+        identity_status=(
+            identity.status if identity is not None else IDENTITY_TRUSTED_LOCAL
+        ),
+        identity_evidence=(
+            identity.evidence if identity is not None else "existing_local_text_path"
+        ),
+        text_sha256=row.get("full_text_text_sha256") or text_sha256(text),
+        extraction_engine=row.get("full_text_extraction_engine") or "existing_text",
+        extraction_engine_version=(
+            row.get("full_text_extraction_engine_version") or "unknown"
+        ),
     )
+
+
+def verify_remote_document_identity(
+    row: dict[str, str],
+    text: str,
+    url: str,
+) -> tuple[str, str]:
+    identity = assess_document_identity(row, text)
+    if not identity.matched:
+        raise DocumentIdentityMismatch(url, identity)
+    return identity.status, identity.evidence
 
 
 def extract_remote_location(
@@ -323,6 +440,7 @@ def extract_remote_location(
         status = "pdf_text_extracted"
     else:
         pdf_errors = []
+        pdf_identity_mismatches: list[DocumentIdentityMismatch] = []
         for pdf_url in pdf_links_from_html(data, final_url)[:5]:
             try:
                 pdf_data, pdf_type, pdf_final_url = request_bytes(pdf_url)
@@ -330,6 +448,13 @@ def extract_remote_location(
                     continue
                 text = extract_pdf_text(pdf_data)
                 if len(text) >= MIN_FULL_TEXT_CHARS:
+                    identity_status, identity_evidence = (
+                        verify_remote_document_identity(
+                            row,
+                            text,
+                            pdf_final_url,
+                        )
+                    )
                     text_path = write_text_cache(row, text, cache_dir, pdf_final_url)
                     return FullTextResult(
                         status="landing_pdf_text_extracted",
@@ -338,7 +463,15 @@ def extract_remote_location(
                         license=location.license,
                         text_path=str(text_path),
                         chars=len(text),
+                        identity_status=identity_status,
+                        identity_evidence=identity_evidence,
+                        text_sha256=text_sha256(text),
+                        extraction_engine="pypdf",
+                        extraction_engine_version=package_version("pypdf"),
                     )
+            except DocumentIdentityMismatch as error:
+                pdf_identity_mismatches.append(error)
+                pdf_errors.append(f"{pdf_url}: {type(error).__name__}: {error}")
             except REMOTE_FETCH_ERRORS as error:
                 pdf_errors.append(f"{pdf_url}: {type(error).__name__}: {error}")
 
@@ -356,6 +489,19 @@ def extract_remote_location(
             f"from {final_url}"
         )
 
+    try:
+        identity_status, identity_evidence = verify_remote_document_identity(
+            row,
+            text,
+            final_url,
+        )
+    except DocumentIdentityMismatch:
+        if (
+            not is_pdf_response(final_url, content_type, data)
+            and pdf_identity_mismatches
+        ):
+            raise pdf_identity_mismatches[0]
+        raise
     text_path = write_text_cache(row, text, cache_dir, final_url)
     return FullTextResult(
         status=status,
@@ -364,6 +510,15 @@ def extract_remote_location(
         license=location.license,
         text_path=str(text_path),
         chars=len(text),
+        identity_status=identity_status,
+        identity_evidence=identity_evidence,
+        text_sha256=text_sha256(text),
+        extraction_engine=(
+            "pypdf" if status == "pdf_text_extracted" else "html_parser"
+        ),
+        extraction_engine_version=(
+            package_version("pypdf") if status == "pdf_text_extracted" else "1"
+        ),
     )
 
 
@@ -522,12 +677,20 @@ def resolve_full_text(
     unpaywall_email: str | None,
     core_api_key: str | None,
 ) -> FullTextResult:
-    existing_text = reuse_existing_text(row)
-    if existing_text is not None:
-        return existing_text
-
     existing = row.get("full_text_path", "").strip()
     errors = []
+    identity_mismatches: list[tuple[FullTextLocation, DocumentIdentityMismatch]] = []
+
+    try:
+        existing_text = reuse_existing_text(row)
+    except DocumentIdentityMismatch as error:
+        errors.append(f"existing_text: {type(error).__name__}: {error}")
+        identity_mismatches.append(
+            (FullTextLocation("existing_text_path", error.url), error)
+        )
+    else:
+        if existing_text is not None:
+            return existing_text
 
     if existing and not existing.startswith(("http://", "https://")):
         try:
@@ -538,12 +701,29 @@ def resolve_full_text(
     for location in candidate_locations(row, unpaywall_email, core_api_key):
         try:
             return extract_remote_location(row, location, cache_dir)
+        except DocumentIdentityMismatch as error:
+            identity_mismatches.append((location, error))
+            errors.append(
+                f"{location.source} {location.url}: {type(error).__name__}: {error}"
+            )
         except REMOTE_FETCH_ERRORS as error:
             errors.append(
                 f"{location.source} {location.url}: {type(error).__name__}: {error}"
             )
 
     if errors:
+        if identity_mismatches:
+            location, mismatch = identity_mismatches[0]
+            return FullTextResult(
+                status="identity_mismatch",
+                source=location.source,
+                url=mismatch.url,
+                license=location.license,
+                identity_status=IDENTITY_MISMATCH,
+                identity_evidence=mismatch.assessment.evidence,
+                error=" | ".join(errors),
+                manual_lookup_url=manual_lookup_url(row),
+            )
         return FullTextResult(
             status="extraction_failed",
             error=" | ".join(errors),
@@ -571,13 +751,32 @@ def output_columns(input_columns: list[str]) -> list[str]:
 
 
 def result_to_columns(result: FullTextResult) -> dict[str, str]:
+    remote_identity_verified = (
+        result.status not in REMOTE_EXTRACTION_STATUSES
+        or result.identity_status in {"verified_doi", "verified_title"}
+    )
+    usable_for_tagging = bool(
+        result.text_path
+        and result.chars >= MIN_FULL_TEXT_CHARS
+        and remote_identity_verified
+    )
     return {
         "full_text_status": result.status,
         "full_text_source": result.source,
-        "full_text_url": result.url,
-        "full_text_license": result.license,
+        "full_text_resolved_source": result.source,
+        "full_text_resolved_url": result.url,
+        "full_text_resolved_license": result.license,
         "full_text_text_path": result.text_path,
         "full_text_chars": str(result.chars),
+        "full_text_usable_for_tagging": "yes" if usable_for_tagging else "no",
+        "full_text_identity_status": result.identity_status,
+        "full_text_identity_evidence": result.identity_evidence,
+        "full_text_text_sha256": result.text_sha256,
+        "full_text_extraction_engine": result.extraction_engine,
+        "full_text_extraction_engine_version": result.extraction_engine_version,
+        "full_text_extraction_contract_version": (
+            result.extraction_contract_version
+        ),
         "full_text_error": result.error,
         "full_text_manual_lookup_url": result.manual_lookup_url,
     }
@@ -627,6 +826,10 @@ def prepare_rows(
                 "paper_id": paper_id,
                 "title": row.get("title", ""),
                 "doi": row.get("doi", ""),
+                **{
+                    column: row.get(column, "")
+                    for column in AVAILABILITY_COLUMNS
+                },
                 **full_text_columns,
             }
         )
@@ -652,13 +855,31 @@ def run(
     write_csv(output_path, enriched_rows, output_columns(fieldnames))
     write_csv(manifest_path, manifest_rows, MANIFEST_COLUMNS)
 
-    local_texts = sum(
+    usable_full_texts = sum(
         1
         for row in manifest_rows
-        if row.get("full_text_text_path") and int(row.get("full_text_chars") or 0) > 0
+        if row.get("full_text_usable_for_tagging") == "yes"
     )
     manual_lookup_needed = sum(
         1 for row in manifest_rows if row.get("full_text_status") == "manual_lookup_needed"
+    )
+    extraction_failures = [
+        row
+        for row in manifest_rows
+        if row.get("full_text_status") == "extraction_failed"
+    ]
+    identity_failures = [
+        row
+        for row in manifest_rows
+        if row.get("full_text_status") == "identity_mismatch"
+    ]
+    warnings = [
+        f"{row.get('paper_id') or '<unknown>'}: full-text extraction failed"
+        for row in extraction_failures
+    ]
+    warnings.extend(
+        f"{row.get('paper_id') or '<unknown>'}: extracted document identity mismatch"
+        for row in identity_failures
     )
 
     return StepResult(
@@ -673,8 +894,20 @@ def run(
             "included_papers": sum(
                 1 for row in rows if row.get("scope_decision") == "include"
             ),
-            "local_texts": local_texts,
+            # Kept as an alias for existing callers; texts may also be remote.
+            "local_texts": usable_full_texts,
+            "usable_full_texts": usable_full_texts,
+            "extraction_failures": len(extraction_failures),
+            "identity_failures": len(identity_failures),
             "manual_lookup_needed": manual_lookup_needed,
+        },
+        warnings=warnings,
+        metadata={
+            "full_text_extraction_contract_version": (
+                FULL_TEXT_EXTRACTION_CONTRACT_VERSION
+            ),
+            "minimum_usable_full_text_chars": MIN_FULL_TEXT_CHARS,
+            "remote_document_identity_required": True,
         },
     )
 

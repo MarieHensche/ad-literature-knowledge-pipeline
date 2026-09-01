@@ -22,6 +22,9 @@ Rules:
 - If the topic says "from 2018 to 2022", use year_from=2018 and year_to=2022.
 - If the topic says "since 2020", use year_from=2020 and year_to=null.
 - If no filter is mentioned, use null or empty arrays.
+- Treat `collection.publication_window`, when present, as authoritative. The
+  pipeline applies its exact inclusive dates deterministically after planning;
+  do not widen or override them.
 - Make the main search string precise but not too narrow.
 - Add 4 to 8 executable search_queries that cover different phrasings, synonyms, populations, methods, applications, or adjacent angles.
 - Include seed search queries from the topic contract when they are useful, and refine them only enough to fit the chosen provider.
