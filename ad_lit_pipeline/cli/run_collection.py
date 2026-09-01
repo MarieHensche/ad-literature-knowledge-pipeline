@@ -123,6 +123,7 @@ def build_step_functions(
     trace_dir: Path,
     topic_contract_path: Path,
     topic_description: str,
+    producing_run_id: str,
 ) -> dict[str, object]:
     artifacts = collection_artifacts(
         args.collection,
@@ -393,6 +394,22 @@ def build_step_functions(
             fail_below_export_ratio=args.fail_below_export_ratio,
         )
 
+    def run_materialize_corpus_snapshot() -> object:
+        from ad_lit_pipeline.steps.collection import materialize_snapshot
+
+        return materialize_snapshot.run(
+            artifacts.deduped_candidates_jsonl,
+            artifacts.papers_csv,
+            artifacts.provider_evidence_index_jsonl,
+            artifacts.provider_response_pages_dir,
+            artifacts.plan_json,
+            topic_contract_path,
+            artifacts.corpus_records_jsonl,
+            artifacts.corpus_snapshot_integrity_json,
+            producing_run_id,
+            artifact_root=Path.cwd(),
+        )
+
     return {
         "generate_topic_contract": run_generate_topic_contract,
         "fetch_review_overviews": run_fetch_review_overviews,
@@ -408,6 +425,7 @@ def build_step_functions(
         "prepare_calibration_full_text": run_prepare_calibration_full_text,
         "calibrate_topic_contract": run_calibrate_topic_contract,
         "export_included_candidates": run_export_included_candidates,
+        "materialize_corpus_snapshot": run_materialize_corpus_snapshot,
     }
 
 
@@ -475,6 +493,7 @@ def run_collection(args: argparse.Namespace) -> None:
         trace_dir,
         topic_contract_path,
         topic_description,
+        manifest.run_id,
     )
 
     if args.dry_run:
@@ -496,6 +515,13 @@ def run_collection(args: argparse.Namespace) -> None:
     print(f"Topic contract: {topic_contract_path}")
     print(f"Plan: {artifacts.plan_json}")
     print(f"Candidate papers CSV: {artifacts.papers_csv}")
+    if artifacts.corpus_records_jsonl.exists():
+        print(f"Corpus records: {artifacts.corpus_records_jsonl}")
+    if artifacts.corpus_snapshot_integrity_json.exists():
+        print(
+            "Corpus snapshot integrity: "
+            f"{artifacts.corpus_snapshot_integrity_json}"
+        )
     print()
     print("Next run:")
     print(

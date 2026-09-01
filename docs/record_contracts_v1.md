@@ -1,6 +1,6 @@
 # Versioned Scientific Record Contracts v1
 
-Status: implemented contract and collection-integrity layer, not yet wired into production steps
+Status: implemented; five corpus-boundary records are emitted by collection
 Record schema: `1.0.0`
 Scientific-validity policy: `1.0.0`
 Gap ontology: `1.0.0`
@@ -11,8 +11,11 @@ Gap ontology: `1.0.0`
 evidence-graph, gap-discovery, ranking, evaluation, and Mantis workflows. The
 contracts coexist with `ad_lit_pipeline/knowledge/`, whose current `Source`,
 `Finding`, `Gap`, and related records remain preliminary legacy contracts. Step
-1.3 does not reinterpret those records and does not change any current CLI,
-pipeline step, or legacy Mantis CSV.
+1.3 did not reinterpret those records or change the legacy Mantis CSV. Phase
+2.3 now uses the same contracts to emit `CorpusSnapshot`, `ScholarlyWork`,
+`SourceVersion`, `ProviderRecord`, and `AccessLocation` from selected collection
+results. Later record types remain contracts until their owning phases produce
+them.
 
 All v1 records are frozen dataclasses with strict JSON-compatible codecs. JSONL
 is the collection format. The schema rejects unknown core fields, requires

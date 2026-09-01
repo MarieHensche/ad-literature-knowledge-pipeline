@@ -13,14 +13,16 @@ response schema, model, and artifacts produced its outputs. This is an additive
 extension of the existing manifest: established run, step, artifact, warning,
 error, and trace fields remain present.
 
-The current pipeline does not yet emit canonical `CorpusSnapshot` records.
-Manifests therefore record that fact explicitly with `status: not_emitted`, a
-null snapshot ID and cutoff, and a reason. They never fabricate a snapshot or
-imply temporal reproducibility that the legacy pipeline cannot provide.
+The collection workflow now emits a canonical `CorpusSnapshot` in its final
+step. At run initialization no snapshot exists yet, so selected collection runs
+record `status: pending_collection_materialization`; workflows without the step
+record `status: not_emitted`. The final step result records the frozen snapshot
+ID and artifact hashes. The initial provenance block is append-only and is not
+rewritten to pretend the snapshot existed before collection completed.
 
-This Foundation step does not wire the versioned scientific records into
-production, execute migrations, contact Mantis, or make live provider or OpenAI
-calls merely to collect provenance.
+Collecting provenance does not execute migrations, contact Mantis, or make live
+provider or OpenAI calls. Snapshot materialization itself is a separate,
+offline validation step over the collection artifacts.
 
 ## Manifest Envelope
 

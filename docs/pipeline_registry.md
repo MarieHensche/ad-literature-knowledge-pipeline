@@ -18,7 +18,7 @@ publish without an explicit feature gate.
 ## Step Catalog
 
 `STEP_CATALOG` is an immutable mapping from step name to the effective
-`StepSpec`. It contains 43 registered steps: 42 implemented module-level `STEP`
+`StepSpec`. It contains 44 registered steps: 43 implemented module-level `STEP`
 objects plus `prepare_calibration_full_text`, a compatibility spec whose runtime
 delegates to the shared full-text implementation.
 
@@ -96,6 +96,13 @@ The historical constants such as `MAIN_PIPELINE`, `COLLECTION_PIPELINE`, and
 `assemble_collection_pipeline(CollectionPipelineOptions(...))` is authoritative
 for existing-contract collection, generated-contract collection, contract-only
 bootstrap, and optional-step branch activation.
+
+The default collection sequence now ends with `materialize_corpus_snapshot`.
+That step consumes the selected paper CSV, deduplicated candidate observations,
+exact provider-evidence archive, resolved plan, and topic contract. It emits a
+strict v1 corpus-record JSONL and a separate freeze/integrity report. The main
+tagging pipeline does not consume this snapshot yet; that handoff remains Phase
+2.5 work.
 
 `collection_calibration` remains a registered compatibility specification, but
 `assemble_collection_pipeline(...)` does not insert it into the current public

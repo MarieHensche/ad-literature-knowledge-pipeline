@@ -150,6 +150,8 @@ Phase 2.2 does not:
 - emit v1 `ProviderRecord` objects; or
 - fetch remote documents or produce passages.
 
-Phase 2.3 will verify these page/index links again, extract the exact provider
-item observation, emit production provider/work/version/access records, and
-freeze a snapshot only after collection-wide integrity succeeds.
+Phase 2.3 now verifies these page/index links again, extracts the exact provider
+item observation, emits production provider/work/version/access records, and
+freezes a snapshot only after collection-wide integrity succeeds. See the
+[corpus snapshot contract](corpus_snapshot.md). Failed HTTP attempts and
+document/passages remain outside this evidence boundary.

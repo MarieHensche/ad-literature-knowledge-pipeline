@@ -70,7 +70,7 @@ thin compatibility wrappers or direct CLIs.
 
 ## Authoritative Pipeline Registry
 
-`ad_lit_pipeline/core/registry.py` contains **43 registered steps** and **10
+`ad_lit_pipeline/core/registry.py` contains **44 registered steps** and **10
 named pipelines**. Both orchestrated CLIs and the local UI use this registry;
 the UI does not maintain a separate order.
 
@@ -167,6 +167,7 @@ plan_search
 -> verify_full_text_availability
 -> backfill_candidates
 -> export_included_candidates
+-> materialize_corpus_snapshot
 ```
 
 OpenAlex is the only implemented candidate provider. The planner receives only
@@ -191,6 +192,22 @@ one-based result position, JSON pointer, and canonical raw-item hash. Initial
 fetch, contract-bootstrap review fetch, and backfill all verify page bytes and
 candidate links before success. Review-seed evidence uses a separate index so
 it cannot be confused with final-candidate retrieval evidence.
+
+After candidate export, `materialize_corpus_snapshot` resolves every selected
+candidate back to its exact archived page and item. It applies the shared
+source-type, work-identity, source-version, lifecycle, access, and inclusive
+cutoff policies, then emits `ScholarlyWork`, `SourceVersion`, `ProviderRecord`,
+`AccessLocation`, and one frozen `CorpusSnapshot`. Its companion integrity
+report records input hashes, exact observed query coverage, open-world
+limitations, record counts, collection validation, and the output hash. The
+record artifact is replaced atomically only after strict validation; a failed
+rebuild writes a failure report and preserves any older record artifact as
+explicitly stale.
+
+The generated artifacts are:
+
+- `data/processed/<collection>_corpus_records.jsonl`;
+- `data/processed/<collection>_corpus_snapshot_integrity.json`.
 
 New runs use `<collection>_provider_candidates*.jsonl`; old
 `<collection>_openalex_candidates*.jsonl` files remain readable for resume or
@@ -400,8 +417,10 @@ Credentials are not stored.
 Every orchestrated run writes `runs/<run_id>/manifest.json`. Manifest schema
 `1.0.0` records sanitized Git state, environment, invocation, selected steps,
 contracts, providers, prompts, response schemas, artifacts, traces, warnings,
-errors, and append-only attempts. The current missing canonical corpus snapshot
-is recorded explicitly rather than fabricated.
+errors, and append-only attempts. Collection step results carry the emitted
+snapshot ID and record/integrity artifact references. The manifest's initial
+run-provenance block does not rewrite itself after the freeze; integrating the
+snapshot as a first-class resumed main-pipeline input remains Phase 2.5 work.
 
 An existing run ID is immutable unless `--resume` is explicit.
 `--resume --run-id <run_id>` appends a compatible attempt, preserves prior
@@ -426,15 +445,18 @@ scientific semantics beyond the underlying steps.
 - OpenAlex is the only implemented collection provider.
 - Clinical-trial registries, datasets, protocols, patents, and dedicated
   negative-result sources are not integrated.
-- Canonical corpus snapshots and cutoff-bound production records are not yet
-  emitted.
+- The collection workflow emits a canonical cutoff-bound snapshot and the first
+  five production record types. The main tagging workflow does not consume that
+  snapshot yet.
 - Work/version identity, source-type, negative/null, and inclusive `as_of`
-  semantics are now frozen in provider-neutral Phase 2.1 policy and tested
-  helpers, but production work/version records do not yet consume them.
+  semantics are frozen in provider-neutral policy and consumed by collection
+  snapshot materialization.
 - Immutable content-addressed raw response pages and complete provider page
   logs are implemented for OpenAlex, including review-seed and backfill calls.
-  These page artifacts are not a corpus snapshot or production
-  `ProviderRecord` collection.
+  They are resolved into production `ProviderRecord` objects only for selected
+  corpus members during the final collection step.
+- `Document` and `Passage` records are not emitted yet; full-text artifacts
+  therefore are not part of the frozen v1 record chain.
 - Preliminary findings are not verified v1 claims.
 - Evidence-graph, gap generation, counterretrieval, verification, scoring, and
   expert-judgment workflows are not production steps yet.
@@ -462,7 +484,10 @@ is pushed, and hosted Foundation CI run 33512451821 passes Python 3.11, Python
 3.12, and the stable `foundation-gate` for these corrections. Phase 2.1 adds 31
 focused corpus-semantic tests. Phase 2.2 adds exact response-page capture,
 candidate-link, redaction, backfill, and tamper tests; the complete offline
-suite passes 684 tests.
+suite passed 684 tests. Phase 2.3 adds canonical corpus materialization,
+strict-freeze, stable-ID, provenance-status, and stale-artifact tests; the
+complete offline suite passes 692 tests under the normal environment and both
+CI hash seeds.
 
 Run focused structural and documentation checks with:
 

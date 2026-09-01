@@ -8,7 +8,7 @@
     "rows": 5
   },
   "registry": {
-    "steps": 43,
+    "steps": 44,
     "pipelines": 10,
     "default_main": [
       "normalize_metadata",
@@ -28,6 +28,7 @@
   "compatibility_guarantees": [
     "The legacy export_mantis implementation and parsed CSV contract are unchanged.",
     "The default main pipeline still ends at legacy export_mantis.",
+    "Canonical corpus snapshot materialization extends collection without changing the legacy Mantis CSV.",
     "The new Mantis delivery pipeline is optional and separately registered.",
     "Mantis publication is not reachable without an explicit publish feature gate.",
     "No live Mantis service or OpenAI call is required by the regression suite."

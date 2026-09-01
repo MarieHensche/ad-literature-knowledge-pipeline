@@ -60,13 +60,17 @@ def collection_namespace(**overrides: object) -> SimpleNamespace:
 
 
 def test_catalog_registers_real_and_compatibility_steps_immutably() -> None:
-    assert len(STEP_CATALOG) == 43
+    assert len(STEP_CATALOG) == 44
     assert step_spec("normalize_metadata").inputs == ["raw_papers_csv"]
     assert step_spec("prepare_calibration_full_text").outputs == [
         "calibration_papers_full_text_csv",
         "calibration_full_text_manifest_csv",
     ]
     assert "normalize_review_config" in STEP_CATALOG
+    assert step_spec("materialize_corpus_snapshot").outputs == [
+        "corpus_records_jsonl",
+        "corpus_snapshot_integrity_json",
+    ]
     assert tuple(PIPELINE_SPECS["main"].steps) == MAIN_PIPELINE
 
     with pytest.raises(TypeError):

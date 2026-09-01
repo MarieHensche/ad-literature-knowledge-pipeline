@@ -1551,8 +1551,9 @@ normalization, exact publication windows are enforced, remote document identity
 is verified, and tagging/Mantis eligibility is evidence-gated. Implementation
 commit `7285aec` is pushed, and hosted run 33512451821 passed Python 3.11,
 Python 3.12, and `foundation-gate`. Phase 2.1 is committed and pushed as
-`edf47e9`; Phase 2.2 is implemented and locally verified. Phase 2.3 may begin
-only after explicit approval.
+`edf47e9`; Phase 2.2 is committed and pushed as `7a902fa`; Phase 2.3 is
+implemented and locally verified. Phase 2.4 may begin only after explicit
+approval.
 
 ### Phase 2.1 — Freeze Corpus And Identity Semantics — Complete
 
@@ -1664,7 +1665,7 @@ provider bytes and request that produced it, and hash tampering is detected.
   without a successful response body, work/version emission, snapshot freezing,
   documents, and passages remain outside Phase 2.2.
 
-### Phase 2.3 — Materialize The Canonical Corpus Snapshot
+### Phase 2.3 — Materialize The Canonical Corpus Snapshot — Complete
 
 - Add a registered production step after candidate export that emits
   `ScholarlyWork`, `SourceVersion`, `ProviderRecord`, `AccessLocation`, and one
@@ -1677,6 +1678,57 @@ provider bytes and request that produced it, and hash tampering is detected.
 Exit gate: unchanged inputs produce stable record and snapshot IDs; missing
 references, cutoff violations, competing identities, or artifact mismatches
 prevent freezing.
+
+#### Phase 2.3 Completion Record
+
+- Added the registered `materialize_corpus_snapshot` production step after
+  `export_included_candidates`. The shared registry now contains 44 steps and
+  the generated-contract collection path receives the same terminal step.
+- Added conventional canonical outputs
+  `data/processed/<collection>_corpus_records.jsonl` and
+  `data/processed/<collection>_corpus_snapshot_integrity.json`, CLI runtime
+  binding, completion output, ignore rules, and manifest-visible `StepResult`
+  inputs, outputs, counts, status, hashes, coverage, and snapshot ID.
+- Selected paper rows must resolve uniquely to deduplicated candidates and then
+  to exact archived provider pages/items through evidence ID, request and
+  response hashes, content-addressed URI, result position, JSON pointer,
+  provider identity, and canonical item hash. Copied metadata cannot replace
+  archived bytes.
+- Materialization applies the shared Phase 2.1 source-type, deterministic work
+  identity, source-version, lifecycle, retention, access, and inclusive-cutoff
+  policies. It emits strict v1 `ScholarlyWork`, `SourceVersion`,
+  `ProviderRecord`, `AccessLocation`, and one frozen `CorpusSnapshot` with
+  deterministic typed IDs.
+- The snapshot identity includes resolved corpus semantics and cutoff, plan and
+  contract hashes, selected input hashes, actual provider observations, and
+  membership. Operational timestamps and producing run IDs do not affect
+  record identities, so unchanged scientific inputs retain identical IDs
+  across repeated runs.
+- Coverage is computed from observed evidence pages, not every query written in
+  the plan. The snapshot records planned/observed/missing logical queries,
+  providers, retrieval phases, page/result counts, execution status, source and
+  access summaries, and explicit open-world limitations.
+- Strict pre-freeze checks deny unresolved or competing identities,
+  inconsistent plan/contract windows, missing or altered evidence, provider
+  item mismatch, disallowed or after-cutoff versions, and impossible retrieval
+  chronology. Full v1 record-local, collection-reference, ownership,
+  membership, chronology, and local-artifact validation runs before publish.
+- Records are serialized to a temporary artifact and atomically replace the
+  canonical JSONL only after every gate passes. Failure writes an atomic
+  integrity report without replacing records; an older JSONL is preserved but
+  explicitly marked stale so it cannot be attributed to the failed attempt.
+- Run provenance now fingerprints the snapshot-materializer implementation and
+  policy versions and distinguishes a selected, not-yet-run final materializer
+  from workflows that cannot emit a snapshot.
+- Verification: seven focused snapshot tests and 82 affected structural,
+  orchestration, provenance, compatibility, and documentation tests pass. The
+  complete offline suite passes 692 tests normally and with CI hash seeds 101
+  and 1201; compilation and diff validation pass. No provider, OpenAI,
+  full-text, or Mantis request was required.
+- Human-readable contract: `docs/corpus_snapshot.md`.
+- Deliberate boundary: `Document` and `Passage` emission, snapshot-native main
+  pipeline handoff/resume, and production Mantis paper projection remain Phase
+  2.4 and Phase 2.5 work. The legacy paper and Mantis CSV paths are unchanged.
 
 ### Phase 2.4 — Materialize Documents And Resolvable Passages
 
@@ -2117,6 +2169,7 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-09-01 | Complete Phase 2.3 with exact selected-candidate-to-provider-byte resolution, strict five-record v1 materialization, observed query coverage, deterministic snapshot identity, full collection validation, and atomic freeze/failure reports. | Archived provider pages were necessary but not yet a stable scientific corpus boundary. Later document, claim, gap, and Mantis work require explicit work/version/provider/access ownership and an immutable inclusive-cutoff membership set. | Phase 2.4 may attach verified documents and resolvable passages to these source versions. Snapshot-native main-pipeline and Mantis handoffs remain Phase 2.5. The complete offline suite passes 692 tests under the normal environment and both CI hash seeds; no live service was required. |
 | 2026-09-01 | Complete Phase 2.2 with exact OpenAlex response-byte capture, credential-free canonical request hashes, provider-neutral evidence indexes, candidate result-position and raw-item links, isolated review-seed evidence, backfill append/verification, compatibility fallbacks, and tamper detection. | Copied candidate metadata and display URLs cannot prove which mutable provider page produced an observation or preserve exact result order and item content. Production provider records and temporal snapshots require immutable input bytes first. | Phase 2.3 may materialize v1 provider/work/version/access records and freeze the first corpus snapshot from these verified inputs. Historical OpenAlex-named artifacts remain usable but explicitly lack archived page evidence. The complete offline suite passes 684 tests; no live service was required. |
 | 2026-09-01 | Complete Phase 2.1 with corpus specification `1.0.0`, one provider-neutral source classifier, deterministic DOI/provider/fingerprint identity assessment, evidence-linked version/lifecycle rules, inclusive earliest-availability cutoff assessment, and explicit review routes for uncertainty. | Immutable provider evidence and production records need fixed semantics before their identities and snapshot membership can be trustworthy. Silent publication-date substitution, metadata-only duplicate merging, or inferred version lineage would make later temporal gap claims irreproducible. | Phase 2.2 may archive exact provider request/response evidence against these rules. The production record bridge remains intentionally unimplemented until Phase 2.3. Complete offline verification passes 672 tests; no live service was required for this semantic step. |
 | 2026-09-01 | Complete P2.0 stabilization after two 641-test deterministic offline runs, a fresh live five-paper collection-to-Mantis smoke from an unedited exact-window plan, implementation commit `7285aec`, and successful hosted Foundation CI run 33512451821. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. The Python 3.11/3.12 matrix and stable `foundation-gate` passed; Phase 2.1 may begin only after explicit approval. |

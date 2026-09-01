@@ -60,6 +60,12 @@ def test_artifact_paths_match_existing_conventions() -> None:
         "data/raw/example_calibration_full_text_manifest.csv"
     )
     assert collection.papers_csv == Path("data/raw/example_papers.csv")
+    assert collection.corpus_records_jsonl == Path(
+        "data/processed/example_corpus_records.jsonl"
+    )
+    assert collection.corpus_snapshot_integrity_json == Path(
+        "data/processed/example_corpus_snapshot_integrity.json"
+    )
 
 
 def test_collection_artifacts_can_resolve_historical_openalex_paths(

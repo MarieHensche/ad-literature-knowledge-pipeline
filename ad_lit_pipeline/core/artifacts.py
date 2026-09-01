@@ -67,6 +67,8 @@ class CollectionArtifacts:
     calibration_papers_full_text_csv: Path
     calibration_full_text_manifest_csv: Path
     papers_csv: Path
+    corpus_records_jsonl: Path
+    corpus_snapshot_integrity_json: Path
 
 
 def processed_path(collection: str, suffix: str, base_dir: Path = Path(".")) -> Path:
@@ -241,6 +243,16 @@ def collection_artifacts(
             collection, "calibration_full_text_manifest.csv", base_dir
         ),
         papers_csv=raw_path(collection, "papers.csv", base_dir),
+        corpus_records_jsonl=processed_path(
+            collection,
+            "corpus_records.jsonl",
+            base_dir,
+        ),
+        corpus_snapshot_integrity_json=processed_path(
+            collection,
+            "corpus_snapshot_integrity.json",
+            base_dir,
+        ),
     )
 
 

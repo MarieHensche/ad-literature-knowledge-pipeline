@@ -12,6 +12,7 @@ from ad_lit_pipeline.steps.collection import (
     fetch_candidates,
     fetch_review_overviews,
     generate_topic_contract,
+    materialize_snapshot,
     plan_search,
     prepare_review_full_text,
     refine_topic_contract,
@@ -112,6 +113,7 @@ _BASE_STEP_SPECS = (
     fetch_candidates.STEP,
     fetch_review_overviews.STEP,
     generate_topic_contract.STEP,
+    materialize_snapshot.STEP,
     plan_search.STEP,
     prepare_review_full_text.STEP,
     refine_topic_contract.STEP,
@@ -217,6 +219,7 @@ _STEP_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "select_calibration_papers": ("screen_title_relevance",),
     "prepare_calibration_full_text": ("select_calibration_papers",),
     "export_included_candidates": ("backfill_candidates",),
+    "materialize_corpus_snapshot": ("export_included_candidates",),
     "import_bibtex": (),
     "import_json_metadata": (),
     "import_ris": (),
@@ -451,8 +454,9 @@ COLLECTION_PIPELINE_SPEC = _pipeline(
         "verify_full_text_availability",
         "backfill_candidates",
         "export_included_candidates",
+        "materialize_corpus_snapshot",
     ),
-    "Plan, collect, screen, backfill, and export candidate papers.",
+    "Plan, collect, screen, backfill, export, and freeze a canonical corpus.",
 )
 
 COLLECTION_CALIBRATION_PIPELINE_SPEC = _pipeline(

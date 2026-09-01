@@ -169,8 +169,33 @@ def test_run_provenance_distinguishes_available_contracts_from_effective_inputs(
         "status": "not_emitted",
         "corpus_snapshot_id": None,
         "as_of": None,
-        "reason": "The current legacy pipeline does not emit CorpusSnapshot records.",
+        "reason": "The selected workflow does not emit CorpusSnapshot records.",
     }
+
+
+def test_run_provenance_marks_selected_snapshot_materialization_as_pending() -> None:
+    provenance = build_run_provenance(
+        project_root=ROOT,
+        argv=["scripts/run_collection.py", "run"],
+        options={},
+        selected_steps=["materialize_corpus_snapshot"],
+        topic_contract_path=ROOT / "configs/topics/early_detection_ad.yaml",
+        model=None,
+    )
+
+    assert provenance["corpus_snapshot"] == {
+        "status": "pending_collection_materialization",
+        "corpus_snapshot_id": None,
+        "as_of": None,
+        "reason": (
+            "The selected collection workflow may emit the snapshot in its final "
+            "materialization step; no snapshot exists at run initialization."
+        ),
+    }
+    materializer = provenance["contracts"]["corpus_snapshot_materialization"]
+    assert materializer["status"] == "emitted_by_collection_snapshot_step"
+    assert materializer["integrity_schema_version"] == "1.0.0"
+    assert materializer["policy_version"] == "1.0.0"
 
 
 def test_new_manifest_is_versioned_atomic_and_attempt_scoped(tmp_path: Path) -> None:

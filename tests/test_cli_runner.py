@@ -429,6 +429,7 @@ def test_run_collection_dry_run_skips_contract_calibration_by_default() -> None:
     assert "Would run step: prepare_calibration_full_text" not in result.stdout
     assert "Would run step: calibrate_topic_contract" not in result.stdout
     assert "Would run step: export_included_candidates" in result.stdout
+    assert "Would run step: materialize_corpus_snapshot" in result.stdout
 
 
 def test_run_collection_can_run_contract_bootstrap_only() -> None:
@@ -531,6 +532,7 @@ def test_run_collection_with_contract_can_start_at_review_refinement() -> None:
     assert "Would run step: plan_search" in result.stdout
     assert "Would run step: calibrate_topic_contract" not in result.stdout
     assert "Would run step: export_included_candidates" in result.stdout
+    assert "Would run step: materialize_corpus_snapshot" in result.stdout
 
 
 def test_run_collection_requires_topic_when_generating_contract() -> None:

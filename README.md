@@ -19,6 +19,7 @@ It can:
 - import paper metadata from CSV, BibTeX, JSON, JSONL, or RIS
 - draft a topic contract from a plain research question
 - plan and run OpenAlex candidate collection from multiple search-query variants
+- freeze selected candidates as provenance-linked v1 corpus records
 - deduplicate candidate papers
 - screen papers against a topic contract with a recall-oriented candidate pass
 - resolve and prepare full text for evidence-grounded processing
@@ -73,6 +74,7 @@ scripts/refine_topic_contract.py    Review-seeded contract refiner
 ad_lit_pipeline/                    Importable pipeline package
 ad_lit_pipeline/corpus/             Corpus, identity, source-type, and cutoff policy
 ad_lit_pipeline/providers/evidence.py Immutable provider response-page evidence
+ad_lit_pipeline/steps/collection/materialize_snapshot.py Canonical snapshot freezer
 ad_lit_pipeline/records/            Versioned scientific record contracts
 ad_lit_pipeline/mantis/             Versioned Mantis projections and publisher
 ad_lit_pipeline/core/registry.py    Shared step/dependency/pipeline registry
@@ -140,8 +142,10 @@ conditional ordering dependencies and capabilities without breaking existing
 
 - [Technical summary](docs/technical_summary.md): implemented architecture,
   workflows, artifact boundaries, and current limitations.
-- [Pipeline registry](docs/pipeline_registry.md): the 43 registered steps, ten
+- [Pipeline registry](docs/pipeline_registry.md): the 44 registered steps, ten
   named pipelines, dependencies, and capabilities.
+- [Corpus snapshot materialization](docs/corpus_snapshot.md): selected-candidate
+  mapping, strict freeze gates, stable identities, and failure behavior.
 - [Run provenance](docs/run_provenance.md): manifests, traces, resumability, and
   redaction.
 - [Immutable provider evidence](docs/provider_evidence.md): exact response
@@ -389,7 +393,16 @@ data/raw/<collection>_provider_candidates.jsonl
 data/raw/<collection>_provider_candidates_deduped.jsonl
 data/raw/<collection>_provider_evidence_index.jsonl
 data/raw/<collection>_provider_response_pages/
+data/processed/<collection>_corpus_records.jsonl
+data/processed/<collection>_corpus_snapshot_integrity.json
 ```
+
+The final collection step resolves every selected paper to its exact provider
+page and item, applies the versioned identity and temporal policies, and emits
+the first production v1 chain: `ScholarlyWork`, `SourceVersion`,
+`ProviderRecord`, `AccessLocation`, and one frozen `CorpusSnapshot`. A strict
+failure report is written instead of replacing the record artifact when input
+evidence is missing, altered, after the cutoff, or identity-conflicting.
 
 Existing `<collection>_openalex_candidates*.jsonl` artifacts remain readable
 for resume and artifact-based continuation. They are marked as lacking archived
@@ -532,14 +545,15 @@ For architecture details, see `docs/technical_summary.md`.
 - If no papers reach successful evidence-backed tagging, the Mantis export step
   fails because it requires at least one row whose tagging status is `tagged`.
 - The strict v1 record, integrity, gap-ontology, and scientific-validity layers
-  are implemented contracts but are not yet emitted by the production paper
-  pipeline.
+  are implemented; collection emits the five corpus-boundary record types, but
+  later scientific record types are not production outputs yet.
 - Provider-neutral corpus, identity, source-type, version, and temporal
-  semantics are implemented, but production v1 work/version/snapshot emission
-  begins in later Phase 2 steps.
+  semantics are implemented and applied by canonical snapshot materialization.
 - Exact OpenAlex response pages, sanitized request identities, result order,
-  candidate positions, and tamper checks are implemented. The production
-  `ProviderRecord` and immutable `CorpusSnapshot` bridge is not yet implemented.
+  candidate positions, tamper checks, production `ProviderRecord` objects, and
+  immutable `CorpusSnapshot` freezing are implemented for selected papers.
+- The main tagging workflow does not yet consume the snapshot, and `Document`
+  and `Passage` records are not yet emitted.
 - Preliminary knowledge exports do not yet produce verified claims,
   relationships, evidence graphs, gap candidates, counterretrieval attempts, or
   three-axis rankings.

@@ -17,6 +17,10 @@ from ad_lit_pipeline.corpus.specification import corpus_specification_from_contr
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
 from ad_lit_pipeline.providers.evidence import PROVIDER_EVIDENCE_SCHEMA_VERSION
 from ad_lit_pipeline.records.registry import SCHEMA_VERSION
+from ad_lit_pipeline.steps.collection.materialize_snapshot import (
+    SNAPSHOT_INTEGRITY_SCHEMA_VERSION,
+    SNAPSHOT_MATERIALIZATION_POLICY_VERSION,
+)
 from ad_lit_pipeline.topics.policy import (
     DEFAULT_TOPIC_STRUCTURE_POLICY_PATH,
     load_topic_structure_policy,
@@ -558,6 +562,19 @@ def collect_contract_provenance(
             "schema_version": PROVIDER_EVIDENCE_SCHEMA_VERSION,
             "status": "emitted_by_provider_collection_steps",
         },
+        "corpus_snapshot_materialization": {
+            **file_reference(
+                project_root
+                / "ad_lit_pipeline"
+                / "steps"
+                / "collection"
+                / "materialize_snapshot.py",
+                project_root,
+            ),
+            "integrity_schema_version": SNAPSHOT_INTEGRITY_SCHEMA_VERSION,
+            "policy_version": SNAPSHOT_MATERIALIZATION_POLICY_VERSION,
+            "status": "emitted_by_collection_snapshot_step",
+        },
         "prompt_templates": directory_reference(
             project_root / "ad_lit_pipeline" / "prompts" / "templates",
             project_root,
@@ -588,7 +605,16 @@ def build_run_provenance(
 ) -> dict[str, Any]:
     root = project_root.resolve()
     contracts, providers = collect_contract_provenance(root, topic_contract_path)
-    snapshot_status = "declared" if corpus_snapshot_id is not None else "not_emitted"
+    materialization_selected = "materialize_corpus_snapshot" in selected_steps
+    snapshot_status = (
+        "declared"
+        if corpus_snapshot_id is not None
+        else (
+            "pending_collection_materialization"
+            if materialization_selected
+            else "not_emitted"
+        )
+    )
     return {
         "schema_version": RUN_PROVENANCE_SCHEMA_VERSION,
         "code": collect_code_provenance(root),
@@ -618,7 +644,13 @@ def build_run_provenance(
             "reason": (
                 None
                 if corpus_snapshot_id is not None
-                else "The current legacy pipeline does not emit CorpusSnapshot records."
+                else (
+                    "The selected collection workflow may emit the snapshot in "
+                    "its final materialization step; no snapshot exists at run "
+                    "initialization."
+                    if materialization_selected
+                    else "The selected workflow does not emit CorpusSnapshot records."
+                )
             ),
         },
     }
