@@ -623,8 +623,10 @@ completion of Phase 2. There is still no canonical immutable `CorpusSnapshot`,
 work/version lineage, complete content-addressed provider-page archive,
 production v1 record emission, or `as_of` query semantics. Old manifests and
 artifacts are not rewritten. The corrected implementation and its fresh live
-verification are recorded below. A new hosted Python 3.11/3.12 result remains
-required after the correction set is approved, committed, and pushed.
+verification are recorded below. The implementation was committed and pushed
+as `7285aec`; hosted
+[Foundation CI run 33512451821](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/actions/runs/33512451821)
+then passed Python 3.11, Python 3.12, and the stable `foundation-gate`.
 
 ### P2.0 Stabilization Completion Record — Local And Live
 
@@ -683,12 +685,12 @@ locally implemented and verified:
   ignored as generated audit data, keeping them out of the source correction
   set. They remain available locally for inspection.
 
-P2.0's implementation and local/live verification are complete. The correction
-set is deliberately still uncommitted: commit/push approval and the resulting
-hosted Python 3.11/3.12 `foundation-gate` are the final source-control gates.
-They do not authorize or implement Phase 2. Phase 2 starts with the live
-collection-to-record bridge for `ScholarlyWork`, `SourceVersion`,
-`ProviderRecord`, and immutable `CorpusSnapshot` records.
+P2.0's implementation, local/live verification, push, and hosted verification
+are complete. Commit `7285aec` contains the 31-file correction set; its hosted
+Python 3.11/3.12 matrix and aggregate `foundation-gate` passed. This does not
+implement Phase 2. Phase 2 starts with the live collection-to-record bridge for
+`ScholarlyWork`, `SourceVersion`, `ProviderRecord`, and immutable
+`CorpusSnapshot` records.
 
 ---
 
@@ -1543,12 +1545,12 @@ Goal: produce one immutable, cutoff-bound corpus whose provider bytes, work and
 version identities, documents, passages, and Mantis paper points are connected
 by strict v1 records without breaking the compatibility CSV workflow.
 
-P2.0 prerequisite: the compatibility paper CSV now preserves structured
-provider and retrieval provenance, unknown columns survive normalization, exact
-publication windows are enforced, remote document identity is verified, and
-tagging/Mantis eligibility is evidence-gated. That correction set must be
-committed, pushed, and pass the hosted Python 3.11/3.12 `foundation-gate` before
-Phase 2.1 begins.
+P2.0 prerequisite: **complete**. The compatibility paper CSV now preserves
+structured provider and retrieval provenance, unknown columns survive
+normalization, exact publication windows are enforced, remote document identity
+is verified, and tagging/Mantis eligibility is evidence-gated. Implementation
+commit `7285aec` is pushed, and hosted run 33512451821 passed Python 3.11,
+Python 3.12, and `foundation-gate`. Phase 2.1 may begin after explicit approval.
 
 ### Phase 2.1 — Freeze Corpus And Identity Semantics
 
@@ -2030,7 +2032,7 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
-| 2026-09-01 | Complete P2.0 stabilization locally after two 641-test deterministic offline runs and a fresh live five-paper collection-to-Mantis smoke from an unedited, exact-window plan. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. Obtain separate commit/push approval, require the hosted Python 3.11/3.12 `foundation-gate`, then begin the `ScholarlyWork`/`SourceVersion`/`ProviderRecord`/`CorpusSnapshot` bridge. |
+| 2026-09-01 | Complete P2.0 stabilization after two 641-test deterministic offline runs, a fresh live five-paper collection-to-Mantis smoke from an unedited exact-window plan, implementation commit `7285aec`, and successful hosted Foundation CI run 33512451821. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. The Python 3.11/3.12 matrix and stable `foundation-gate` passed; Phase 2.1 may begin only after explicit approval. |
 | 2026-09-01 | Harden the compatibility pipeline after the first live five-paper smoke: exact publication-window enforcement and carriage, structured canonical provenance, remote-document identity verification, explicit tagging evidence/state policy, and evidence-gated legacy Mantis export. | The live run met its requested provider date range but used a post-plan manual edit, retrieved one wrong PDF, tagged one title-only row, and stopped after one tiered query; the old success statuses therefore overstated end-to-end validity. | Retain old artifacts as invalidating audit evidence and perform a fresh run. Treat it only as a smoke, report executed-query coverage, and do not mark Phase 2 complete until immutable snapshots and work/version/provider-record identities exist. |
 | 2026-08-31 | Complete Step 1.10 and Foundation after the Python 3.11/3.12 hosted matrix and stable `foundation-gate` passed on the pushed branch and PR, then require that check on `dev061602` through active repository ruleset 21912442 with no bypass actors. | Local-only verification cannot establish that the committed workflow runs correctly on GitHub or prevent later unverified branch updates. | PR #2 is mergeable and green. Later phases must keep the stable gate required or record and review a deliberate replacement. |
 | 2026-08-28 | Complete Step 1.9 with one truthful documentation hierarchy, removal of the obsolete review scaffold, a visibly superseded bootstrap plan, explicit preliminary-versus-v1 scientific boundaries, truthful collection-calibration help, local-link and registry documentation tests, and deterministic literal replacement-target extraction. | Contradictory scaffolding and milestone-era documentation could make implemented review steps look unavailable, preliminary knowledge look verified, or compatibility-only calibration look active. Full verification also exposed a hash-seed-dependent equivalent-word choice. | Step 1.10 can add CI against a documented 43-step, ten-pipeline boundary and the complete offline suite. Collection calibration activation, production v1 record emission, and later scientific pipeline behavior remain separate decisions. |

@@ -414,9 +414,9 @@ stable gate is required on `dev061602` through repository ruleset 21912442. See
 [continuous integration](continuous_integration.md).
 
 The post-live hardening recorded on 2026-09-01 passes 641 offline tests locally
-on Python 3.12.2 under both fixed hash seeds. It remains uncommitted in the
-Codex worktree, so the 2026-08-31 hosted result does not yet verify these newer
-changes; commit/push must produce a new hosted matrix result before review.
+on Python 3.12.2 under both fixed hash seeds. Implementation commit `7285aec`
+is pushed, and hosted Foundation CI run 33512451821 passes Python 3.11, Python
+3.12, and the stable `foundation-gate` for these corrections.
 
 Run focused structural and documentation checks with:
 
