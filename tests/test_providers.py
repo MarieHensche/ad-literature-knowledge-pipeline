@@ -288,6 +288,7 @@ def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
         "doi": "https://doi.org/10.123/example",
         "display_name": "Example Study",
         "publication_year": 2024,
+        "type": "article",
         "abstract_inverted_index": {"hello": [0], "world": [1]},
         "authorships": [{"author": {"display_name": "A. Author"}}],
         "primary_location": {
@@ -303,6 +304,11 @@ def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
     assert candidate["abstract"] == "hello world"
     assert candidate["authors"] == "A. Author"
     assert candidate["venue"] == "Journal"
+    assert candidate["canonical_work_kind"] == "research_article"
+    assert candidate["source_type_classification_status"] == "resolved"
+    assert candidate["source_type_classification_evidence"] == [
+        "provider_type:type=article"
+    ]
 
 
 def test_openalex_fetches_multiple_search_queries(

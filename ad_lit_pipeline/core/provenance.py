@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from ad_lit_pipeline.corpus.specification import corpus_specification_from_contract
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
 from ad_lit_pipeline.records.registry import SCHEMA_VERSION
 from ad_lit_pipeline.topics.policy import (
@@ -465,6 +466,17 @@ def _topic_contract_reference(
                             }
                         )
                     )
+                specification = corpus_specification_from_contract(payload)
+                specification_mapping = specification.semantic_mapping()
+                reference["corpus_specification_status"] = (
+                    "declared"
+                    if "corpus_specification" in collection
+                    else "compatibility_default"
+                )
+                reference["corpus_specification"] = specification_mapping
+                reference["corpus_specification_sha256"] = _canonical_sha256(
+                    specification_mapping
+                )
         except (OSError, ValueError):
             pass
     return reference, providers

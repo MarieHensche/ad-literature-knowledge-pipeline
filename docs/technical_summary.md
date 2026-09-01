@@ -40,6 +40,7 @@ is explicitly superseded and exists only to preserve old links.
 ```text
 scripts/                 Compatibility wrappers and direct step CLIs
 ad_lit_pipeline/cli/     Main and collection orchestration
+ad_lit_pipeline/corpus/  Corpus policy, identity, source-type, temporal rules
 ad_lit_pipeline/core/    Artifacts, registry, manifests, runner, provenance
 ad_lit_pipeline/io/      CSV, JSON, JSONL, YAML, and path helpers
 ad_lit_pipeline/knowledge/
@@ -213,8 +214,29 @@ Topic contracts define:
 - main topics, anchor, and secondary replacements;
 - tagging categories, values, dependencies, and fallback policy;
 - tagging evidence policy (`abstract_or_full_text` or `full_text_required`);
-- enabled providers, exact optional publication window, and search queries; and
+- enabled providers, exact optional publication window, and search queries;
+- corpus semantics for cutoff resolution, earliest public availability,
+  languages, access, source/version retention, identity, missing dates, and
+  explicitly identified negative or null results; and
 - optional explicit topic-policy profile selection.
+
+`ad_lit_pipeline/corpus/` owns these provider-neutral Phase 2.1 semantics. The
+corpus specification is strict and versioned as `1.0.0`. An omitted
+specification resolves to the same compatibility default as a newly generated
+contract, so legacy contracts do not acquire different hidden behavior.
+Explicit `as_of` dates are inclusive; otherwise the run's UTC collection-start
+date is frozen as the cutoff. Temporal eligibility uses the earliest
+defensible public-availability date, never silently substitutes publication
+date, and routes missing, estimated, or cutoff-straddling dates to review and
+exclusion.
+
+Shared classification distinguishes canonical work kinds from provider labels
+and records resolved, provisional, or needs-review evidence. Identity order is
+DOI, stable provider identifier, then a normalized metadata fingerprint. The
+fingerprint is never treated as resolved identity. Source versions, including
+preprints, accepted manuscripts, versions of record, corrections, and
+retractions, remain distinct and are linked only when explicit evidence exists.
+These rules are also included, with a semantic hash, in run provenance.
 
 Generated and refined contracts contain a `topic_policy` reference with the
 policy ID, semantic version, semantic SHA-256, and selected profile IDs. The
@@ -388,10 +410,12 @@ scientific semantics beyond the underlying steps.
   negative-result sources are not integrated.
 - Canonical corpus snapshots and cutoff-bound production records are not yet
   emitted.
-- Work/version identities, immutable content-addressed raw snapshots, complete
-  provider page logs, and `as_of` semantics remain Phase 2/3 work. Current
-  raw-record and observation hashes improve traceability but are not a corpus
-  snapshot.
+- Work/version identity, source-type, negative/null, and inclusive `as_of`
+  semantics are now frozen in provider-neutral Phase 2.1 policy and tested
+  helpers, but production work/version records do not yet consume them.
+- Immutable content-addressed raw snapshots and complete provider page logs
+  remain Phase 2.2 work. Current raw-record and observation hashes improve
+  traceability but are not a corpus snapshot.
 - Preliminary findings are not verified v1 claims.
 - Evidence-graph, gap generation, counterretrieval, verification, scoring, and
   expert-judgment workflows are not production steps yet.
@@ -416,7 +440,8 @@ stable gate is required on `dev061602` through repository ruleset 21912442. See
 The post-live hardening recorded on 2026-09-01 passes 641 offline tests locally
 on Python 3.12.2 under both fixed hash seeds. Implementation commit `7285aec`
 is pushed, and hosted Foundation CI run 33512451821 passes Python 3.11, Python
-3.12, and the stable `foundation-gate` for these corrections.
+3.12, and the stable `foundation-gate` for these corrections. Phase 2.1 adds 31
+focused corpus-semantic tests; the complete offline suite passes 672 tests.
 
 Run focused structural and documentation checks with:
 

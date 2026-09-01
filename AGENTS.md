@@ -28,6 +28,7 @@ reusable behavior belongs in `ad_lit_pipeline/`.
 ```text
 ad_lit_pipeline/
   cli/          Orchestrated command-line workflows
+  corpus/       Corpus policy, identity, source-type, and temporal semantics
   core/         Artifacts, manifests, runner helpers, step specs
   io/           CSV, JSON, JSONL, YAML, and path helpers
   llm/          Shared LLM clients, schemas, and trace writing
@@ -44,6 +45,7 @@ configs/topics/ Topic contracts
 | Kind of code | Location |
 | --- | --- |
 | Pipeline orchestration | `ad_lit_pipeline/cli/` |
+| Corpus and identity semantics | `ad_lit_pipeline/corpus/` |
 | Script compatibility wrappers | `scripts/` |
 | Pipeline step behavior | `ad_lit_pipeline/steps/<area>/` |
 | Topic loading and validation | `ad_lit_pipeline/topics/` |

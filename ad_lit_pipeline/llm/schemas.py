@@ -2,6 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from ad_lit_pipeline.corpus.specification import (
+    ACCESS_POLICIES,
+    AS_OF_RESOLUTIONS,
+    AVAILABILITY_DATE_RULES,
+    CORPUS_SPECIFICATION_SCHEMA_VERSION,
+    IDENTITY_BASIS_ORDER,
+)
+from ad_lit_pipeline.records.models import (
+    IdentityStatus,
+    NegativeNullPolicy,
+    SourceVersionKind,
+    WorkKind,
+)
 from ad_lit_pipeline.topics.contract import VALID_TAGGING_EVIDENCE_POLICIES
 
 
@@ -225,6 +238,135 @@ def topic_structure_schema() -> dict[str, Any]:
     }
 
 
+def corpus_specification_schema() -> dict[str, Any]:
+    """Build the strict v1 corpus-semantics schema for generated contracts."""
+    return {
+        "type": "object",
+        "properties": {
+            "schema_version": {
+                "type": "string",
+                "enum": [CORPUS_SPECIFICATION_SCHEMA_VERSION],
+            },
+            "as_of": {
+                "type": ["string", "null"],
+                "pattern": r"^\d{4}-\d{2}-\d{2}$",
+            },
+            "as_of_resolution": {
+                "type": "string",
+                "enum": sorted(AS_OF_RESOLUTIONS),
+            },
+            "availability_date_rule": {
+                "type": "string",
+                "enum": sorted(AVAILABILITY_DATE_RULES),
+            },
+            "allowed_source_types": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": True,
+                "items": {
+                    "type": "string",
+                    "enum": [item.value for item in WorkKind],
+                },
+            },
+            "allowed_languages": {
+                "type": "array",
+                "uniqueItems": True,
+                "items": {"type": "string"},
+            },
+            "include_unknown_language": {"type": "boolean"},
+            "access_policy": {
+                "type": "string",
+                "enum": sorted(ACCESS_POLICIES),
+            },
+            "version_policy": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["retain_all_identified"],
+                    },
+                    "retained_version_kinds": {
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": True,
+                        "items": {
+                            "type": "string",
+                            "enum": [item.value for item in SourceVersionKind],
+                        },
+                    },
+                    "preferred_version_kind": {
+                        "type": "string",
+                        "enum": [item.value for item in SourceVersionKind],
+                    },
+                    "link_versions_only_with_evidence": {
+                        "type": "boolean",
+                        "enum": [True],
+                    },
+                },
+                "required": [
+                    "mode",
+                    "retained_version_kinds",
+                    "preferred_version_kind",
+                    "link_versions_only_with_evidence",
+                ],
+                "additionalProperties": False,
+            },
+            "identity_policy": {
+                "type": "object",
+                "properties": {
+                    "ordered_bases": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": list(IDENTITY_BASIS_ORDER),
+                        },
+                        "uniqueItems": True,
+                        "minItems": len(IDENTITY_BASIS_ORDER),
+                        "maxItems": len(IDENTITY_BASIS_ORDER),
+                    },
+                    "metadata_fingerprint_status": {
+                        "type": "string",
+                        "enum": [IdentityStatus.NEEDS_REVIEW.value],
+                    },
+                    "ambiguous_identity_policy": {
+                        "type": "string",
+                        "enum": ["review"],
+                    },
+                },
+                "required": [
+                    "ordered_bases",
+                    "metadata_fingerprint_status",
+                    "ambiguous_identity_policy",
+                ],
+                "additionalProperties": False,
+            },
+            "unknown_date_policy": {
+                "type": "string",
+                "enum": ["review_and_exclude"],
+            },
+            "negative_null_result_policy": {
+                "type": "string",
+                "enum": [item.value for item in NegativeNullPolicy],
+            },
+        },
+        "required": [
+            "schema_version",
+            "as_of",
+            "as_of_resolution",
+            "availability_date_rule",
+            "allowed_source_types",
+            "allowed_languages",
+            "include_unknown_language",
+            "access_policy",
+            "version_policy",
+            "identity_policy",
+            "unknown_date_policy",
+            "negative_null_result_policy",
+        ],
+        "additionalProperties": False,
+    }
+
+
 def topic_contract_schema(
     provider_names: list[str],
     min_tagging_categories: int = 6,
@@ -409,6 +551,7 @@ def topic_contract_schema(
                         "required": ["start", "end"],
                         "additionalProperties": False,
                     },
+                    "corpus_specification": corpus_specification_schema(),
                     "search_queries": {
                         "type": "array",
                         "minItems": 3,
@@ -429,6 +572,7 @@ def topic_contract_schema(
                     "max_results_default",
                     "exclude_openalex_review_type",
                     "publication_window",
+                    "corpus_specification",
                     "search_queries",
                 ],
                 "additionalProperties": False,

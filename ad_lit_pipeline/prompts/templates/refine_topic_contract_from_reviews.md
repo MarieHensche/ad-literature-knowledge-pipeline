@@ -17,7 +17,7 @@ Task:
 Return a complete refined contract. Build final tagging categories only from
 the supplied `full_text_evidence`. You may refine only `topic_structure` and
 `tagging.categories`; preserve the research topic, scope, screening policies,
-provider settings, search queries, and fallback policy.
+provider settings, corpus specification, search queries, and fallback policy.
 
 Evidence rules:
 - Define tagging categories and allowed values only from `full_text_evidence`.

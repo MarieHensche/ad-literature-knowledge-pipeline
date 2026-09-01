@@ -1702,6 +1702,12 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
     assert row["corpus_publication_window_inclusive"] == "true"
     assert row["provider_record_updated_at"] == "2026-05-20T10:00:00Z"
     assert row["provider_source_type"] == "article"
+    assert row["canonical_work_kind"] == "research_article"
+    assert row["source_type_classification_status"] == "resolved"
+    assert json.loads(row["source_type_classification_evidence_json"]) == [
+        "provider_type:type=article"
+    ]
+    assert json.loads(row["source_type_review_reasons_json"]) == []
     assert row["provider_crossref_type"] == "journal-article"
     assert row["language"] == "en"
     assert row["is_retracted"] == "false"

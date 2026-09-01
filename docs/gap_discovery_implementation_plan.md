@@ -1552,7 +1552,7 @@ is verified, and tagging/Mantis eligibility is evidence-gated. Implementation
 commit `7285aec` is pushed, and hosted run 33512451821 passed Python 3.11,
 Python 3.12, and `foundation-gate`. Phase 2.1 may begin after explicit approval.
 
-### Phase 2.1 — Freeze Corpus And Identity Semantics
+### Phase 2.1 — Freeze Corpus And Identity Semantics — Complete
 
 - Add the complete corpus specification: inclusive `as_of`, publication and
   availability rules, allowed source types, providers, languages, versions,
@@ -1567,6 +1567,40 @@ Python 3.12, and `foundation-gate`. Phase 2.1 may begin after explicit approval.
 Exit gate: identical source facts produce identical work/version identity
 projections, and every ambiguous case is retained with an explicit status or
 review route.
+
+#### Phase 2.1 Completion Record
+
+- Added strict, versioned corpus specification `1.0.0` under
+  `ad_lit_pipeline/corpus/`, including inclusive cutoff resolution, earliest
+  defensible public availability, source/language/access/version retention,
+  identity, unknown-date, and explicitly identified negative/null-result rules.
+- Updated the checked-in topic contracts and generated-contract schema/prompt.
+  Legacy contracts without the new section resolve to the identical documented
+  compatibility default rather than acquiring an implicit alternative policy.
+- Added one shared provider-neutral source classifier. It preserves provider
+  labels and decision evidence while distinguishing `resolved`, `provisional`,
+  and `needs_review` classifications. OpenAlex candidate and compatibility CSV
+  exports now carry its additive audit fields.
+- Implemented deterministic identity assessment in the fixed order DOI, stable
+  provider identifier, then normalized metadata fingerprint. Fingerprints are
+  always `needs_review`; conflicts and insufficient facts take explicit review
+  routes rather than being merged.
+- Implemented distinct version and lifecycle assessment for preprints, accepted
+  manuscripts, versions of record, corrections, retractions, protocols,
+  datasets, and patents. Cross-version lineage requires explicit evidence.
+- Implemented cutoff assessment for exact and partial availability dates.
+  Missing, estimated, or cutoff-straddling dates are retained as audit decisions
+  but excluded pending review; publication date is never used as an undeclared
+  substitute for public availability.
+- Run provenance now records the resolved semantic corpus specification and its
+  SHA-256, including whether it was declared or supplied by the compatibility
+  default.
+- Verification: 31 focused corpus-semantics tests pass, 220 affected pipeline
+  tests pass, and the complete deterministic offline suite passes 672 tests.
+- Deliberate boundary: this step freezes and tests decisions; it does not yet
+  archive immutable provider response pages or emit production
+  `ProviderRecord`, `ScholarlyWork`, `SourceVersion`, or `CorpusSnapshot`
+  records. Those are Phase 2.2 and Phase 2.3 responsibilities.
 
 ### Phase 2.2 — Capture Immutable Provider Evidence
 
@@ -2032,6 +2066,7 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-09-01 | Complete Phase 2.1 with corpus specification `1.0.0`, one provider-neutral source classifier, deterministic DOI/provider/fingerprint identity assessment, evidence-linked version/lifecycle rules, inclusive earliest-availability cutoff assessment, and explicit review routes for uncertainty. | Immutable provider evidence and production records need fixed semantics before their identities and snapshot membership can be trustworthy. Silent publication-date substitution, metadata-only duplicate merging, or inferred version lineage would make later temporal gap claims irreproducible. | Phase 2.2 may archive exact provider request/response evidence against these rules. The production record bridge remains intentionally unimplemented until Phase 2.3. Complete offline verification passes 672 tests; no live service was required for this semantic step. |
 | 2026-09-01 | Complete P2.0 stabilization after two 641-test deterministic offline runs, a fresh live five-paper collection-to-Mantis smoke from an unedited exact-window plan, implementation commit `7285aec`, and successful hosted Foundation CI run 33512451821. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. The Python 3.11/3.12 matrix and stable `foundation-gate` passed; Phase 2.1 may begin only after explicit approval. |
 | 2026-09-01 | Harden the compatibility pipeline after the first live five-paper smoke: exact publication-window enforcement and carriage, structured canonical provenance, remote-document identity verification, explicit tagging evidence/state policy, and evidence-gated legacy Mantis export. | The live run met its requested provider date range but used a post-plan manual edit, retrieved one wrong PDF, tagged one title-only row, and stopped after one tiered query; the old success statuses therefore overstated end-to-end validity. | Retain old artifacts as invalidating audit evidence and perform a fresh run. Treat it only as a smoke, report executed-query coverage, and do not mark Phase 2 complete until immutable snapshots and work/version/provider-record identities exist. |
 | 2026-08-31 | Complete Step 1.10 and Foundation after the Python 3.11/3.12 hosted matrix and stable `foundation-gate` passed on the pushed branch and PR, then require that check on `dev061602` through active repository ruleset 21912442 with no bypass actors. | Local-only verification cannot establish that the committed workflow runs correctly on GitHub or prevent later unverified branch updates. | PR #2 is mergeable and green. Later phases must keep the stable gate required or record and review a deliberate replacement. |

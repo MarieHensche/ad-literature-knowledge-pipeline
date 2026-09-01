@@ -72,6 +72,17 @@ def test_topic_contract_template_loads() -> None:
     assert contract["collection"]["exclude_openalex_review_type"] is False
     assert contract["collection"]["publication_window"] is None
     assert contract["collection"]["search_queries"] == []
+    corpus = contract["collection"]["corpus_specification"]
+    assert corpus["schema_version"] == "1.0.0"
+    assert corpus["as_of"] is None
+    assert corpus["as_of_resolution"] == "collection_start_date"
+    assert corpus["identity_policy"]["ordered_bases"] == [
+        "doi",
+        "provider_id",
+        "metadata_fingerprint",
+    ]
+    assert corpus["unknown_date_policy"] == "review_and_exclude"
+    assert corpus["negative_null_result_policy"] == "include_when_identified"
     assert contract["tagging"]["evidence_policy"] == "abstract_or_full_text"
     assert "knowledge_goal" not in contract["tagging"]["categories"]
     assert "primary_topic_detail" in contract["tagging"]["categories"]

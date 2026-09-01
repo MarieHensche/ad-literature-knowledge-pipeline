@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ad_lit_pipeline.corpus.source_types import classify_source_type
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.records.ids import canonical_json
 from ad_lit_pipeline.steps.collection import verify_full_text_availability
@@ -42,6 +43,10 @@ OUTPUT_COLUMNS = [
     "corpus_publication_window_inclusive",
     "provider_record_updated_at",
     "provider_source_type",
+    "canonical_work_kind",
+    "source_type_classification_status",
+    "source_type_classification_evidence_json",
+    "source_type_review_reasons_json",
     "provider_crossref_type",
     "language",
     "is_retracted",
@@ -262,6 +267,7 @@ def raw_record_sha256(candidate: dict[str, Any]) -> str:
 
 def structured_provenance_fields(candidate: dict[str, Any]) -> dict[str, str]:
     raw = raw_record(candidate)
+    source_type_assessment = classify_source_type({**raw, **candidate})
     return {
         "provider": scalar_text(candidate.get("provider")),
         "provider_id": scalar_text(candidate.get("provider_id")),
@@ -284,6 +290,22 @@ def structured_provenance_fields(candidate: dict[str, Any]) -> dict[str, str]:
         ),
         "provider_source_type": scalar_text(
             candidate.get("source_type") or raw.get("type")
+        ),
+        "canonical_work_kind": scalar_text(
+            candidate.get("canonical_work_kind")
+            or source_type_assessment.work_kind.value
+        ),
+        "source_type_classification_status": scalar_text(
+            candidate.get("source_type_classification_status")
+            or source_type_assessment.status
+        ),
+        "source_type_classification_evidence_json": canonical_json(
+            candidate.get("source_type_classification_evidence")
+            or source_type_assessment.evidence
+        ),
+        "source_type_review_reasons_json": canonical_json(
+            candidate.get("source_type_review_reasons")
+            or source_type_assessment.review_reasons
         ),
         "provider_crossref_type": scalar_text(
             candidate.get("crossref_type") or raw.get("type_crossref")

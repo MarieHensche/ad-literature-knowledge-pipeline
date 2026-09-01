@@ -8,6 +8,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ad_lit_pipeline.corpus.specification import (
+    corpus_specification_from_contract,
+    default_corpus_specification_mapping,
+)
 from ad_lit_pipeline.core.env import load_dotenv
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.yaml_io import read_yaml_object, write_yaml_object
@@ -212,6 +216,12 @@ def contract_from_model_payload(
 ) -> dict[str, Any]:
     """Convert the model-friendly categories list into contract YAML shape."""
     contract = deepcopy(payload)
+    collection = contract.get("collection")
+    if isinstance(collection, dict):
+        collection.setdefault(
+            "corpus_specification",
+            default_corpus_specification_mapping(),
+        )
     active_policy = policy or default_topic_structure_policy()
     normalize_topic_structure(
         contract,
@@ -1282,6 +1292,7 @@ def run(
 
     categories = contract["tagging"]["categories"]
     collection = contract["collection"]
+    corpus_specification = corpus_specification_from_contract(contract)
     search_queries = collection.get("search_queries", [])
     return StepResult(
         step_name=STEP.name,
@@ -1299,6 +1310,7 @@ def run(
             "topic_id": contract["topic_id"],
             "title": contract["research_topic"]["title"],
             "topic_policy": deepcopy(contract["topic_policy"]),
+            "corpus_specification": corpus_specification.semantic_mapping(),
         },
     )
 

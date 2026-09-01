@@ -78,6 +78,20 @@ Discovery and screening rules:
 - Set `collection.publication_window` to exact inclusive `start` and `end`
   dates in `YYYY-MM-DD` form only when the user states both boundaries;
   otherwise set it to null. Never infer exact dates that the user did not give.
+- Preserve `collection.corpus_specification.schema_version` and its fixed
+  identity order: DOI, provider ID, then review-only metadata fingerprint.
+- Set `corpus_specification.as_of` only when the user gives an exact cutoff. In
+  that case use `as_of_resolution: explicit`; otherwise use `as_of: null` and
+  `as_of_resolution: collection_start_date` so the run records one exact date.
+- Keep `availability_date_rule: earliest_public_availability`,
+  `unknown_date_policy: review_and_exclude`, and
+  `identity_policy.ambiguous_identity_policy: review`. Publication date is not
+  a substitute for unknown public availability.
+- Retain all explicitly identified source versions and link versions only when
+  relationship evidence exists. Include negative or null results when they are
+  explicitly identifiable; never infer a null result from missing reporting.
+- Change allowed source types, languages, or access policy only when the user
+  explicitly requests a narrower corpus. Preserve provider-neutral values.
 - Add at least three complementary `collection.search_queries` with a concise
   reason for each query.
 

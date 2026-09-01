@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ad_lit_pipeline.corpus.specification import validate_corpus_specification
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
 from ad_lit_pipeline.topics.matching import (
     DEFAULT_TOPIC_FIELD,
@@ -668,6 +669,13 @@ def validate_topic_contract(
                 "collection.publication_window.start must not follow "
                 "collection.publication_window.end."
             )
+
+    corpus_specification = collection.get("corpus_specification")
+    if corpus_specification is not None:
+        validate_corpus_specification(
+            corpus_specification,
+            "collection.corpus_specification",
+        )
 
     if "search_queries" in collection:
         search_queries = require_list(

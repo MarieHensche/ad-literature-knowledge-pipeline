@@ -71,6 +71,7 @@ scripts/fetch_review_overviews.py   Review/overview seed fetcher
 scripts/refine_topic_contract.py    Review-seeded contract refiner
 .github/workflows/foundation-ci.yml Offline Foundation CI
 ad_lit_pipeline/                    Importable pipeline package
+ad_lit_pipeline/corpus/             Corpus, identity, source-type, and cutoff policy
 ad_lit_pipeline/records/            Versioned scientific record contracts
 ad_lit_pipeline/mantis/             Versioned Mantis projections and publisher
 ad_lit_pipeline/core/registry.py    Shared step/dependency/pipeline registry
@@ -92,7 +93,11 @@ configs/topics/
 Topic contracts define the research topic, scope criteria, rule-based screening
 terms, candidate-screening policy, tagging categories, fallback policy, enabled
 providers, an optional exact inclusive publication window, the tagging-evidence
-policy, and optional seed search queries. Tagging categories are
+policy, optional seed search queries, and the versioned corpus specification.
+That specification freezes the inclusive `as_of` cutoff, earliest-public-
+availability rule, source/language/version/access policies, deterministic
+identity order, missing-date review route, and treatment of explicitly
+identified negative or null results. Tagging categories are
 topic-specific knowledge dimensions. New generated contracts should replace the
 template examples with categories and values inferred from review/overview seed
 papers. Generated/refined contracts require at least six concrete knowledge
@@ -508,6 +513,9 @@ For architecture details, see `docs/technical_summary.md`.
 - The strict v1 record, integrity, gap-ontology, and scientific-validity layers
   are implemented contracts but are not yet emitted by the production paper
   pipeline.
+- Provider-neutral corpus, identity, source-type, version, and temporal
+  semantics are implemented, but production v1 work/version/snapshot emission
+  begins in later Phase 2 steps.
 - Preliminary knowledge exports do not yet produce verified claims,
   relationships, evidence graphs, gap candidates, counterretrieval attempts, or
   three-axis rankings.

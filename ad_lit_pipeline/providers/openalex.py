@@ -13,6 +13,7 @@ from urllib.parse import urlunsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from ad_lit_pipeline.corpus.source_types import classify_source_type
 from ad_lit_pipeline.steps.collection.candidate_identity import dedupe_key
 from ad_lit_pipeline.topics.matching import (
     annotate_candidate_topic_matches,
@@ -507,6 +508,7 @@ def candidate_from_work(
         provider_plan = {}
 
     abstract = inverted_index_to_text(work.get("abstract_inverted_index"))
+    source_type_assessment = classify_source_type(work)
 
     candidate = {
         "provider": "openalex",
@@ -516,6 +518,14 @@ def candidate_from_work(
         "year": work.get("publication_year"),
         "publication_date": str(work.get("publication_date") or ""),
         "source_type": str(work.get("type") or ""),
+        "canonical_work_kind": source_type_assessment.work_kind.value,
+        "source_type_classification_status": source_type_assessment.status,
+        "source_type_classification_evidence": list(
+            source_type_assessment.evidence
+        ),
+        "source_type_review_reasons": list(
+            source_type_assessment.review_reasons
+        ),
         "language": str(work.get("language") or ""),
         "provider_record_updated_at": str(work.get("updated_date") or ""),
         "abstract": abstract,
