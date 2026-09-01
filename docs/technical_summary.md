@@ -20,6 +20,8 @@ graph construction, counterretrieval, gap verification, or three-axis ranking.
   capabilities.
 - [Run provenance](run_provenance.md) defines manifests, traces, and resume
   behavior.
+- [Immutable provider evidence](provider_evidence.md) defines exact response
+  pages, sanitized request identity, candidate links, and tamper verification.
 - [Continuous integration](continuous_integration.md) defines the offline
   matrix, network guard, security boundary, and stable required check.
 - [Scientific validity](scientific_validity.md), [record contracts](record_contracts_v1.md),
@@ -178,6 +180,22 @@ again on returned candidates, carried into the canonical CSV, and enforced
 again during scope screening. Tiered query groups stop when the requested
 unique-candidate target is reached; additional planned query text is not
 evidence that every query ran or that corpus coverage is adequate.
+
+Every new OpenAlex response body is captured at the transport boundary before
+JSON interpretation and archived before candidate conversion. Exact bytes use
+a provider/content-addressed path, while an atomic
+provider-neutral JSONL index records the canonical credential-free request,
+query/group/tier/page context, response hash and URI, retrieval time, provider
+item update range, and exact result order. Each candidate links to its page,
+one-based result position, JSON pointer, and canonical raw-item hash. Initial
+fetch, contract-bootstrap review fetch, and backfill all verify page bytes and
+candidate links before success. Review-seed evidence uses a separate index so
+it cannot be confused with final-candidate retrieval evidence.
+
+New runs use `<collection>_provider_candidates*.jsonl`; old
+`<collection>_openalex_candidates*.jsonl` files remain readable for resume or
+artifact-based continuation and receive an explicit unavailable-evidence marker
+rather than fabricated provenance.
 
 When no contract is supplied, the preceding bootstrap pipeline is added:
 
@@ -413,9 +431,10 @@ scientific semantics beyond the underlying steps.
 - Work/version identity, source-type, negative/null, and inclusive `as_of`
   semantics are now frozen in provider-neutral Phase 2.1 policy and tested
   helpers, but production work/version records do not yet consume them.
-- Immutable content-addressed raw snapshots and complete provider page logs
-  remain Phase 2.2 work. Current raw-record and observation hashes improve
-  traceability but are not a corpus snapshot.
+- Immutable content-addressed raw response pages and complete provider page
+  logs are implemented for OpenAlex, including review-seed and backfill calls.
+  These page artifacts are not a corpus snapshot or production
+  `ProviderRecord` collection.
 - Preliminary findings are not verified v1 claims.
 - Evidence-graph, gap generation, counterretrieval, verification, scoring, and
   expert-judgment workflows are not production steps yet.
@@ -441,7 +460,9 @@ The post-live hardening recorded on 2026-09-01 passes 641 offline tests locally
 on Python 3.12.2 under both fixed hash seeds. Implementation commit `7285aec`
 is pushed, and hosted Foundation CI run 33512451821 passes Python 3.11, Python
 3.12, and the stable `foundation-gate` for these corrections. Phase 2.1 adds 31
-focused corpus-semantic tests; the complete offline suite passes 672 tests.
+focused corpus-semantic tests. Phase 2.2 adds exact response-page capture,
+candidate-link, redaction, backfill, and tamper tests; the complete offline
+suite passes 684 tests.
 
 Run focused structural and documentation checks with:
 

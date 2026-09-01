@@ -9,6 +9,7 @@ class CandidateProvider(Protocol):
 
     name: str
     max_per_page: int
+    supports_immutable_provider_evidence: bool
 
     def validate_plan(self, plan: dict[str, Any]) -> None:
         """Validate that a search plan can be executed by this provider."""
@@ -20,6 +21,7 @@ class CandidateProvider(Protocol):
         per_page: int,
         mailto: str | None,
         sleep_seconds: float,
+        evidence_archive: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch candidates for a validated provider-specific plan."""
 

@@ -381,7 +381,8 @@ def test_run_collection_explain_lists_steps() -> None:
     assert "calibrate_topic_contract" not in result.stdout
     assert "generate_topic_contract" in result.stdout
     assert "prepare_review_full_text" in result.stdout
-    assert "example_openalex_candidates.jsonl" in result.stdout
+    assert "example_provider_candidates.jsonl" in result.stdout
+    assert "example_provider_evidence_index.jsonl" in result.stdout
 
 
 def test_collection_candidate_search_budget_is_bounded_for_small_runs() -> None:

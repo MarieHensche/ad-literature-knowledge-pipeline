@@ -46,6 +46,10 @@ inputs/full_text/
 outputs/
 reports/generated/
 data/processed/example_*
+# Immutable provider response pages and indexes are generated, potentially large,
+# and may contain third-party metadata. Tests use fixtures outside these paths.
+data/raw/*_provider_response_pages/
+data/raw/*_provider_evidence_index.jsonl
 # Local P2.0 live-stabilization artifacts are retained as audit evidence but
 # must not be mixed with source changes.
 data/collection_plans/p20_stabilization_*

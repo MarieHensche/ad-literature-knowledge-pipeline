@@ -72,6 +72,7 @@ scripts/refine_topic_contract.py    Review-seeded contract refiner
 .github/workflows/foundation-ci.yml Offline Foundation CI
 ad_lit_pipeline/                    Importable pipeline package
 ad_lit_pipeline/corpus/             Corpus, identity, source-type, and cutoff policy
+ad_lit_pipeline/providers/evidence.py Immutable provider response-page evidence
 ad_lit_pipeline/records/            Versioned scientific record contracts
 ad_lit_pipeline/mantis/             Versioned Mantis projections and publisher
 ad_lit_pipeline/core/registry.py    Shared step/dependency/pipeline registry
@@ -143,6 +144,8 @@ conditional ordering dependencies and capabilities without breaking existing
   named pipelines, dependencies, and capabilities.
 - [Run provenance](docs/run_provenance.md): manifests, traces, resumability, and
   redaction.
+- [Immutable provider evidence](docs/provider_evidence.md): exact response
+  pages, request identity, candidate links, and tamper verification.
 - [Continuous integration](docs/continuous_integration.md): offline matrix,
   network guard, security boundary, and required-check setup.
 - [Scientific-validity policy](docs/scientific_validity.md), [record contracts](docs/record_contracts_v1.md),
@@ -372,7 +375,25 @@ the groups are exhausted; standalone `search_queries` remain inspection and
 legacy-fallback inputs and are not proof that every variant ran. Candidate
 artifacts preserve the executed query, group, tier, index, rank, reason,
 redacted provider URL, timestamps, duplicate observations, raw-record hashes,
-and exact publication window so retrieval can be audited.
+and exact publication window so retrieval can be audited. Each successful
+OpenAlex response body is captured before interpretation and archived before
+candidate conversion in a content-addressed raw page directory. A
+provider-neutral index links candidates to the exact page,
+request hash, result position, JSON pointer, response hash, and retrieval time.
+Review/overview seed calls use a separate evidence index.
+
+New runs write:
+
+```text
+data/raw/<collection>_provider_candidates.jsonl
+data/raw/<collection>_provider_candidates_deduped.jsonl
+data/raw/<collection>_provider_evidence_index.jsonl
+data/raw/<collection>_provider_response_pages/
+```
+
+Existing `<collection>_openalex_candidates*.jsonl` artifacts remain readable
+for resume and artifact-based continuation. They are marked as lacking archived
+provider evidence rather than being assigned invented provenance.
 
 This writes a canonical paper CSV:
 
@@ -516,6 +537,9 @@ For architecture details, see `docs/technical_summary.md`.
 - Provider-neutral corpus, identity, source-type, version, and temporal
   semantics are implemented, but production v1 work/version/snapshot emission
   begins in later Phase 2 steps.
+- Exact OpenAlex response pages, sanitized request identities, result order,
+  candidate positions, and tamper checks are implemented. The production
+  `ProviderRecord` and immutable `CorpusSnapshot` bridge is not yet implemented.
 - Preliminary knowledge exports do not yet produce verified claims,
   relationships, evidence graphs, gap candidates, counterretrieval attempts, or
   three-axis rankings.

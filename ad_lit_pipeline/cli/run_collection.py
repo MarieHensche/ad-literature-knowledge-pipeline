@@ -124,7 +124,12 @@ def build_step_functions(
     topic_contract_path: Path,
     topic_description: str,
 ) -> dict[str, object]:
-    artifacts = collection_artifacts(args.collection)
+    artifacts = collection_artifacts(
+        args.collection,
+        prefer_existing_legacy=bool(
+            args.resume or args.only_step or args.from_step
+        ),
+    )
 
     def full_text_availability_required() -> bool:
         from ad_lit_pipeline.steps.collection import verify_full_text_availability
@@ -156,6 +161,12 @@ def build_step_functions(
             artifacts.review_overviews_jsonl,
             args.max_review_overviews,
             mailto=args.mailto,
+            provider_evidence_index_path=(
+                artifacts.review_provider_evidence_index_jsonl
+            ),
+            provider_response_pages_dir=(
+                artifacts.review_provider_response_pages_dir
+            ),
         )
 
     def run_prepare_review_full_text() -> object:
@@ -208,6 +219,12 @@ def build_step_functions(
             artifacts.candidates_jsonl,
             args.max_results,
             mailto=args.mailto,
+            provider_evidence_index_path=(
+                artifacts.provider_evidence_index_jsonl
+            ),
+            provider_response_pages_dir=(
+                artifacts.provider_response_pages_dir
+            ),
         )
 
     def run_deduplicate_candidates() -> object:
@@ -265,6 +282,12 @@ def build_step_functions(
             full_text_availability_workers=args.full_text_availability_workers,
             unpaywall_email=args.full_text_email,
             core_api_key=args.core_api_key,
+            provider_evidence_index_path=(
+                artifacts.provider_evidence_index_jsonl
+            ),
+            provider_response_pages_dir=(
+                artifacts.provider_response_pages_dir
+            ),
         )
 
     def run_select_calibration_papers() -> object:
@@ -460,7 +483,12 @@ def run_collection(args: argparse.Namespace) -> None:
 
     run_selected_steps(selected, step_functions, manifest, args.dry_run)
 
-    artifacts = collection_artifacts(args.collection)
+    artifacts = collection_artifacts(
+        args.collection,
+        prefer_existing_legacy=bool(
+            args.resume or args.only_step or args.from_step
+        ),
+    )
     print()
     print("Collection complete.")
     print(f"Run id: {manifest.run_id}")

@@ -9,6 +9,7 @@ from typing import Any
 
 from ad_lit_pipeline.corpus.source_types import classify_source_type
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.providers.evidence import unavailable_provider_evidence
 from ad_lit_pipeline.records.ids import canonical_json
 from ad_lit_pipeline.steps.collection import verify_full_text_availability
 from ad_lit_pipeline.topics.matching import (
@@ -47,6 +48,17 @@ OUTPUT_COLUMNS = [
     "source_type_classification_status",
     "source_type_classification_evidence_json",
     "source_type_review_reasons_json",
+    "provider_evidence_status",
+    "provider_page_evidence_id",
+    "provider_request_sha256",
+    "provider_response_sha256",
+    "provider_response_uri",
+    "provider_response_media_type",
+    "provider_page_or_cursor",
+    "provider_result_position",
+    "provider_result_count",
+    "provider_raw_record_json_pointer",
+    "provider_evidence_json",
     "provider_crossref_type",
     "language",
     "is_retracted",
@@ -268,6 +280,11 @@ def raw_record_sha256(candidate: dict[str, Any]) -> str:
 def structured_provenance_fields(candidate: dict[str, Any]) -> dict[str, str]:
     raw = raw_record(candidate)
     source_type_assessment = classify_source_type({**raw, **candidate})
+    provider_evidence = candidate.get("provider_evidence")
+    if not isinstance(provider_evidence, dict):
+        provider_evidence = unavailable_provider_evidence(
+            "historical_candidate_artifact"
+        )
     return {
         "provider": scalar_text(candidate.get("provider")),
         "provider_id": scalar_text(candidate.get("provider_id")),
@@ -307,6 +324,37 @@ def structured_provenance_fields(candidate: dict[str, Any]) -> dict[str, str]:
             candidate.get("source_type_review_reasons")
             or source_type_assessment.review_reasons
         ),
+        "provider_evidence_status": scalar_text(
+            provider_evidence.get("status")
+        ),
+        "provider_page_evidence_id": scalar_text(
+            provider_evidence.get("page_evidence_id")
+        ),
+        "provider_request_sha256": scalar_text(
+            provider_evidence.get("request_sha256")
+        ),
+        "provider_response_sha256": scalar_text(
+            provider_evidence.get("response_sha256")
+        ),
+        "provider_response_uri": scalar_text(
+            provider_evidence.get("response_uri")
+        ),
+        "provider_response_media_type": scalar_text(
+            provider_evidence.get("response_media_type")
+        ),
+        "provider_page_or_cursor": scalar_text(
+            provider_evidence.get("page_or_cursor")
+        ),
+        "provider_result_position": scalar_text(
+            provider_evidence.get("result_position")
+        ),
+        "provider_result_count": scalar_text(
+            provider_evidence.get("result_count")
+        ),
+        "provider_raw_record_json_pointer": scalar_text(
+            provider_evidence.get("raw_record_json_pointer")
+        ),
+        "provider_evidence_json": canonical_json(provider_evidence),
         "provider_crossref_type": scalar_text(
             candidate.get("crossref_type") or raw.get("type_crossref")
         ),

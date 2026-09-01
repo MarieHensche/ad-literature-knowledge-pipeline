@@ -1708,6 +1708,13 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
         "provider_type:type=article"
     ]
     assert json.loads(row["source_type_review_reasons_json"]) == []
+    assert row["provider_evidence_status"] == "unavailable"
+    assert row["provider_page_evidence_id"] == ""
+    assert json.loads(row["provider_evidence_json"]) == {
+        "reason": "historical_candidate_artifact",
+        "schema_version": "1.0.0",
+        "status": "unavailable",
+    }
     assert row["provider_crossref_type"] == "journal-article"
     assert row["language"] == "en"
     assert row["is_retracted"] == "false"

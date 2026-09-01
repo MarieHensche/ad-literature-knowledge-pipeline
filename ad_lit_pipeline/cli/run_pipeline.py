@@ -174,7 +174,10 @@ def build_step_functions(
 ) -> dict[str, object]:
     artifacts = main_pipeline_artifacts(args.collection)
     knowledge_paths = knowledge_artifacts(args.collection)
-    collection_paths = collection_artifacts(args.collection)
+    collection_paths = collection_artifacts(
+        args.collection,
+        prefer_existing_legacy=True,
+    )
     topic_contract_path = Path(args.topic_contract)
     config_path = Path(args.tagging_config) if args.tagging_config else None
     model = args.model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")

@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from ad_lit_pipeline.corpus.specification import corpus_specification_from_contract
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
+from ad_lit_pipeline.providers.evidence import PROVIDER_EVIDENCE_SCHEMA_VERSION
 from ad_lit_pipeline.records.registry import SCHEMA_VERSION
 from ad_lit_pipeline.topics.policy import (
     DEFAULT_TOPIC_STRUCTURE_POLICY_PATH,
@@ -548,6 +549,14 @@ def collect_contract_provenance(
             ),
             "schema_version": SCHEMA_VERSION,
             "status": "available_not_emitted_by_legacy_pipeline",
+        },
+        "provider_evidence": {
+            **file_reference(
+                project_root / "ad_lit_pipeline" / "providers" / "evidence.py",
+                project_root,
+            ),
+            "schema_version": PROVIDER_EVIDENCE_SCHEMA_VERSION,
+            "status": "emitted_by_provider_collection_steps",
         },
         "prompt_templates": directory_reference(
             project_root / "ad_lit_pipeline" / "prompts" / "templates",

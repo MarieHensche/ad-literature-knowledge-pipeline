@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import os
 import time
@@ -14,6 +13,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from ad_lit_pipeline.corpus.source_types import classify_source_type
+from ad_lit_pipeline.providers.evidence import (
+    CapturedJSONResponse,
+    ProviderEvidenceArchive,
+    json_object_from_response_bytes,
+    unavailable_provider_evidence,
+)
 from ad_lit_pipeline.steps.collection.candidate_identity import dedupe_key
 from ad_lit_pipeline.topics.matching import (
     annotate_candidate_topic_matches,
@@ -462,7 +467,33 @@ def fetch_json(
     for attempt in range(1, max_attempts + 1):
         try:
             with urlopen(request, timeout=60) as response:
-                data = json.loads(response.read().decode("utf-8"))
+                raw_bytes = response.read()
+                retrieved_at = datetime.now(timezone.utc).isoformat()
+                headers = getattr(response, "headers", None)
+                if headers is not None and hasattr(headers, "get_content_type"):
+                    media_type = str(headers.get_content_type() or "application/json")
+                elif headers is not None and hasattr(headers, "get"):
+                    media_type = str(
+                        headers.get("Content-Type") or "application/json"
+                    ).split(";", 1)[0]
+                else:
+                    media_type = "application/json"
+                content_encoding = (
+                    str(headers.get("Content-Encoding") or "").strip() or None
+                    if headers is not None and hasattr(headers, "get")
+                    else None
+                )
+                status_code = int(getattr(response, "status", 200) or 200)
+                response_url = (
+                    str(response.geturl())
+                    if hasattr(response, "geturl")
+                    else url
+                )
+                data = json_object_from_response_bytes(
+                    raw_bytes,
+                    content_encoding,
+                    "OpenAlex response",
+                )
             break
         except HTTPError as error:
             if error.code == 429:
@@ -490,7 +521,38 @@ def fetch_json(
     if not isinstance(data, dict):
         raise ValueError("OpenAlex response was not a JSON object.")
 
-    return data
+    return CapturedJSONResponse(
+        data,
+        raw_bytes=raw_bytes,
+        retrieved_at=retrieved_at,
+        response_url=response_url,
+        status_code=status_code,
+        media_type=media_type,
+        content_encoding=content_encoding,
+    )
+
+
+def archive_openalex_page(
+    archive: ProviderEvidenceArchive | None,
+    response: dict[str, object],
+    request_url: str,
+    retrieval_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Archive exact transport bytes when immutable evidence is configured."""
+    if archive is None:
+        return None
+    if not isinstance(response, CapturedJSONResponse):
+        raise ValueError(
+            "Immutable OpenAlex evidence requires a captured HTTP response; "
+            "a decoded or synthetic mapping cannot be archived as exact bytes."
+        )
+    return archive.archive_json_page(
+        provider="openalex",
+        request_url=request_url,
+        request_headers={"User-Agent": USER_AGENT},
+        response=response,
+        retrieval_context=retrieval_context,
+    )
 
 
 def candidate_from_work(
@@ -502,6 +564,8 @@ def candidate_from_work(
     query_index: int | None = None,
     query_rank: int | None = None,
     query_reason: str | None = None,
+    provider_evidence: dict[str, Any] | None = None,
+    retrieved_at: str | None = None,
 ) -> dict[str, object]:
     provider_plan = plan.get("provider_specific_plan")
     if not isinstance(provider_plan, dict):
@@ -510,6 +574,7 @@ def candidate_from_work(
     abstract = inverted_index_to_text(work.get("abstract_inverted_index"))
     source_type_assessment = classify_source_type(work)
 
+    retrieval_timestamp = retrieved_at or datetime.now(timezone.utc).isoformat()
     candidate = {
         "provider": "openalex",
         "provider_id": str(work.get("id") or ""),
@@ -540,10 +605,14 @@ def candidate_from_work(
         "query_rank": query_rank,
         "query_reason": query_reason or "",
         "rank": rank,
-        "retrieval_date": date.today().isoformat(),
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "retrieval_date": retrieval_timestamp[:10],
+        "retrieved_at": retrieval_timestamp,
         "query_url": query_url,
         "raw_record": work,
+        "provider_evidence": provider_evidence
+        or unavailable_provider_evidence(
+            "provider_evidence_archive_not_configured"
+        ),
     }
     return annotate_candidate_topic_matches(candidate, plan.get("topic_match_spec"))
 
@@ -628,6 +697,7 @@ class OpenAlexProvider:
     max_per_page = 100
     supports_fielded_text_search = True
     supports_boolean_query_blocks = True
+    supports_immutable_provider_evidence = True
 
     def __init__(self) -> None:
         self.last_fetch_diagnostics: dict[str, Any] = {}
@@ -690,6 +760,7 @@ class OpenAlexProvider:
         per_page: int,
         mailto: str | None,
         sleep_seconds: float,
+        evidence_archive: ProviderEvidenceArchive | None = None,
     ) -> list[dict[str, Any]]:
         if isinstance(plan.get("query_groups"), list):
             return self.fetch_tiered_candidates(
@@ -698,6 +769,7 @@ class OpenAlexProvider:
                 per_page,
                 mailto,
                 sleep_seconds,
+                evidence_archive=evidence_archive,
             )
         return self.fetch_legacy_candidates(
             plan,
@@ -705,6 +777,7 @@ class OpenAlexProvider:
             per_page,
             mailto,
             sleep_seconds,
+            evidence_archive=evidence_archive,
         )
 
     def fetch_additional_candidates(
@@ -716,6 +789,7 @@ class OpenAlexProvider:
         mailto: str | None,
         sleep_seconds: float,
         backfill_round: int = 1,
+        evidence_archive: ProviderEvidenceArchive | None = None,
     ) -> list[dict[str, Any]]:
         if max_results <= 0:
             self.last_fetch_diagnostics = {
@@ -736,6 +810,7 @@ class OpenAlexProvider:
                 existing_candidates=existing_candidates,
                 max_new_results=max_results,
                 backfill_round=backfill_round,
+                evidence_archive=evidence_archive,
             )
 
         existing_keys = {dedupe_key(candidate) for candidate in existing_candidates}
@@ -745,6 +820,7 @@ class OpenAlexProvider:
             per_page,
             mailto,
             sleep_seconds,
+            evidence_archive=evidence_archive,
         )
         additional = [
             candidate
@@ -767,6 +843,7 @@ class OpenAlexProvider:
         per_page: int,
         mailto: str | None,
         sleep_seconds: float,
+        evidence_archive: ProviderEvidenceArchive | None = None,
     ) -> list[dict[str, Any]]:
         candidates = []
         search_queries = self.search_queries_from_plan(plan)
@@ -794,12 +871,28 @@ class OpenAlexProvider:
                 )
 
                 response = fetch_json(query_url)
+                page_record = archive_openalex_page(
+                    evidence_archive,
+                    response,
+                    query_url,
+                    {
+                        "query_id": f"legacy_query_{query_index}",
+                        "logical_query_id": f"legacy_query_{query_index}",
+                        "query_group_id": "legacy",
+                        "query_tier": None,
+                        "retrieval_iteration": 1,
+                        "retrieval_phase": "legacy",
+                        "page_or_cursor": f"page:{page}",
+                        "per_page": per_page,
+                        "backfill_round": None,
+                    },
+                )
                 results = response.get("results")
 
                 if not isinstance(results, list) or not results:
                     break
 
-                for work in results:
+                for result_position, work in enumerate(results, start=1):
                     if not isinstance(work, dict):
                         continue
 
@@ -816,6 +909,21 @@ class OpenAlexProvider:
                             query_index=query_index,
                             query_rank=query_rank,
                             query_reason=query_reason,
+                            provider_evidence=(
+                                evidence_archive.candidate_link(
+                                    page_record,
+                                    result_position=result_position,
+                                    raw_record=work,
+                                )
+                                if evidence_archive is not None
+                                and page_record is not None
+                                else None
+                            ),
+                            retrieved_at=(
+                                response.retrieved_at
+                                if isinstance(response, CapturedJSONResponse)
+                                else None
+                            ),
                         )
                     )
 
@@ -849,6 +957,7 @@ class OpenAlexProvider:
         existing_candidates: list[dict[str, Any]] | None = None,
         max_new_results: int | None = None,
         backfill_round: int | None = None,
+        evidence_archive: ProviderEvidenceArchive | None = None,
     ) -> list[dict[str, Any]]:
         strategy = plan.get("retrieval_strategy")
         if not isinstance(strategy, dict):
@@ -1013,6 +1122,26 @@ class OpenAlexProvider:
                         diagnostics["query_page_states"][query_id] = page_state
 
                         response = fetch_json(query_url)
+                        page_record = archive_openalex_page(
+                            evidence_archive,
+                            response,
+                            query_url,
+                            {
+                                "query_id": query_id,
+                                "logical_query_id": logical_query_id,
+                                "query_group_id": str(
+                                    group.get("group_id") or f"tier_{tier}"
+                                ),
+                                "query_tier": tier,
+                                "retrieval_iteration": iteration,
+                                "retrieval_phase": str(
+                                    query_entry.get("retrieval_phase") or ""
+                                ),
+                                "page_or_cursor": f"page:{page}",
+                                "per_page": per_page,
+                                "backfill_round": backfill_round,
+                            },
+                        )
                         results = response.get("results")
                         if not isinstance(results, list) or not results:
                             exhausted_query_ids.add(query_id)
@@ -1036,7 +1165,7 @@ class OpenAlexProvider:
                             )
                             break
 
-                        for work in results:
+                        for result_position, work in enumerate(results, start=1):
                             if not isinstance(work, dict):
                                 continue
 
@@ -1056,6 +1185,21 @@ class OpenAlexProvider:
                                 query_index=query_index,
                                 query_rank=query_rank,
                                 query_reason=query_reason,
+                                provider_evidence=(
+                                    evidence_archive.candidate_link(
+                                        page_record,
+                                        result_position=result_position,
+                                        raw_record=work,
+                                    )
+                                    if evidence_archive is not None
+                                    and page_record is not None
+                                    else None
+                                ),
+                                retrieved_at=(
+                                    response.retrieved_at
+                                    if isinstance(response, CapturedJSONResponse)
+                                    else None
+                                ),
                             )
                             candidate["retrieval_group_id"] = str(
                                 group.get("group_id") or f"tier_{tier}"
@@ -1158,6 +1302,12 @@ class OpenAlexProvider:
                                                     "retrieval_backfill_round",
                                                     "",
                                                 )
+                                            ),
+                                            "provider_evidence": candidate.get(
+                                                "provider_evidence",
+                                                unavailable_provider_evidence(
+                                                    "historical_duplicate_observation"
+                                                ),
                                             ),
                                         }
                                     )

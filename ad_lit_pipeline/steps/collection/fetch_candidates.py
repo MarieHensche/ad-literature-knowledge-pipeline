@@ -11,13 +11,25 @@ from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.json_io import read_json_object
 from ad_lit_pipeline.io.jsonl_io import write_jsonl
 from ad_lit_pipeline.providers.base import CandidateProvider, candidate_provider_dates
+from ad_lit_pipeline.providers.evidence import (
+    ProviderEvidenceArchive,
+    candidate_evidence_errors,
+    read_provider_evidence_index,
+    sha256_bytes,
+    unavailable_provider_evidence,
+    verify_provider_evidence,
+)
 from ad_lit_pipeline.providers.openalex import OpenAlexProvider
 
 
 STEP = StepSpec(
     name="fetch_candidates",
     inputs=["search_plan_json"],
-    outputs=["candidates_jsonl"],
+    outputs=[
+        "candidates_jsonl",
+        "provider_evidence_index_jsonl",
+        "provider_response_pages_dir",
+    ],
     uses_llm=False,
     description="Fetch candidate papers from the provider selected in a search plan.",
 )
@@ -204,6 +216,18 @@ def get_provider(name: str) -> CandidateProvider:
     return provider
 
 
+def default_provider_evidence_paths(output_path: Path) -> tuple[Path, Path]:
+    """Derive provider-neutral evidence paths for direct step invocation."""
+    stem = output_path.stem
+    for suffix in ("_provider_candidates", "_openalex_candidates", "_candidates"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    index_path = output_path.with_name(f"{stem}_provider_evidence_index.jsonl")
+    archive_root = output_path.with_name(f"{stem}_provider_response_pages")
+    return index_path, archive_root
+
+
 def run(
     plan_path: Path,
     output_path: Path,
@@ -211,6 +235,8 @@ def run(
     per_page: int | None = None,
     mailto: str | None = None,
     sleep_seconds: float = 0.2,
+    provider_evidence_index_path: Path | None = None,
+    provider_response_pages_dir: Path | None = None,
 ) -> StepResult:
     plan = read_json_object(plan_path)
     provider_plan = plan.get("provider_specific_plan")
@@ -234,13 +260,42 @@ def run(
     resolved_max_results = max_results or int(
         provider_plan.get("max_results_recommendation") or 100
     )
-    fetched_candidates = provider.fetch_candidates(
-        plan=plan,
-        max_results=resolved_max_results,
-        per_page=resolved_per_page,
-        mailto=mailto,
-        sleep_seconds=sleep_seconds,
+    default_index, default_archive = default_provider_evidence_paths(output_path)
+    evidence_index = provider_evidence_index_path or default_index
+    evidence_archive_root = provider_response_pages_dir or default_archive
+    evidence_archive = ProviderEvidenceArchive(
+        evidence_archive_root,
+        evidence_index,
+        append_existing=False,
     )
+    evidence_archive.flush()
+    evidence_supported = bool(
+        getattr(provider, "supports_immutable_provider_evidence", False)
+    )
+    if evidence_supported:
+        fetched_candidates = provider.fetch_candidates(
+            plan=plan,
+            max_results=resolved_max_results,
+            per_page=resolved_per_page,
+            mailto=mailto,
+            sleep_seconds=sleep_seconds,
+            evidence_archive=evidence_archive,
+        )
+    else:
+        fetched_candidates = provider.fetch_candidates(
+            plan=plan,
+            max_results=resolved_max_results,
+            per_page=resolved_per_page,
+            mailto=mailto,
+            sleep_seconds=sleep_seconds,
+        )
+    for candidate in fetched_candidates:
+        candidate.setdefault(
+            "provider_evidence",
+            unavailable_provider_evidence(
+                "provider_adapter_does_not_emit_immutable_evidence"
+            ),
+        )
     candidates, publication_window_rejections = (
         enforce_candidate_publication_window(fetched_candidates, plan)
     )
@@ -274,11 +329,37 @@ def run(
             f"executed={executed_queries} planned={planned_execution_queries}."
         )
 
+    evidence_archive.flush()
+    evidence_verification = verify_provider_evidence(
+        evidence_index,
+        evidence_archive_root,
+    )
+    if not evidence_verification.valid:
+        raise ValueError(
+            "fetch_candidates provider evidence verification failed: "
+            + "; ".join(evidence_verification.errors)
+        )
+    link_errors = candidate_evidence_errors(
+        candidates,
+        read_provider_evidence_index(evidence_index),
+        require_archived=evidence_supported,
+    )
+    if link_errors:
+        raise ValueError(
+            "fetch_candidates candidate evidence links failed: "
+            + "; ".join(link_errors)
+        )
+
     write_jsonl(output_path, candidates)
     row_counts = {
         "provider_candidates_returned": len(fetched_candidates),
         "publication_window_rejections": len(publication_window_rejections),
         "fetched_candidates": len(candidates),
+        "provider_response_pages": evidence_verification.record_count,
+        "provider_response_archive_files": (
+            evidence_verification.archive_file_count
+        ),
+        "provider_response_bytes": evidence_verification.total_response_bytes,
     }
     for key in [
         "target_candidates",
@@ -305,7 +386,11 @@ def run(
     return StepResult(
         step_name=STEP.name,
         inputs={"search_plan_json": plan_path},
-        outputs={"candidates_jsonl": output_path},
+        outputs={
+            "candidates_jsonl": output_path,
+            "provider_evidence_index_jsonl": evidence_index,
+            "provider_response_pages_dir": evidence_archive_root,
+        },
         row_counts=row_counts,
         warnings=warnings,
         metadata={
@@ -325,6 +410,16 @@ def run(
             ),
             "publication_window_rejections": publication_window_rejections,
             "fetch_diagnostics": diagnostics,
+            "provider_evidence": {
+                "schema_version": "1.0.0",
+                "status": "verified" if evidence_verification.valid else "failed",
+                "adapter_supports_immutable_evidence": evidence_supported,
+                "index_sha256": sha256_bytes(evidence_index.read_bytes()),
+                "page_records": evidence_verification.record_count,
+                "archive_files": evidence_verification.archive_file_count,
+                "response_bytes": evidence_verification.total_response_bytes,
+                "candidate_links_verified": len(candidates),
+            },
         },
     )
 
@@ -342,6 +437,16 @@ def main() -> None:
     )
     parser.add_argument("--mailto", default=None, help="Optional email for provider polite pool.")
     parser.add_argument("--sleep", type=float, default=0.2, help="Delay between API pages.")
+    parser.add_argument(
+        "--provider-evidence-index",
+        default=None,
+        help="Provider-neutral immutable response-page index JSONL.",
+    )
+    parser.add_argument(
+        "--provider-response-pages-dir",
+        default=None,
+        help="Content-addressed raw provider response-page directory.",
+    )
     args = parser.parse_args()
 
     result = run(
@@ -351,6 +456,16 @@ def main() -> None:
         args.per_page,
         args.mailto,
         args.sleep,
+        (
+            Path(args.provider_evidence_index)
+            if args.provider_evidence_index
+            else None
+        ),
+        (
+            Path(args.provider_response_pages_dir)
+            if args.provider_response_pages_dir
+            else None
+        ),
     )
 
     print(f"Fetched candidates: {result.row_counts['fetched_candidates']}")

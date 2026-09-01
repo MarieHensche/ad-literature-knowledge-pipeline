@@ -72,6 +72,7 @@ def duplicate_summary(row: dict[str, Any]) -> dict[str, Any]:
         "retrieval_iteration": row.get("retrieval_iteration", ""),
         "retrieval_phase": row.get("retrieval_phase", ""),
         "retrieval_backfill_round": row.get("retrieval_backfill_round", ""),
+        "provider_evidence": row.get("provider_evidence", {}),
     }
 
 

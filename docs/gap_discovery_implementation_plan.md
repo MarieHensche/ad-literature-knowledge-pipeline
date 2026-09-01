@@ -1550,7 +1550,9 @@ structured provider and retrieval provenance, unknown columns survive
 normalization, exact publication windows are enforced, remote document identity
 is verified, and tagging/Mantis eligibility is evidence-gated. Implementation
 commit `7285aec` is pushed, and hosted run 33512451821 passed Python 3.11,
-Python 3.12, and `foundation-gate`. Phase 2.1 may begin after explicit approval.
+Python 3.12, and `foundation-gate`. Phase 2.1 is committed and pushed as
+`edf47e9`; Phase 2.2 is implemented and locally verified. Phase 2.3 may begin
+only after explicit approval.
 
 ### Phase 2.1 — Freeze Corpus And Identity Semantics — Complete
 
@@ -1602,7 +1604,7 @@ review route.
   `ProviderRecord`, `ScholarlyWork`, `SourceVersion`, or `CorpusSnapshot`
   records. Those are Phase 2.2 and Phase 2.3 responsibilities.
 
-### Phase 2.2 — Capture Immutable Provider Evidence
+### Phase 2.2 — Capture Immutable Provider Evidence — Complete
 
 - Store content-addressed raw provider response pages, canonical redacted
   request hashes, query/group/tier, page or cursor, result order, provider
@@ -1612,6 +1614,55 @@ review route.
 
 Exit gate: every retained OpenAlex candidate resolves to the exact archived
 provider bytes and request that produced it, and hash tampering is detected.
+
+#### Phase 2.2 Completion Record
+
+- Added provider-evidence schema `1.0.0` and the provider-neutral implementation
+  in `ad_lit_pipeline/providers/evidence.py`. The transport captures the exact
+  successful HTTP response-body bytes before JSON interpretation, including
+  supported content-encoding handling.
+- Canonical request identity retains only the HTTP method, normalized endpoint,
+  sorted scientific query parameters, and allowlisted non-secret headers.
+  API keys, tokens, signatures, cookies, embedded credentials, `mailto`, and
+  email values are removed rather than hashed or stored.
+- Raw pages use atomic, content-addressed paths by provider and response SHA-256.
+  The atomic JSONL index records request hash, query/logical query/group/tier,
+  iteration, retrieval phase, backfill round, page or cursor, per-page value,
+  response status/media type/encoding/hash/URI/byte count, retrieval time,
+  provider-update range, and exact provider result order plus ordered raw-item
+  hashes.
+- Every newly fetched candidate links to its page evidence ID, request and
+  response hashes, response URI, page/cursor, exact one-based result position,
+  JSON pointer, page result count, and canonical raw-item hash. The candidate
+  retrieval timestamp is the page observation timestamp.
+- Initial candidate fetch, review/overview seed fetch, and iterative backfill
+  use the same archive/verification rules. Review-seed pages have a separate
+  index and store so contract-bootstrap evidence cannot be confused with the
+  final candidate corpus. Backfill verifies the existing archive before adding
+  observations.
+- Deduplication preserves the representative page link and page links for
+  duplicate observations. The compatibility paper CSV exposes additive flat
+  fields plus the complete canonical provider-evidence JSON.
+- Generalized new candidate paths from `openalex_candidates` to
+  `provider_candidates`. Historical OpenAlex-named artifacts remain readable
+  for resume, `--from-step`, `--only-step`, and main-pipeline handoff when the
+  provider-neutral artifact is absent; they receive an explicit `unavailable`
+  evidence marker rather than fabricated provenance.
+- Verification recomputes request hashes and page IDs, constrains artifact
+  paths, checks content-addressed location, exact byte hash/size, JSON decoding,
+  result count/order, provider-update summaries, candidate position/provider
+  identity, JSON pointer, and raw-item hash against both the candidate and the
+  archived page item. Tampering or missing links stop the step.
+- Run provenance records the provider-evidence schema and implementation hash;
+  step manifests record index/file hashes and page, file, byte, and link counts.
+- Verification: 195 affected provider/collection/orchestration/provenance tests
+  pass; the complete deterministic offline suite passes 684 tests; compilation
+  and diff validation pass. No live provider request was needed for this step.
+- Human-readable contract: `docs/provider_evidence.md`.
+- Deliberate boundary: successful provider pages are immutable evidence inputs,
+  not yet v1 `ProviderRecord` objects or a `CorpusSnapshot`. Failed HTTP attempts
+  without a successful response body, work/version emission, snapshot freezing,
+  documents, and passages remain outside Phase 2.2.
 
 ### Phase 2.3 — Materialize The Canonical Corpus Snapshot
 
@@ -2066,6 +2117,7 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-09-01 | Complete Phase 2.2 with exact OpenAlex response-byte capture, credential-free canonical request hashes, provider-neutral evidence indexes, candidate result-position and raw-item links, isolated review-seed evidence, backfill append/verification, compatibility fallbacks, and tamper detection. | Copied candidate metadata and display URLs cannot prove which mutable provider page produced an observation or preserve exact result order and item content. Production provider records and temporal snapshots require immutable input bytes first. | Phase 2.3 may materialize v1 provider/work/version/access records and freeze the first corpus snapshot from these verified inputs. Historical OpenAlex-named artifacts remain usable but explicitly lack archived page evidence. The complete offline suite passes 684 tests; no live service was required. |
 | 2026-09-01 | Complete Phase 2.1 with corpus specification `1.0.0`, one provider-neutral source classifier, deterministic DOI/provider/fingerprint identity assessment, evidence-linked version/lifecycle rules, inclusive earliest-availability cutoff assessment, and explicit review routes for uncertainty. | Immutable provider evidence and production records need fixed semantics before their identities and snapshot membership can be trustworthy. Silent publication-date substitution, metadata-only duplicate merging, or inferred version lineage would make later temporal gap claims irreproducible. | Phase 2.2 may archive exact provider request/response evidence against these rules. The production record bridge remains intentionally unimplemented until Phase 2.3. Complete offline verification passes 672 tests; no live service was required for this semantic step. |
 | 2026-09-01 | Complete P2.0 stabilization after two 641-test deterministic offline runs, a fresh live five-paper collection-to-Mantis smoke from an unedited exact-window plan, implementation commit `7285aec`, and successful hosted Foundation CI run 33512451821. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. The Python 3.11/3.12 matrix and stable `foundation-gate` passed; Phase 2.1 may begin only after explicit approval. |
 | 2026-09-01 | Harden the compatibility pipeline after the first live five-paper smoke: exact publication-window enforcement and carriage, structured canonical provenance, remote-document identity verification, explicit tagging evidence/state policy, and evidence-gated legacy Mantis export. | The live run met its requested provider date range but used a post-plan manual edit, retrieved one wrong PDF, tagged one title-only row, and stopped after one tiered query; the old success statuses therefore overstated end-to-end validity. | Retain old artifacts as invalidating audit evidence and perform a fresh run. Treat it only as a smoke, report executed-query coverage, and do not mark Phase 2 complete until immutable snapshots and work/version/provider-record identities exist. |
