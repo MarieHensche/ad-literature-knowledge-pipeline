@@ -1,6 +1,6 @@
 # Technical Summary
 
-Status: reconciled with the implemented repository on 2026-09-01
+Status: reconciled with the implemented repository on 2026-09-02
 
 This project is a domain-adaptable research-literature pipeline with an
 Alzheimer early-detection default contract. It collects or imports papers,
@@ -8,9 +8,11 @@ screens them, prepares full text, extracts structured tags, can generate an
 evidence-linked literature review, and emits Mantis-ready outputs.
 
 It is not yet a complete scientific gap-discovery system. The strict scientific
-record, integrity, gap-ontology, and validity layers are implemented, but the
-production paper pipeline does not yet emit those v1 records or run evidence-
-graph construction, counterretrieval, gap verification, or three-axis ranking.
+record, integrity, gap-ontology, and validity layers are implemented. Collection
+emits the five strict corpus-boundary records, and the direct Phase 2.4 bridge
+can add exact `Document` and resolvable `Passage` records. The default main
+pipeline does not yet consume that snapshot or run evidence-graph construction,
+counterretrieval, gap verification, or three-axis ranking.
 
 ## Documentation Sources Of Truth
 
@@ -22,6 +24,8 @@ graph construction, counterretrieval, gap verification, or three-axis ranking.
   behavior.
 - [Immutable provider evidence](provider_evidence.md) defines exact response
   pages, sanitized request identity, candidate links, and tamper verification.
+- [Exact documents and passages](document_passages.md) defines source-byte and
+  normalized-text ownership, deterministic locators, and integrity checks.
 - [Continuous integration](continuous_integration.md) defines the offline
   matrix, network guard, security boundary, and stable required check.
 - [Scientific validity](scientific_validity.md), [record contracts](record_contracts_v1.md),
@@ -388,10 +392,21 @@ and CORE when configured. Extracted text is cached outside the repository using
 manifests and path metadata. Availability locators remain separate from the
 resolved extracted document. Remote extraction must match a DOI in front matter
 or the compact ordered paper title before it becomes usable tagging evidence.
-The manifest records the identity decision, text SHA-256, extraction engine and
-version, extraction-contract version, resolved URL/source/license, and any
-failure. Text cleanup preserves line and section boundaries for evidence
-selection.
+Extraction contract `3.0.0` retains exact downloaded or trusted-local source
+bytes separately from the normalized UTF-8 representation. The manifest records
+both hashes, source byte size/media type/retrieval time, the identity decision,
+extraction engine and version, a content-addressed structure artifact, page
+metadata when independently resolvable, resolved URL/source/license, and any
+failure. Historical remote text without exact source bytes is fetched again.
+Text cleanup preserves line and section boundaries for evidence selection.
+
+The Phase 2.4 direct materializer validates the frozen corpus, full-text
+identity, source bytes, representation, and structure before emitting strict
+`Document` and bounded document-order `Passage` records. General integrity
+validation independently checks source/text/structure hashes, exact character
+occurrence, and verified page-coordinate agreement. Failed source versions are
+written as audit issues without invented records. Default registry, resume, UI,
+and Mantis-paper integration remain Phase 2.5 work.
 
 Tagging uses an explicit state machine. A row is `tagged` only from a usable
 abstract, trusted local text, or identity-verified remote extracted full text;
@@ -455,8 +470,9 @@ scientific semantics beyond the underlying steps.
   logs are implemented for OpenAlex, including review-seed and backfill calls.
   They are resolved into production `ProviderRecord` objects only for selected
   corpus members during the final collection step.
-- `Document` and `Passage` records are not emitted yet; full-text artifacts
-  therefore are not part of the frozen v1 record chain.
+- Strict `Document` and `Passage` records can be emitted by the direct Phase 2.4
+  materializer. They are not yet part of the default registry-owned main
+  workflow, so Phase 2.5 must complete the snapshot handoff and artifact chain.
 - Preliminary findings are not verified v1 claims.
 - Evidence-graph, gap generation, counterretrieval, verification, scoring, and
   expert-judgment workflows are not production steps yet.
@@ -487,7 +503,9 @@ candidate-link, redaction, backfill, and tamper tests; the complete offline
 suite passed 684 tests. Phase 2.3 adds canonical corpus materialization,
 strict-freeze, stable-ID, provenance-status, and stale-artifact tests; the
 complete offline suite passes 692 tests under the normal environment and both
-CI hash seeds.
+CI hash seeds. Phase 2.4 adds 14 exact-source, document/passage, cache,
+identity, locator, integrity, and failure regressions; the complete offline suite
+passes 706 tests under the normal environment and both CI hash seeds.
 
 Run focused structural and documentation checks with:
 

@@ -1,7 +1,7 @@
 # Gap-Discovery System: Living Implementation Plan
 
 Status: active planning document  
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 Review cadence: review at the start and end of every implementation phase, and
 whenever a schema, provider, scientific-validity rule, or pipeline order changes.
 
@@ -1552,8 +1552,8 @@ is verified, and tagging/Mantis eligibility is evidence-gated. Implementation
 commit `7285aec` is pushed, and hosted run 33512451821 passed Python 3.11,
 Python 3.12, and `foundation-gate`. Phase 2.1 is committed and pushed as
 `edf47e9`; Phase 2.2 is committed and pushed as `7a902fa`; Phase 2.3 is
-implemented and locally verified. Phase 2.4 may begin only after explicit
-approval.
+committed and pushed as `5d00b8c`; Phase 2.4 is implemented and locally
+verified. Phase 2.5 may begin only after explicit approval.
 
 ### Phase 2.1 — Freeze Corpus And Identity Semantics — Complete
 
@@ -1730,7 +1730,7 @@ prevent freezing.
   pipeline handoff/resume, and production Mantis paper projection remain Phase
   2.4 and Phase 2.5 work. The legacy paper and Mantis CSV paths are unchanged.
 
-### Phase 2.4 — Materialize Documents And Resolvable Passages
+### Phase 2.4 — Materialize Documents And Resolvable Passages — Complete
 
 - Make main-pipeline full-text preparation consume snapshot-backed source and
   access identities. Emit `Document` only for trusted-local or identity-verified
@@ -1742,6 +1742,55 @@ prevent freezing.
 
 Exit gate: every future claim can cite an exact passage whose source version,
 document bytes, text, locator, and hashes validate independently.
+
+#### Phase 2.4 Completion Record
+
+- Upgraded full-text extraction contract `2.0.0` to `3.0.0`. Preparation now
+  retains exact downloaded PDF/HTML bytes or explicitly trusted local bytes in
+  a content-addressed external cache, independently of the normalized UTF-8
+  text used for tagging and passage coordinates.
+- Added source-byte path/hash/size/media type, retrieval time, encryption/page
+  metadata, and a content-addressed text-structure path/hash to the additive
+  full-text manifest. Existing compatibility columns and tagging behavior are
+  preserved.
+- Historical remote text that lacks exact source bytes is refetched and passes
+  the existing DOI/title identity gate again. Trusted local text can become an
+  exact `text/plain` source. Existing content-addressed cache entries are
+  hash-checked and repaired from bytes supplied by the same preparation call.
+- Added deterministic structure-first segmentation `1.0.0`: document-order
+  paragraphs and recognized scientific headings, including single-newline
+  boundaries, are preserved; only units over 4,000 characters are split.
+  Every passage stores exact Unicode-code-point offsets, section path, stable
+  sequence/paragraph indices, representation/text hashes, extractor identity,
+  configuration hash, and independently derived PDF page range when available.
+- Added the direct `materialize_document_passages` Phase 2.4 bridge. It consumes
+  one integrity-valid frozen corpus plus its full-text manifest, resolves each
+  `SourceVersion` through the Phase 2.3 paper identity, reuses or creates a
+  credential-free `AccessLocation`, and emits strict v1 `Document` and `Passage`
+  records.
+- Documents are eligible only for `trusted_local`, `verified_doi`, or
+  `verified_title` identities with usable, unencrypted, hash-valid artifacts.
+  PDF emission additionally requires independently resolvable page spans and a
+  positive page count; no page coordinates are guessed.
+- Exact source bytes, text, and structure are copied to content-addressed,
+  Git-ignored `runs/<run_id>/artifacts/documents/` paths. Output receives full
+  record and artifact validation before atomic replacement. Per-source failures
+  remain structured audit data and emit neither documents, passages, nor stray
+  access records.
+- Extended general v1 artifact validation to verify source byte hash/size,
+  normalized representation, structure hash/schema/media/page bounds, exact
+  passage occurrence, and page-coordinate agreement independently of the
+  materializer.
+- Verification: 14 focused exact-byte, identity, historical-cache, corruption,
+  stable-ID, structure, page, section, query-redaction, and failure tests were
+  added. The complete deterministic offline suite passes 706 tests normally and
+  with CI hash seeds 101 and 1201; compilation and diff validation pass. No
+  provider, OpenAI, full-text, or Mantis request was required.
+- Human-readable contract: `docs/document_passages.md`.
+- Deliberate Phase 2.5 boundary: the materializer has a direct package CLI and
+  `StepSpec` but is not registered in the default collection/main pipeline.
+  Snapshot handoff/resume, artifact naming, registry/UI assembly, and strict
+  Mantis paper projection remain Phase 2.5 work; the legacy CSV is unchanged.
 
 ### Phase 2.5 — Integrate Snapshot Handoffs And Mantis Papers
 
@@ -2169,6 +2218,7 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
+| 2026-09-02 | Complete Phase 2.4 with exact source-byte retention, a separately hashed normalized representation/structure, identity-gated strict `Document` emission, deterministic resolvable `Passage` records, and independent artifact/locator validation. | Future claims must cite evidence-local text while preserving the exact source bytes and enough structure to reproduce and audit the locator. Historical remote text alone cannot prove which document bytes were used. | Extraction contract `3.0.0` refetches historical remote caches without source bytes; old live manifests need reprocessing. The direct bridge remains outside default orchestration until Phase 2.5 wires snapshot handoff, registry/UI/resume, and the strict Mantis paper view. The complete offline suite passes 706 tests without live services. |
 | 2026-09-01 | Complete Phase 2.3 with exact selected-candidate-to-provider-byte resolution, strict five-record v1 materialization, observed query coverage, deterministic snapshot identity, full collection validation, and atomic freeze/failure reports. | Archived provider pages were necessary but not yet a stable scientific corpus boundary. Later document, claim, gap, and Mantis work require explicit work/version/provider/access ownership and an immutable inclusive-cutoff membership set. | Phase 2.4 may attach verified documents and resolvable passages to these source versions. Snapshot-native main-pipeline and Mantis handoffs remain Phase 2.5. The complete offline suite passes 692 tests under the normal environment and both CI hash seeds; no live service was required. |
 | 2026-09-01 | Complete Phase 2.2 with exact OpenAlex response-byte capture, credential-free canonical request hashes, provider-neutral evidence indexes, candidate result-position and raw-item links, isolated review-seed evidence, backfill append/verification, compatibility fallbacks, and tamper detection. | Copied candidate metadata and display URLs cannot prove which mutable provider page produced an observation or preserve exact result order and item content. Production provider records and temporal snapshots require immutable input bytes first. | Phase 2.3 may materialize v1 provider/work/version/access records and freeze the first corpus snapshot from these verified inputs. Historical OpenAlex-named artifacts remain usable but explicitly lack archived page evidence. The complete offline suite passes 684 tests; no live service was required. |
 | 2026-09-01 | Complete Phase 2.1 with corpus specification `1.0.0`, one provider-neutral source classifier, deterministic DOI/provider/fingerprint identity assessment, evidence-linked version/lifecycle rules, inclusive earliest-availability cutoff assessment, and explicit review routes for uncertainty. | Immutable provider evidence and production records need fixed semantics before their identities and snapshot membership can be trustworthy. Silent publication-date substitution, metadata-only duplicate merging, or inferred version lineage would make later temporal gap claims irreproducible. | Phase 2.2 may archive exact provider request/response evidence against these rules. The production record bridge remains intentionally unimplemented until Phase 2.3. Complete offline verification passes 672 tests; no live service was required for this semantic step. |

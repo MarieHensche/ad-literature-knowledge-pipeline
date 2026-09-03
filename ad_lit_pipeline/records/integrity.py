@@ -18,6 +18,9 @@ from ad_lit_pipeline.records.serialization import record_from_dict, record_to_di
 from ad_lit_pipeline.records.validation import validate_record
 
 
+SUPPORTED_TEXT_STRUCTURE_SCHEMA_VERSIONS = frozenset({"1.0.0"})
+
+
 class IntegritySeverity(str, Enum):
     ERROR = "error"
     WARNING = "warning"
@@ -1967,6 +1970,7 @@ def _validate_artifacts(
 ) -> int:
     verifier = _ArtifactVerifier(collector, artifact_root)
     representation_text: dict[str, str] = {}
+    representation_pages: dict[str, tuple[tuple[int, int, int], ...]] = {}
 
     for occurrence in occurrences:
         record = occurrence.record
@@ -2026,6 +2030,117 @@ def _validate_artifacts(
                                     "extensions.pipeline.text_representation.encoding"
                                 ),
                             )
+                structure_uri = representation.get("structure_artifact_uri")
+                structure_hash = representation.get("structure_sha256")
+                structure_version = representation.get("structure_schema_version")
+                structure_values = (structure_uri, structure_hash, structure_version)
+                if any(value is not None for value in structure_values):
+                    if not all(isinstance(value, str) for value in structure_values):
+                        collector.error(
+                            "invalid_text_structure_extension",
+                            "Text structure requires artifact URI, SHA-256, and "
+                            "schema-version strings.",
+                            occurrence=occurrence,
+                            field_path="extensions.pipeline.text_representation",
+                        )
+                    else:
+                        structure_path = verifier.verify_hash(
+                            structure_uri,
+                            structure_hash,
+                            occurrence,
+                            (
+                                "extensions.pipeline.text_representation."
+                                "structure_artifact_uri"
+                            ),
+                        )
+                        if structure_path is not None:
+                            try:
+                                structure = json.loads(
+                                    structure_path.read_text(encoding="utf-8")
+                                )
+                            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                                collector.error(
+                                    "text_structure_decode_error",
+                                    f"Could not decode text structure: {exc}.",
+                                    occurrence=occurrence,
+                                    field_path=(
+                                        "extensions.pipeline.text_representation."
+                                        "structure_artifact_uri"
+                                    ),
+                                )
+                            else:
+                                text = representation_text.get(record.record_id)
+                                spans: list[tuple[int, int, int]] = []
+                                structure_valid = isinstance(structure, Mapping)
+                                if structure_valid:
+                                    structure_valid = (
+                                        structure.get("schema_version")
+                                        == structure_version
+                                        and structure_version
+                                        in SUPPORTED_TEXT_STRUCTURE_SCHEMA_VERSIONS
+                                        and structure.get("representation_sha256")
+                                        == expected_hash
+                                        and structure.get("media_type")
+                                        == record.media_type
+                                        and isinstance(
+                                            structure.get("page_spans"), list
+                                        )
+                                    )
+                                previous_page = 0
+                                previous_end = 0
+                                if structure_valid:
+                                    for item in structure["page_spans"]:
+                                        if not isinstance(item, Mapping):
+                                            structure_valid = False
+                                            break
+                                        page = item.get("page_number")
+                                        start = item.get("start_char")
+                                        end = item.get("end_char")
+                                        if (
+                                            isinstance(page, bool)
+                                            or not isinstance(page, int)
+                                            or page <= previous_page
+                                            or isinstance(start, bool)
+                                            or not isinstance(start, int)
+                                            or start < previous_end
+                                            or isinstance(end, bool)
+                                            or not isinstance(end, int)
+                                            or end <= start
+                                            or (text is not None and end > len(text))
+                                        ):
+                                            structure_valid = False
+                                            break
+                                        spans.append((page, start, end))
+                                        previous_page = page
+                                        previous_end = end
+                                if (
+                                    structure_valid
+                                    and record.media_type == "application/pdf"
+                                    and (record.page_count is None or not spans)
+                                ):
+                                    structure_valid = False
+                                if (
+                                    structure_valid
+                                    and spans
+                                    and record.page_count is not None
+                                    and spans[-1][0] > record.page_count
+                                ):
+                                    structure_valid = False
+                                if not structure_valid:
+                                    collector.error(
+                                        "invalid_text_structure",
+                                        "Text structure does not match the document "
+                                        "representation, media type, or page bounds.",
+                                        occurrence=occurrence,
+                                        field_path=(
+                                            "extensions.pipeline.text_representation."
+                                            "structure_artifact_uri"
+                                        ),
+                                    )
+                                else:
+                                    representation_pages[record.record_id] = tuple(
+                                        spans
+                                    )
         elif isinstance(record, m.MantisPublicationReceipt):
             verifier.verify_hash(
                 record.source_artifact_reference.reference,
@@ -2068,6 +2183,26 @@ def _validate_artifacts(
                 occurrence=occurrence,
                 field_path="locator",
             )
+        page_spans = representation_pages.get(record.document_id)
+        if page_spans is not None:
+            pages = [
+                page
+                for page, page_start, page_end in page_spans
+                if page_start < end and page_end > start
+            ]
+            expected_page_start = min(pages) if pages else None
+            expected_page_end = max(pages) if pages else None
+            if (
+                record.locator["page_start"] != expected_page_start
+                or record.locator["page_end"] != expected_page_end
+            ):
+                collector.error(
+                    "passage_page_locator_mismatch",
+                    "Passage page coordinates do not match the verified text "
+                    "structure.",
+                    occurrence=occurrence,
+                    field_path="locator",
+                )
 
     return len(verifier.verified_paths)
 

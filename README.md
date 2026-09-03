@@ -146,6 +146,9 @@ conditional ordering dependencies and capabilities without breaking existing
   named pipelines, dependencies, and capabilities.
 - [Corpus snapshot materialization](docs/corpus_snapshot.md): selected-candidate
   mapping, strict freeze gates, stable identities, and failure behavior.
+- [Exact documents and passages](docs/document_passages.md): source-byte
+  retention, normalized representations, deterministic locators, and the Phase
+  2.5 integration boundary.
 - [Run provenance](docs/run_provenance.md): manifests, traces, resumability, and
   redaction.
 - [Immutable provider evidence](docs/provider_evidence.md): exact response
@@ -256,10 +259,13 @@ Full-text availability means a locator was reachable during collection; it does
 not mean the retrieved bytes are the requested paper or contain usable text.
 `prepare_full_text` therefore preserves the original availability fields,
 records the separately resolved document URL/source, verifies remote text
-against front-matter DOI or compact title evidence, retains section boundaries,
-and records text hash and extraction-engine metadata. The default tagging
-policy accepts a usable abstract, trusted local text, or identity-verified
-remote extracted full text.
+against front-matter DOI or compact title evidence, retains the exact source
+bytes, builds a separately hashed normalized-text structure, and records source,
+text, retrieval, and extraction metadata. The Phase 2.4 direct materializer can
+turn this manifest plus a frozen corpus snapshot into strict `Document` and
+resolvable `Passage` records; default registry wiring remains Phase 2.5. The
+default tagging policy accepts a usable abstract, trusted local text, or
+identity-verified remote extracted full text.
 Set `tagging.evidence_policy: full_text_required` in the topic contract to
 forbid abstract fallback. Insufficient-evidence and LLM-failed rows remain in
 the extraction CSV with explicit status and error fields, but are not published
@@ -552,8 +558,10 @@ For architecture details, see `docs/technical_summary.md`.
 - Exact OpenAlex response pages, sanitized request identities, result order,
   candidate positions, tamper checks, production `ProviderRecord` objects, and
   immutable `CorpusSnapshot` freezing are implemented for selected papers.
-- The main tagging workflow does not yet consume the snapshot, and `Document`
-  and `Passage` records are not yet emitted.
+- The main tagging workflow does not yet consume the snapshot. Phase 2.4 can
+  emit strict `Document` and `Passage` records through its direct package
+  materializer, but registry/CLI/UI handoff is deliberately deferred to Phase
+  2.5.
 - Preliminary knowledge exports do not yet produce verified claims,
   relationships, evidence graphs, gap candidates, counterretrieval attempts, or
   three-axis rankings.

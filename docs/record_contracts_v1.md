@@ -1,6 +1,7 @@
 # Versioned Scientific Record Contracts v1
 
-Status: implemented; five corpus-boundary records are emitted by collection
+Status: implemented; five corpus-boundary records are emitted by collection,
+with direct Phase 2.4 document/passage materialization available
 Record schema: `1.0.0`
 Scientific-validity policy: `1.0.0`
 Gap ontology: `1.0.0`
@@ -14,8 +15,9 @@ contracts coexist with `ad_lit_pipeline/knowledge/`, whose current `Source`,
 1.3 did not reinterpret those records or change the legacy Mantis CSV. Phase
 2.3 now uses the same contracts to emit `CorpusSnapshot`, `ScholarlyWork`,
 `SourceVersion`, `ProviderRecord`, and `AccessLocation` from selected collection
-results. Later record types remain contracts until their owning phases produce
-them.
+results. Phase 2.4 emits `Document` and `Passage` records through a strict direct
+materializer; Phase 2.5 will register that snapshot-native handoff. Later record
+types remain contracts until their owning phases produce them.
 
 All v1 records are frozen dataclasses with strict JSON-compatible codecs. JSONL
 is the collection format. The schema rejects unknown core fields, requires
@@ -61,7 +63,7 @@ and stable remote identifiers, never authentication data.
 | `ProviderRecord` | `prov_` | Immutable retrieval observation with provider item, query, request/raw hashes, rank, timestamps, license, and sanitized failure. Success requires a raw hash and location. |
 | `AccessLocation` | `access_` | Timestamped access observation for one source version. The URI hash is recomputed and failure-like states require a reason. |
 | `Document` | `doc_` | Exact stored byte snapshot with role, media type, hash, size, access source, license, and quarantine state. Encrypted content cannot be treated as usable stored text. |
-| `Passage` | `passage_` | Canonical document-order text unit with text/representation hashes and exact locator coordinates. Text hashes and local coordinate ranges are checked; cross-document occurrence is deferred. |
+| `Passage` | `passage_` | Canonical document-order text unit with text/representation hashes and exact locator coordinates. When the Phase 2.4 text/structure extension is present, integrity validation checks exact occurrence and page-coordinate agreement. |
 | `Entity` | `entity_` | Typed method, population, outcome, intervention, dataset, design, setting, or other entity with aliases and ontology identifiers. Ambiguity and merges stay explicit. |
 | `Claim` | `claim_` | Source-attributed, synthesized, or human claim with typed entity roles and comparability context. It carries extraction state, not scientific truth or evidence quality. |
 | `ClaimEvidence` | `clev_` | Exact passage spans and material-element checks for one mutually exclusive claim outcome. Contradiction requires a comparable counterclaim; support requires spans without material mismatch. |
