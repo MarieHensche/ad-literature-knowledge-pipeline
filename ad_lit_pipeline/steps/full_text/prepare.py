@@ -3,10 +3,13 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.metadata
 import json
 import os
 import re
+import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from http.client import InvalidURL
 from io import BytesIO
@@ -17,6 +20,19 @@ from urllib.parse import quote, urlencode, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
+from ad_lit_pipeline.steps.full_text.evidence import MIN_USABLE_FULL_TEXT_CHARS
+from ad_lit_pipeline.steps.full_text.identity import (
+    IDENTITY_MISMATCH,
+    IDENTITY_TRUSTED_LOCAL,
+    DocumentIdentityMismatch,
+    REMOTE_EXTRACTION_STATUSES,
+    assess_document_identity,
+    requires_remote_identity_validation,
+)
+from ad_lit_pipeline.steps.full_text.passages import (
+    REPRESENTATION_SCHEMA_VERSION,
+    read_representation_structure,
+)
 
 
 STEP = StepSpec(
@@ -28,18 +44,49 @@ STEP = StepSpec(
 )
 
 USER_AGENT = "ad-literature-knowledge-pipeline/0.1"
-MIN_FULL_TEXT_CHARS = 1000
+MIN_FULL_TEXT_CHARS = MIN_USABLE_FULL_TEXT_CHARS
+FULL_TEXT_EXTRACTION_CONTRACT_VERSION = "3.0.0"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 20.0
 
 FULL_TEXT_COLUMNS = [
     "full_text_status",
+    # full_text_source is retained as a compatibility alias for the resolved source.
     "full_text_source",
-    "full_text_url",
-    "full_text_license",
+    "full_text_resolved_source",
+    "full_text_resolved_url",
+    "full_text_resolved_license",
     "full_text_text_path",
     "full_text_chars",
+    "full_text_usable_for_tagging",
+    "full_text_identity_status",
+    "full_text_identity_evidence",
+    "full_text_text_sha256",
+    "full_text_extraction_engine",
+    "full_text_extraction_engine_version",
+    "full_text_extraction_contract_version",
+    "full_text_source_artifact_path",
+    "full_text_source_sha256",
+    "full_text_source_byte_size",
+    "full_text_source_media_type",
+    "full_text_retrieved_at",
+    "full_text_page_count",
+    "full_text_encrypted",
+    "full_text_structure_path",
+    "full_text_structure_sha256",
     "full_text_error",
     "full_text_manual_lookup_url",
+]
+
+AVAILABILITY_COLUMNS = [
+    "full_text_availability_status",
+    "full_text_availability_source",
+    "full_text_url",
+    "full_text_url_kind",
+    "full_text_url_checked_at",
+    "full_text_url_content_type",
+    "full_text_license",
+    "full_text_is_open_access",
+    "full_text_availability_error",
 ]
 
 REMOTE_FETCH_ERRORS = (
@@ -55,6 +102,7 @@ MANIFEST_COLUMNS = [
     "paper_id",
     "title",
     "doi",
+    *AVAILABILITY_COLUMNS,
     *FULL_TEXT_COLUMNS,
 ]
 
@@ -74,6 +122,21 @@ class FullTextResult:
     license: str = ""
     text_path: str = ""
     chars: int = 0
+    identity_status: str = ""
+    identity_evidence: str = ""
+    text_sha256: str = ""
+    extraction_engine: str = ""
+    extraction_engine_version: str = ""
+    extraction_contract_version: str = FULL_TEXT_EXTRACTION_CONTRACT_VERSION
+    source_artifact_path: str = ""
+    source_sha256: str = ""
+    source_byte_size: int = 0
+    source_media_type: str = ""
+    retrieved_at: str = ""
+    page_count: int | None = None
+    encrypted: bool = False
+    structure_path: str = ""
+    structure_sha256: str = ""
     error: str = ""
     manual_lookup_url: str = ""
 
@@ -112,6 +175,218 @@ class SimpleHTMLTextExtractor(HTMLParser):
 
 def clean_whitespace(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
+
+
+def clean_extracted_text(value: str) -> str:
+    """Normalize horizontal whitespace while preserving headings and pages."""
+    lines = [
+        re.sub(r"[ \t\f\v]+", " ", line).strip()
+        for line in value.splitlines()
+    ]
+    output: list[str] = []
+    previous_blank = False
+    for line in lines:
+        if not line:
+            if output and not previous_blank:
+                output.append("")
+            previous_blank = True
+            continue
+        output.append(line)
+        previous_blank = False
+    return "\n".join(output).strip()
+
+
+def text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def canonical_json_bytes(value: dict[str, Any]) -> bytes:
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def normalized_media_type(value: str, *, is_pdf: bool = False) -> str:
+    media_type = str(value or "").split(";", 1)[0].strip().casefold()
+    if is_pdf:
+        return "application/pdf"
+    return media_type or "application/octet-stream"
+
+
+def source_suffix(media_type: str) -> str:
+    return {
+        "application/pdf": ".pdf",
+        "text/html": ".html",
+        "application/xhtml+xml": ".html",
+        "text/plain": ".txt",
+    }.get(media_type, ".bin")
+
+
+def write_source_cache(data: bytes, cache_dir: Path, media_type: str) -> Path:
+    digest = hashlib.sha256(data).hexdigest()
+    path = cache_dir / "source_bytes" / f"{digest}{source_suffix(media_type)}"
+    if not path.exists() or file_sha256(path) != digest:
+        atomic_write_bytes(path, data)
+    if file_sha256(path) != digest:
+        raise ValueError(f"Could not verify exact source-byte cache {path}.")
+    return path
+
+
+def pdf_page_metadata(
+    data: bytes,
+    representation: str,
+) -> tuple[list[dict[str, int]], int | None, bool]:
+    """Locate normalized PDF page text in the canonical representation."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(BytesIO(data))
+        encrypted = bool(reader.is_encrypted)
+        spans: list[dict[str, int]] = []
+        cursor = 0
+        for page_number, page in enumerate(reader.pages, start=1):
+            page_text = clean_extracted_text(page.extract_text() or "")
+            if not page_text:
+                continue
+            start = representation.find(page_text, cursor)
+            if start < 0:
+                return [], len(reader.pages), encrypted
+            end = start + len(page_text)
+            spans.append(
+                {"page_number": page_number, "start_char": start, "end_char": end}
+            )
+            cursor = end
+        return spans, len(reader.pages), encrypted
+    except Exception:
+        return [], None, False
+
+
+def write_structure_cache(
+    cache_dir: Path,
+    *,
+    representation: str,
+    media_type: str,
+    page_spans: list[dict[str, int]],
+) -> tuple[Path, str]:
+    payload = {
+        "schema_version": REPRESENTATION_SCHEMA_VERSION,
+        "normalization": "clean_extracted_text_v1",
+        "representation_sha256": text_sha256(representation),
+        "media_type": media_type,
+        "page_spans": page_spans,
+    }
+    content = canonical_json_bytes(payload)
+    digest = hashlib.sha256(content).hexdigest()
+    path = cache_dir / "representations" / f"{digest}.json"
+    if not path.exists() or file_sha256(path) != digest:
+        atomic_write_bytes(path, content)
+    if file_sha256(path) != digest:
+        raise ValueError(f"Could not verify text-structure cache {path}.")
+    return path, digest
+
+
+def completed_result(
+    row: dict[str, str],
+    cache_dir: Path,
+    *,
+    status: str,
+    source: str,
+    url: str,
+    license_value: str,
+    source_bytes: bytes,
+    source_media_type: str,
+    text: str,
+    identity_status: str,
+    identity_evidence: str,
+    extraction_engine: str,
+    extraction_engine_version: str,
+    retrieved_at: str | None = None,
+    representation_path: Path | None = None,
+) -> FullTextResult:
+    media_type = normalized_media_type(
+        source_media_type,
+        is_pdf=source_bytes.startswith(b"%PDF"),
+    )
+    source_path = write_source_cache(source_bytes, cache_dir, media_type)
+    text_path = representation_path or write_text_cache(row, text, cache_dir, url)
+    page_spans: list[dict[str, int]] = []
+    page_count: int | None = None
+    encrypted = False
+    if media_type == "application/pdf":
+        page_spans, page_count, encrypted = pdf_page_metadata(source_bytes, text)
+    structure_path, structure_hash = write_structure_cache(
+        cache_dir,
+        representation=text,
+        media_type=media_type,
+        page_spans=page_spans,
+    )
+    return FullTextResult(
+        status=status,
+        source=source,
+        url=url,
+        license=license_value,
+        text_path=str(text_path),
+        chars=len(text),
+        identity_status=identity_status,
+        identity_evidence=identity_evidence,
+        text_sha256=text_sha256(text),
+        extraction_engine=extraction_engine,
+        extraction_engine_version=extraction_engine_version,
+        source_artifact_path=str(source_path),
+        source_sha256=hashlib.sha256(source_bytes).hexdigest(),
+        source_byte_size=len(source_bytes),
+        source_media_type=media_type,
+        retrieved_at=retrieved_at or utc_now(),
+        page_count=page_count,
+        encrypted=encrypted,
+        structure_path=str(structure_path),
+        structure_sha256=structure_hash,
+    )
+
+
+def package_version(name: str) -> str:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
 
 
 def normalize_doi(value: str) -> str:
@@ -214,7 +489,7 @@ def extract_pdf_text(data: bytes) -> str:
         parts = []
         for page in reader.pages:
             parts.append(page.extract_text() or "")
-        return clean_whitespace("\n\n".join(parts))
+        return clean_extracted_text("\n\n".join(parts))
     except Exception as error:
         raise ValueError(f"Could not extract PDF text: {error}") from error
 
@@ -222,7 +497,7 @@ def extract_pdf_text(data: bytes) -> str:
 def extract_html_text(data: bytes) -> str:
     parser = SimpleHTMLTextExtractor()
     parser.feed(data.decode("utf-8", errors="ignore"))
-    return clean_whitespace(parser.text())
+    return clean_extracted_text(parser.text())
 
 
 def pdf_links_from_html(data: bytes, base_url: str) -> list[str]:
@@ -258,7 +533,7 @@ def write_text_cache(
     text_dir = cache_dir / "texts"
     text_dir.mkdir(parents=True, exist_ok=True)
     path = text_dir / f"{safe_stem(row, url)}.txt"
-    path.write_text(text, encoding="utf-8")
+    atomic_write_bytes(path, text.encode("utf-8"))
     return path
 
 
@@ -266,29 +541,46 @@ def extract_local_file(row: dict[str, str], path: Path, cache_dir: Path) -> Full
     if not path.exists():
         raise FileNotFoundError(path)
 
+    source_bytes = path.read_bytes()
     if path.suffix.lower() == ".pdf":
-        text = extract_pdf_text(path.read_bytes())
+        text = extract_pdf_text(source_bytes)
         status = "local_pdf_text_extracted"
+        media_type = "application/pdf"
     else:
-        text = path.read_text(encoding="utf-8", errors="ignore")
+        text = clean_extracted_text(source_bytes.decode("utf-8", errors="ignore"))
         status = "local_text_extracted"
+        media_type = "text/plain"
 
     if len(text) < MIN_FULL_TEXT_CHARS:
         raise ValueError(
             f"Extracted text too short for full-text tagging ({len(text)} chars)"
         )
 
-    text_path = write_text_cache(row, text, cache_dir, str(path))
-    return FullTextResult(
+    return completed_result(
+        row,
+        cache_dir,
         status=status,
         source="local_file",
         url=str(path),
-        text_path=str(text_path),
-        chars=len(text),
+        license_value="",
+        source_bytes=source_bytes,
+        source_media_type=media_type,
+        text=text,
+        identity_status=IDENTITY_TRUSTED_LOCAL,
+        identity_evidence="explicit_local_file",
+        extraction_engine=(
+            "pypdf" if path.suffix.lower() == ".pdf" else "local_text"
+        ),
+        extraction_engine_version=(
+            package_version("pypdf") if path.suffix.lower() == ".pdf" else "1"
+        ),
     )
 
 
-def reuse_existing_text(row: dict[str, str]) -> FullTextResult | None:
+def reuse_existing_text(
+    row: dict[str, str],
+    cache_dir: Path,
+) -> FullTextResult | None:
     text_path = row.get("full_text_text_path", "").strip()
     if not text_path:
         return None
@@ -301,14 +593,139 @@ def reuse_existing_text(row: dict[str, str]) -> FullTextResult | None:
     if len(text) < MIN_FULL_TEXT_CHARS:
         return None
 
+    remote = requires_remote_identity_validation(row)
+    if (
+        remote
+        and row.get("full_text_extraction_contract_version", "").strip()
+        != FULL_TEXT_EXTRACTION_CONTRACT_VERSION
+    ):
+        return None
+
+    source_path_value = row.get("full_text_source_artifact_path", "").strip()
+    structure_path_value = row.get("full_text_structure_path", "").strip()
+    if remote and (
+        not source_path_value
+        or not structure_path_value
+        or not Path(source_path_value).expanduser().is_file()
+        or not Path(structure_path_value).expanduser().is_file()
+    ):
+        return None
+
+    if remote:
+        identity = assess_document_identity(row, text)
+        if not identity.matched:
+            raise DocumentIdentityMismatch(str(path), identity)
+    else:
+        identity = None
+
+    if not remote and not source_path_value:
+        return completed_result(
+            row,
+            cache_dir,
+            status=row.get("full_text_status") or "existing_text_available",
+            source=row.get("full_text_source") or "existing_text_path",
+            url=row.get("full_text_resolved_url") or str(path),
+            license_value=(
+                row.get("full_text_resolved_license")
+                or row.get("full_text_license", "")
+            ),
+            source_bytes=path.read_bytes(),
+            source_media_type="text/plain",
+            text=text,
+            identity_status=IDENTITY_TRUSTED_LOCAL,
+            identity_evidence="existing_local_text_path",
+            extraction_engine=row.get("full_text_extraction_engine") or "existing_text",
+            extraction_engine_version=(
+                row.get("full_text_extraction_engine_version") or "unknown"
+            ),
+            representation_path=path,
+        )
+
+    try:
+        source_byte_size = int(row.get("full_text_source_byte_size") or 0)
+        page_count_value = row.get("full_text_page_count", "").strip()
+        page_count = int(page_count_value) if page_count_value else None
+    except ValueError:
+        return None
+    source_path = Path(source_path_value).expanduser()
+    structure_path = Path(structure_path_value).expanduser()
+    if source_path_value:
+        source_bytes = source_path.read_bytes()
+        if source_byte_size != len(source_bytes):
+            return None
+        if row.get("full_text_source_sha256") != hashlib.sha256(
+            source_bytes
+        ).hexdigest():
+            return None
+    if structure_path_value:
+        structure_bytes = structure_path.read_bytes()
+        if row.get("full_text_structure_sha256") != hashlib.sha256(
+            structure_bytes
+        ).hexdigest():
+            return None
+    actual_text_hash = text_sha256(text)
+    if row.get("full_text_text_sha256") not in ("", actual_text_hash):
+        return None
+    if structure_path_value:
+        try:
+            read_representation_structure(
+                structure_path,
+                representation_sha256=actual_text_hash,
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+    if remote and not all(
+        (
+            source_byte_size > 0,
+            row.get("full_text_source_media_type", "").strip(),
+            row.get("full_text_retrieved_at", "").strip(),
+            row.get("full_text_extraction_engine", "").strip(),
+            row.get("full_text_extraction_engine_version", "").strip(),
+        )
+    ):
+        return None
     return FullTextResult(
         status=row.get("full_text_status") or "existing_text_available",
         source=row.get("full_text_source") or "existing_text_path",
-        url=row.get("full_text_url", ""),
-        license=row.get("full_text_license", ""),
+        url=row.get("full_text_resolved_url") or row.get("full_text_url", ""),
+        license=(
+            row.get("full_text_resolved_license")
+            or row.get("full_text_license", "")
+        ),
         text_path=str(path),
         chars=len(text),
+        identity_status=(
+            identity.status if identity is not None else IDENTITY_TRUSTED_LOCAL
+        ),
+        identity_evidence=(
+            identity.evidence if identity is not None else "existing_local_text_path"
+        ),
+        text_sha256=actual_text_hash,
+        extraction_engine=row.get("full_text_extraction_engine") or "existing_text",
+        extraction_engine_version=(
+            row.get("full_text_extraction_engine_version") or "unknown"
+        ),
+        source_artifact_path=source_path_value,
+        source_sha256=row.get("full_text_source_sha256", ""),
+        source_byte_size=source_byte_size,
+        source_media_type=row.get("full_text_source_media_type", ""),
+        retrieved_at=row.get("full_text_retrieved_at", ""),
+        page_count=page_count,
+        encrypted=row.get("full_text_encrypted", "").casefold() == "true",
+        structure_path=structure_path_value,
+        structure_sha256=row.get("full_text_structure_sha256", ""),
     )
+
+
+def verify_remote_document_identity(
+    row: dict[str, str],
+    text: str,
+    url: str,
+) -> tuple[str, str]:
+    identity = assess_document_identity(row, text)
+    if not identity.matched:
+        raise DocumentIdentityMismatch(url, identity)
+    return identity.status, identity.evidence
 
 
 def extract_remote_location(
@@ -323,6 +740,7 @@ def extract_remote_location(
         status = "pdf_text_extracted"
     else:
         pdf_errors = []
+        pdf_identity_mismatches: list[DocumentIdentityMismatch] = []
         for pdf_url in pdf_links_from_html(data, final_url)[:5]:
             try:
                 pdf_data, pdf_type, pdf_final_url = request_bytes(pdf_url)
@@ -330,15 +748,31 @@ def extract_remote_location(
                     continue
                 text = extract_pdf_text(pdf_data)
                 if len(text) >= MIN_FULL_TEXT_CHARS:
-                    text_path = write_text_cache(row, text, cache_dir, pdf_final_url)
-                    return FullTextResult(
+                    identity_status, identity_evidence = (
+                        verify_remote_document_identity(
+                            row,
+                            text,
+                            pdf_final_url,
+                        )
+                    )
+                    return completed_result(
+                        row,
+                        cache_dir,
                         status="landing_pdf_text_extracted",
                         source=location.source,
                         url=pdf_final_url,
-                        license=location.license,
-                        text_path=str(text_path),
-                        chars=len(text),
+                        license_value=location.license,
+                        source_bytes=pdf_data,
+                        source_media_type=pdf_type,
+                        text=text,
+                        identity_status=identity_status,
+                        identity_evidence=identity_evidence,
+                        extraction_engine="pypdf",
+                        extraction_engine_version=package_version("pypdf"),
                     )
+            except DocumentIdentityMismatch as error:
+                pdf_identity_mismatches.append(error)
+                pdf_errors.append(f"{pdf_url}: {type(error).__name__}: {error}")
             except REMOTE_FETCH_ERRORS as error:
                 pdf_errors.append(f"{pdf_url}: {type(error).__name__}: {error}")
 
@@ -356,14 +790,37 @@ def extract_remote_location(
             f"from {final_url}"
         )
 
-    text_path = write_text_cache(row, text, cache_dir, final_url)
-    return FullTextResult(
+    try:
+        identity_status, identity_evidence = verify_remote_document_identity(
+            row,
+            text,
+            final_url,
+        )
+    except DocumentIdentityMismatch:
+        if (
+            not is_pdf_response(final_url, content_type, data)
+            and pdf_identity_mismatches
+        ):
+            raise pdf_identity_mismatches[0]
+        raise
+    return completed_result(
+        row,
+        cache_dir,
         status=status,
         source=location.source,
         url=final_url,
-        license=location.license,
-        text_path=str(text_path),
-        chars=len(text),
+        license_value=location.license,
+        source_bytes=data,
+        source_media_type=content_type,
+        text=text,
+        identity_status=identity_status,
+        identity_evidence=identity_evidence,
+        extraction_engine=(
+            "pypdf" if status == "pdf_text_extracted" else "html_parser"
+        ),
+        extraction_engine_version=(
+            package_version("pypdf") if status == "pdf_text_extracted" else "1"
+        ),
     )
 
 
@@ -522,12 +979,20 @@ def resolve_full_text(
     unpaywall_email: str | None,
     core_api_key: str | None,
 ) -> FullTextResult:
-    existing_text = reuse_existing_text(row)
-    if existing_text is not None:
-        return existing_text
-
     existing = row.get("full_text_path", "").strip()
     errors = []
+    identity_mismatches: list[tuple[FullTextLocation, DocumentIdentityMismatch]] = []
+
+    try:
+        existing_text = reuse_existing_text(row, cache_dir)
+    except DocumentIdentityMismatch as error:
+        errors.append(f"existing_text: {type(error).__name__}: {error}")
+        identity_mismatches.append(
+            (FullTextLocation("existing_text_path", error.url), error)
+        )
+    else:
+        if existing_text is not None:
+            return existing_text
 
     if existing and not existing.startswith(("http://", "https://")):
         try:
@@ -538,12 +1003,29 @@ def resolve_full_text(
     for location in candidate_locations(row, unpaywall_email, core_api_key):
         try:
             return extract_remote_location(row, location, cache_dir)
+        except DocumentIdentityMismatch as error:
+            identity_mismatches.append((location, error))
+            errors.append(
+                f"{location.source} {location.url}: {type(error).__name__}: {error}"
+            )
         except REMOTE_FETCH_ERRORS as error:
             errors.append(
                 f"{location.source} {location.url}: {type(error).__name__}: {error}"
             )
 
     if errors:
+        if identity_mismatches:
+            location, mismatch = identity_mismatches[0]
+            return FullTextResult(
+                status="identity_mismatch",
+                source=location.source,
+                url=mismatch.url,
+                license=location.license,
+                identity_status=IDENTITY_MISMATCH,
+                identity_evidence=mismatch.assessment.evidence,
+                error=" | ".join(errors),
+                manual_lookup_url=manual_lookup_url(row),
+            )
         return FullTextResult(
             status="extraction_failed",
             error=" | ".join(errors),
@@ -571,13 +1053,49 @@ def output_columns(input_columns: list[str]) -> list[str]:
 
 
 def result_to_columns(result: FullTextResult) -> dict[str, str]:
+    remote_identity_verified = (
+        result.status not in REMOTE_EXTRACTION_STATUSES
+        or result.identity_status in {"verified_doi", "verified_title"}
+    )
+    usable_for_tagging = bool(
+        result.text_path
+        and result.chars >= MIN_FULL_TEXT_CHARS
+        and remote_identity_verified
+    )
     return {
         "full_text_status": result.status,
         "full_text_source": result.source,
-        "full_text_url": result.url,
-        "full_text_license": result.license,
+        "full_text_resolved_source": result.source,
+        "full_text_resolved_url": result.url,
+        "full_text_resolved_license": result.license,
         "full_text_text_path": result.text_path,
         "full_text_chars": str(result.chars),
+        "full_text_usable_for_tagging": "yes" if usable_for_tagging else "no",
+        "full_text_identity_status": result.identity_status,
+        "full_text_identity_evidence": result.identity_evidence,
+        "full_text_text_sha256": result.text_sha256,
+        "full_text_extraction_engine": result.extraction_engine,
+        "full_text_extraction_engine_version": result.extraction_engine_version,
+        "full_text_extraction_contract_version": (
+            result.extraction_contract_version
+        ),
+        "full_text_source_artifact_path": result.source_artifact_path,
+        "full_text_source_sha256": result.source_sha256,
+        "full_text_source_byte_size": (
+            str(result.source_byte_size) if result.source_artifact_path else ""
+        ),
+        "full_text_source_media_type": result.source_media_type,
+        "full_text_retrieved_at": result.retrieved_at,
+        "full_text_page_count": (
+            str(result.page_count) if result.page_count is not None else ""
+        ),
+        "full_text_encrypted": (
+            "true" if result.encrypted else "false"
+            if result.source_artifact_path
+            else ""
+        ),
+        "full_text_structure_path": result.structure_path,
+        "full_text_structure_sha256": result.structure_sha256,
         "full_text_error": result.error,
         "full_text_manual_lookup_url": result.manual_lookup_url,
     }
@@ -627,6 +1145,10 @@ def prepare_rows(
                 "paper_id": paper_id,
                 "title": row.get("title", ""),
                 "doi": row.get("doi", ""),
+                **{
+                    column: row.get(column, "")
+                    for column in AVAILABILITY_COLUMNS
+                },
                 **full_text_columns,
             }
         )
@@ -652,13 +1174,31 @@ def run(
     write_csv(output_path, enriched_rows, output_columns(fieldnames))
     write_csv(manifest_path, manifest_rows, MANIFEST_COLUMNS)
 
-    local_texts = sum(
+    usable_full_texts = sum(
         1
         for row in manifest_rows
-        if row.get("full_text_text_path") and int(row.get("full_text_chars") or 0) > 0
+        if row.get("full_text_usable_for_tagging") == "yes"
     )
     manual_lookup_needed = sum(
         1 for row in manifest_rows if row.get("full_text_status") == "manual_lookup_needed"
+    )
+    extraction_failures = [
+        row
+        for row in manifest_rows
+        if row.get("full_text_status") == "extraction_failed"
+    ]
+    identity_failures = [
+        row
+        for row in manifest_rows
+        if row.get("full_text_status") == "identity_mismatch"
+    ]
+    warnings = [
+        f"{row.get('paper_id') or '<unknown>'}: full-text extraction failed"
+        for row in extraction_failures
+    ]
+    warnings.extend(
+        f"{row.get('paper_id') or '<unknown>'}: extracted document identity mismatch"
+        for row in identity_failures
     )
 
     return StepResult(
@@ -673,8 +1213,20 @@ def run(
             "included_papers": sum(
                 1 for row in rows if row.get("scope_decision") == "include"
             ),
-            "local_texts": local_texts,
+            # Kept as an alias for existing callers; texts may also be remote.
+            "local_texts": usable_full_texts,
+            "usable_full_texts": usable_full_texts,
+            "extraction_failures": len(extraction_failures),
+            "identity_failures": len(identity_failures),
             "manual_lookup_needed": manual_lookup_needed,
+        },
+        warnings=warnings,
+        metadata={
+            "full_text_extraction_contract_version": (
+                FULL_TEXT_EXTRACTION_CONTRACT_VERSION
+            ),
+            "minimum_usable_full_text_chars": MIN_FULL_TEXT_CHARS,
+            "remote_document_identity_required": True,
         },
     )
 

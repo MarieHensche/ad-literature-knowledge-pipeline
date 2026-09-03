@@ -1,0 +1,43 @@
+template_schema_version: 1.0.0
+profile_version: 1.0.0
+compatibility_version: 1.0.0
+record_kind: verified_gap
+source_contract: mantis_verified_gap_projection
+source_schema_version: 1.0.0
+eligible_statuses: [verified_open]
+point_id_source_path: point_id
+fields:
+  - {output_name: title, source_path: title, mantis_type: Title, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: semantic, source_path: semantic, mantis_type: Semantic, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: 0}
+  - {output_name: point_id, source_path: point_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: gap_type, source_path: gap_type, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: gap_status, source_path: gap_status, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: research_question, source_path: research_question, mantis_type: Semantic, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: 1}
+  - {output_name: novelty_score, source_path: novelty_score, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: novelty_scale_min, source_path: novelty_scale_min, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: novelty_scale_max, source_path: novelty_scale_max, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: novelty_uncertainty, source_path: novelty_uncertainty, mantis_type: Numeric, required: false, null_policy: empty, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: importance_score, source_path: importance_score, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: importance_scale_min, source_path: importance_scale_min, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: importance_scale_max, source_path: importance_scale_max, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: importance_uncertainty, source_path: importance_uncertainty, mantis_type: Numeric, required: false, null_policy: empty, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: feasibility_score, source_path: feasibility_score, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: feasibility_scale_min, source_path: feasibility_scale_min, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: feasibility_scale_max, source_path: feasibility_scale_max, mantis_type: Numeric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: feasibility_uncertainty, source_path: feasibility_uncertainty, mantis_type: Numeric, required: false, null_policy: empty, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: score_calibration_status, source_path: score_calibration_status, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: coverage_status, source_path: coverage_status, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: supporting_claim_ids, source_path: supporting_claim_ids, mantis_type: Categoric, required: false, null_policy: empty, multivalue_policy: join, separator: " | ", semantic_order: null}
+  - {output_name: decisive_verification_attempt_id, source_path: decisive_verification_attempt_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: verification_completed_at, source_path: verification_completed_at, mantis_type: Date, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: counterevidence_ids, source_path: counterevidence_ids, mantis_type: Categoric, required: false, null_policy: empty, multivalue_policy: join, separator: " | ", semantic_order: null}
+  - {output_name: counterretrieval_ids, source_path: counterretrieval_ids, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: join, separator: " | ", semantic_order: null}
+  - {output_name: retrieval_query_log_ids, source_path: retrieval_query_log_ids, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: join, separator: " | ", semantic_order: null}
+  - {output_name: uncertainty_reasons, source_path: uncertainty_reasons, mantis_type: Categoric, required: false, null_policy: empty, multivalue_policy: join, separator: " | ", semantic_order: null}
+  - {output_name: as_of, source_path: as_of, mantis_type: Date, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: snapshot_id, source_path: snapshot_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+semantic_text: {strategy: statement_rationale_question, separator: "\n\n"}
+row_sort_paths: [point_id]
+csv_policy: {encoding: utf-8, line_terminator: "\n", null_sentinel: "", quote_minimal: true}
+supported_tool_versions: [mantisai-cli==3.7.0]
+connection_compatibility_verified: false

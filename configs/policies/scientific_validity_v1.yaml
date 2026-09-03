@@ -1,0 +1,504 @@
+schema_version: "1.0.0"
+policy_id: scientific_validity
+policy_version: "1.0.0"
+scope: cross_domain
+
+terminology:
+  gap_candidate:
+    definition: >
+      A versioned and scoped hypothesis that recorded deterministic signals
+      indicate an unresolved knowledge condition within a named corpus snapshot
+      and inclusive as_of cutoff. It is a proposition to verify, not evidence of
+      global absence.
+    required_qualifiers:
+      - candidate_version
+      - corpus_snapshot_id
+      - corpus_scope
+      - as_of
+      - gap_type
+      - signal_ids
+      - coverage_status
+      - uncertainty_reasons
+    prohibited_inferences:
+      - global_nonexistence
+      - scientific_importance
+      - study_feasibility
+      - expert_acceptance
+
+  verified_gap:
+    definition: >
+      A gap candidate in verified_open state whose supporting and counterevidence
+      claims are passage-verified, whose type-specific counterretrieval and
+      terminology, indexing, adjacent-literature, and duplicate checks are
+      complete, whose coverage is adequate for the declared rule, and for which
+      no eligible resolving evidence is known within the stated scope and as_of.
+    required_qualifiers:
+      - candidate_version
+      - corpus_snapshot_id
+      - corpus_scope
+      - as_of
+      - coverage_status
+      - verification_dossier_id
+      - uncertainty_reasons
+    prohibited_inferences:
+      - global_nonexistence
+      - final_scientific_truth
+      - scientific_consensus
+      - scientific_importance
+      - study_feasibility
+      - expert_acceptance
+
+  refuted_gap:
+    definition: >
+      A candidate for which eligible evidence available by the candidate's
+      original as_of shows that the asserted operational gap did not exist as
+      scoped, or that the generating signal was invalid. This does not refute the
+      underlying scientific hypothesis.
+    required_qualifiers:
+      - original_candidate_version
+      - original_as_of
+      - refuting_evidence_ids
+      - verification_dossier_id
+    prohibited_inferences:
+      - underlying_hypothesis_refuted
+      - final_scientific_truth
+
+  resolved_gap:
+    definition: >
+      A gap that was verified_open at an earlier cutoff and is addressed by
+      eligible evidence made available later that satisfies the gap-type-specific
+      resolution rule. Resolution does not imply final scientific truth.
+    required_qualifiers:
+      - prior_verified_candidate_version
+      - prior_as_of
+      - resolving_evidence_ids
+      - resolution_rule_id
+      - resolution_as_of
+    prohibited_inferences:
+      - final_scientific_truth
+      - permanent_resolution
+
+  corpus_sparse:
+    definition: >
+      A condition in which the number or density of deduplicated eligible study
+      units for a declared query or graph cell is below a predeclared threshold
+      in one named corpus snapshot. It means sparse in that corpus only.
+    required_qualifiers:
+      - corpus_snapshot_id
+      - corpus_scope
+      - as_of
+      - query_or_cell
+      - counted_unit
+      - observed_count
+      - threshold
+      - coverage_status
+    prohibited_inferences:
+      - globally_unstudied
+      - scientifically_important
+      - feasible_to_study
+
+  as_of:
+    definition: >
+      The inclusive scientific valid-time cutoff used to decide which exact
+      source versions were publicly available. It is distinct from retrieved_at,
+      recorded_at, study completion time, and pipeline run time; later versions
+      cannot be silently projected backward.
+    required_qualifiers:
+      - cutoff_date
+      - availability_date_rule
+      - corpus_snapshot_id
+    prohibited_inferences:
+      - historical_completeness_without_snapshot
+
+  supported:
+    definition: >
+      The cited source passage directly entails all material elements of a claim
+      in its stated population, method, outcome, design, and source-version
+      context. Supported does not mean independently replicated or scientifically
+      true.
+    required_qualifiers:
+      - claim_id
+      - source_version_id
+      - passage_ids
+      - verifier_id
+    prohibited_inferences:
+      - independently_replicated
+      - final_scientific_truth
+
+  contradicted:
+    definition: >
+      A cited passage entails a materially incompatible assertion only after the
+      claims satisfy the declared comparability key. Opposite directions in
+      non-comparable contexts are not contradictions.
+    required_qualifiers:
+      - claim_id
+      - counterclaim_id
+      - passage_ids
+      - comparability_key
+      - verifier_id
+    prohibited_inferences:
+      - contradiction_without_comparability
+      - source_fraud
+      - final_scientific_truth
+
+  insufficient:
+    definition: >
+      The accessible evidence does not establish either support or contradiction
+      for all material claim elements. It is an evidence state, not proof that
+      evidence does not exist.
+    required_qualifiers:
+      - claim_id
+      - checked_passage_ids
+      - insufficiency_reasons
+    prohibited_inferences:
+      - global_nonexistence
+      - claim_false
+
+  uncertain:
+    definition: >
+      A reason-coded outcome or status used when verification cannot reach the
+      required conclusion because access, coverage, comparability, terminology,
+      evidence, or automated judgments remain unresolved. For a claim it means
+      no safe support decision was possible; for a gap it means the candidate's
+      verification could not conclude. It is not a confidence score.
+    required_qualifiers:
+      - uncertainty_context
+      - subject_id
+      - uncertainty_reasons
+      - unresolved_checks
+    prohibited_inferences:
+      - probably_false
+      - probably_unimportant
+
+open_world:
+  missing_representation_is_global_absence: false
+  zero_results_are_global_absence: false
+  adequate_coverage_is_global_completeness: false
+  historical_reconstruction_without_snapshot_is_certain: false
+  qualification_required_phrases:
+    - not studied
+    - not been studied
+    - never studied
+    - unstudied
+    - not been investigated
+    - never been investigated
+    - no evidence exists
+    - no studies have
+    - no study has
+    - no studies exist
+    - no research exists
+    - no literature exists
+    - no prior work exists
+    - no published evidence
+    - evidence is absent
+    - no eligible records
+    - no records were found
+  always_prohibited_phrases:
+    - proven gap
+    - scientifically validated gap
+  required_absence_qualifiers:
+    - corpus_snapshot_id
+    - corpus_scope
+    - as_of
+    - searched_sources
+    - coverage_status
+  preferred_absence_language: >
+    No eligible records were retrieved for the declared question within the
+    named corpus snapshot and as_of cutoff; coverage and access limitations
+    remain visible.
+
+claim_verification:
+  outcomes_are_mutually_exclusive: true
+  comparability_required_for_contradiction: true
+  support_is_scientific_truth: false
+  outcomes:
+    supported:
+      definition: The exact cited passages support all material claim elements.
+    contradicted:
+      definition: Comparable verified evidence supports an incompatible claim.
+    insufficient:
+      definition: Available evidence establishes neither support nor contradiction.
+    uncertain:
+      definition: Unresolved ambiguity, access, comparability, or disagreement prevents a safe claim decision.
+
+gap_lifecycle:
+  initial_status: proposed
+  state_history_is_append_only: true
+  human_judgment_is_gap_status: false
+  statuses:
+    proposed:
+      definition: A generated and versioned hypothesis awaiting verification.
+      terminal_for_candidate_version: false
+    verification_in_progress:
+      definition: Required support, countersearch, coverage, and artifact checks are running.
+      terminal_for_candidate_version: false
+    verified_open:
+      definition: The operational gap remains open within the qualified scope and as_of.
+      terminal_for_candidate_version: true
+    refuted:
+      definition: Evidence available by the original as_of invalidates the asserted gap.
+      terminal_for_candidate_version: true
+    resolved:
+      definition: Later evidence addresses a previously verified-open gap under its resolution rule.
+      terminal_for_candidate_version: true
+    uncertain:
+      definition: Verification is inconclusive for one or more recorded reasons.
+      terminal_for_candidate_version: true
+    terminology_artifact:
+      definition: Terminology, indexing, entity resolution, or query construction explains the apparent gap.
+      terminal_for_candidate_version: true
+    duplicate:
+      definition: The candidate is equivalent to a separately identified canonical candidate.
+      terminal_for_candidate_version: true
+
+  verified_open_required_checks:
+    - candidate_version_frozen
+    - corpus_snapshot_recorded
+    - as_of_recorded
+    - deterministic_signal_supported
+    - supporting_claims_verified
+    - counterevidence_verified
+    - counterretrieval_complete
+    - synonym_and_indexing_check_complete
+    - adjacent_literature_check_complete
+    - duplicate_check_complete
+    - coverage_adequate_for_rule
+    - uncertainty_recorded
+
+  resolution_required_checks:
+    - previously_verified_open
+    - later_resolving_evidence_verified
+    - gap_type_resolution_rule_satisfied
+    - resolution_as_of_recorded
+
+  transitions:
+    - from: proposed
+      to: verification_in_progress
+      required_checks:
+        - candidate_version_frozen
+        - corpus_snapshot_recorded
+        - as_of_recorded
+        - deterministic_signal_recorded
+      requires_new_candidate_version: false
+    - from: verification_in_progress
+      to: verified_open
+      required_checks:
+        - candidate_version_frozen
+        - corpus_snapshot_recorded
+        - as_of_recorded
+        - deterministic_signal_supported
+        - supporting_claims_verified
+        - counterevidence_verified
+        - counterretrieval_complete
+        - synonym_and_indexing_check_complete
+        - adjacent_literature_check_complete
+        - duplicate_check_complete
+        - coverage_adequate_for_rule
+        - uncertainty_recorded
+      requires_new_candidate_version: false
+    - from: verification_in_progress
+      to: refuted
+      required_checks:
+        - original_as_of_recorded
+        - refuting_evidence_verified
+        - refutation_reason_recorded
+      requires_new_candidate_version: false
+    - from: verification_in_progress
+      to: resolved
+      required_checks:
+        - previously_verified_open
+        - later_resolving_evidence_verified
+        - gap_type_resolution_rule_satisfied
+        - resolution_as_of_recorded
+      requires_new_candidate_version: false
+    - from: verification_in_progress
+      to: uncertain
+      required_checks:
+        - uncertainty_reasons_recorded
+        - unresolved_checks_recorded
+      requires_new_candidate_version: false
+    - from: verification_in_progress
+      to: terminology_artifact
+      required_checks:
+        - artifact_type_recorded
+        - artifact_basis_verified
+      requires_new_candidate_version: false
+    - from: verification_in_progress
+      to: duplicate
+      required_checks:
+        - canonical_gap_id_recorded
+        - equivalence_basis_recorded
+      requires_new_candidate_version: false
+    - from: uncertain
+      to: verification_in_progress
+      required_checks:
+        - new_evidence_access_or_rule_recorded
+      requires_new_candidate_version: true
+    - from: verified_open
+      to: verification_in_progress
+      required_checks:
+        - refresh_reason_recorded
+        - new_snapshot_or_cutoff_recorded
+      requires_new_candidate_version: true
+    - from: refuted
+      to: verification_in_progress
+      required_checks:
+        - correction_or_scope_change_recorded
+      requires_new_candidate_version: true
+    - from: resolved
+      to: verification_in_progress
+      required_checks:
+        - correction_or_scope_change_recorded
+      requires_new_candidate_version: true
+    - from: terminology_artifact
+      to: verification_in_progress
+      required_checks:
+        - artifact_correction_recorded
+        - candidate_lineage_recorded
+      requires_new_candidate_version: true
+    - from: duplicate
+      to: verification_in_progress
+      required_checks:
+        - deduplication_correction_recorded
+        - candidate_lineage_recorded
+      requires_new_candidate_version: true
+
+coverage:
+  adequate_for_rule_is_global_completeness: false
+  statuses:
+    not_assessed:
+      definition: Coverage dimensions have not yet been evaluated.
+    adequate_for_rule:
+      definition: The declared retrieval procedure meets the minimum for this gap type only.
+    partial:
+      definition: Some declared sources, terms, dates, or accessible materials are missing.
+    insufficient:
+      definition: Coverage is too weak to support the requested gap conclusion.
+  required_dimensions:
+    - providers
+    - source_types
+    - date_window
+    - languages
+    - query_variants
+    - synonym_coverage
+    - adjacent_literature
+    - retrieval_failures
+    - inaccessible_material
+    - deduplication
+  missing_edge_meaning: Not represented in this corpus snapshot.
+  unknown_availability_policy: exclude_from_temporal_claim_and_mark_uncertain
+
+assessment_dimensions:
+  must_remain_separate: true
+  dimensions:
+    screening_confidence:
+      kind: confidence
+      definition: Confidence that a record is relevant to the declared corpus scope.
+    extraction_confidence:
+      kind: confidence
+      definition: Confidence that structured data faithfully represents the cited passage.
+    verification_confidence:
+      kind: confidence
+      definition: Confidence in an automated support or contradiction assessment.
+    reporting_quality:
+      kind: quality
+      definition: Completeness and transparency of reporting, separate from study validity.
+    study_quality:
+      kind: quality
+      definition: Methodological quality and risk of bias derived from explicit study factors.
+    evidence_quality:
+      kind: quality
+      definition: An explained synthesis that retains its reporting, study-quality, directness, precision, and consistency components.
+    scientific_confidence:
+      kind: confidence
+      definition: Degree to which a synthesis conclusion is warranted by verified evidence and uncertainty.
+    corpus_coverage:
+      kind: coverage
+      definition: Assessed reach of the declared retrieval procedure for a particular rule.
+    gap_uncertainty:
+      kind: uncertainty
+      definition: Structured unresolved limitations attached to a gap candidate.
+    novelty:
+      kind: ranking
+      definition: Whether the operational gap remains unresolved within scope and as_of.
+    importance:
+      kind: ranking
+      definition: Expected theoretical, practical, clinical, or policy consequence under declared criteria.
+    feasibility:
+      kind: ranking
+      definition: Practical ability to address the gap under declared resource and ethical constraints.
+  forbidden_derivations:
+    - from: extraction_confidence
+      to: evidence_quality
+    - from: extraction_confidence
+      to: scientific_confidence
+    - from: model_confidence
+      to: scientific_confidence
+    - from: model_confidence
+      to: novelty
+    - from: model_confidence
+      to: importance
+    - from: model_confidence
+      to: feasibility
+    - from: model_confidence
+      to: reporting_quality
+    - from: model_confidence
+      to: study_quality
+    - from: reporting_quality
+      to: study_quality
+    - from: study_quality
+      to: reporting_quality
+    - from: legacy_evidence_strength
+      to: scientific_confidence
+    - from: map_proximity
+      to: scientific_support
+
+human_review:
+  mandatory_triggers:
+    verifier_disagreement:
+      definition: Independent automated verifiers disagree on a material claim.
+    material_detail_mismatch:
+      definition: Numbers, direction, population, outcome, method, or design do not align.
+    comparability_ambiguous:
+      definition: A contradiction or comparison depends on unresolved comparability.
+    terminology_or_entity_ambiguous:
+      definition: Terminology or entity resolution could change the candidate state.
+    central_evidence_inaccessible:
+      definition: A material source, supplement, protocol, or dataset cannot be checked.
+    inadequate_coverage_for_promotion:
+      definition: Promotion is requested while coverage is not adequate for the rule.
+    high_stakes_claim:
+      definition: The output could materially affect clinical, policy, safety, or ethical decisions.
+    terminal_state_reopened:
+      definition: A terminal candidate version is superseded after correction, new access, or scope change.
+    expert_judgment_conflict:
+      definition: Expert judgments or a manual override conflict materially.
+    mantis_or_llm_hypothesis_without_signal:
+      definition: A Mantis or LLM hypothesis lacks an independent deterministic signal.
+  cannot_be_waived_by_review:
+    - missing_stable_id
+    - missing_provenance
+    - invalid_schema
+    - orphan_reference
+    - missing_corpus_snapshot
+    - missing_as_of
+    - missing_independent_deterministic_signal
+
+mantis_interpretation:
+  is_evidence: false
+  may_create_gap_candidate: false
+  resulting_gap_status_after_independent_signal: proposed
+  may_set_verified_status: false
+  requires_independent_deterministic_signal: true
+  requires_standard_counterretrieval_and_verification: true
+  required_provenance_fields:
+    - interpretation_id
+    - space_id
+    - map_id
+    - map_profile_version
+    - map_input_hash
+    - selected_point_ids
+    - actor
+    - prompt_or_action
+    - timestamp
+    - output_text

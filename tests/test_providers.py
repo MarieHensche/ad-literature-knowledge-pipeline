@@ -125,6 +125,24 @@ def test_openalex_url_uses_api_key_from_environment(
     assert "secret-key" not in redact_openalex_url(url)
 
 
+def test_openalex_display_url_redacts_private_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENALEX_API_KEY", "secret-key")
+    url = build_openalex_url(
+        openalex_plan(),
+        page=1,
+        per_page=25,
+        mailto="private@example.test",
+    )
+
+    redacted = redact_openalex_url(url)
+
+    assert "private%40example.test" not in redacted
+    assert "private@example.test" not in redacted
+    assert "mailto=REDACTED" in redacted
+
+
 def test_openalex_fetch_json_retries_transient_url_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -270,6 +288,7 @@ def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
         "doi": "https://doi.org/10.123/example",
         "display_name": "Example Study",
         "publication_year": 2024,
+        "type": "article",
         "abstract_inverted_index": {"hello": [0], "world": [1]},
         "authorships": [{"author": {"display_name": "A. Author"}}],
         "primary_location": {
@@ -285,6 +304,11 @@ def test_openalex_candidate_conversion_rebuilds_abstract() -> None:
     assert candidate["abstract"] == "hello world"
     assert candidate["authors"] == "A. Author"
     assert candidate["venue"] == "Journal"
+    assert candidate["canonical_work_kind"] == "research_article"
+    assert candidate["source_type_classification_status"] == "resolved"
+    assert candidate["source_type_classification_evidence"] == [
+        "provider_type:type=article"
+    ]
 
 
 def test_openalex_fetches_multiple_search_queries(
@@ -462,9 +486,14 @@ def test_openalex_tiered_fetch_dedupes_and_continues_pages(
     assert candidates[0]["local_relevance_tier"] == 0
     assert candidates[0]["in_fetch_duplicate_count"] == 2
     assert candidates[0]["in_fetch_duplicate_provenance"]
+    assert candidates[0]["in_fetch_duplicate_provenance"][0]["query_index"] == 1
     assert candidates[0]["in_fetch_duplicate_provenance"][0]["query_rank"] == 2
     assert provider.last_fetch_diagnostics["raw_provider_candidates_seen"] == 3
     assert provider.last_fetch_diagnostics["in_fetch_duplicates_removed"] == 1
+    assert provider.last_fetch_diagnostics["planned_logical_query_count"] == 1
+    assert provider.last_fetch_diagnostics["planned_execution_query_count"] == 1
+    assert provider.last_fetch_diagnostics["executed_logical_query_count"] == 1
+    assert provider.last_fetch_diagnostics["executed_query_count"] == 1
     assert "page=1" in urls[0]
     assert "page=2" in urls[1]
 
@@ -549,6 +578,8 @@ def test_tiered_fetch_uses_fallback_execution_queries_without_boolean(
     assert provider.last_fetch_diagnostics["provider_boolean_query_blocks"] is False
     assert provider.last_fetch_diagnostics["logical_query_count"] == 1
     assert provider.last_fetch_diagnostics["execution_query_count"] == 2
+    assert provider.last_fetch_diagnostics["planned_execution_query_count"] == 2
+    assert provider.last_fetch_diagnostics["executed_query_count"] == 2
 
 
 def test_openalex_backfill_resumes_after_consumed_page(

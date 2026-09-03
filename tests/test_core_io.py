@@ -32,6 +32,24 @@ def test_artifact_paths_match_existing_conventions() -> None:
         "data/processed/example_literature_review.md"
     )
     assert collection.plan_json == Path("data/collection_plans/example_plan.json")
+    assert collection.candidates_jsonl == Path(
+        "data/raw/example_provider_candidates.jsonl"
+    )
+    assert collection.deduped_candidates_jsonl == Path(
+        "data/raw/example_provider_candidates_deduped.jsonl"
+    )
+    assert collection.provider_evidence_index_jsonl == Path(
+        "data/raw/example_provider_evidence_index.jsonl"
+    )
+    assert collection.provider_response_pages_dir == Path(
+        "data/raw/example_provider_response_pages"
+    )
+    assert collection.review_provider_evidence_index_jsonl == Path(
+        "data/raw/example_review_provider_evidence_index.jsonl"
+    )
+    assert collection.review_provider_response_pages_dir == Path(
+        "data/raw/example_review_provider_response_pages"
+    )
     assert collection.calibration_papers_csv == Path(
         "data/raw/example_calibration_papers.csv"
     )
@@ -42,6 +60,36 @@ def test_artifact_paths_match_existing_conventions() -> None:
         "data/raw/example_calibration_full_text_manifest.csv"
     )
     assert collection.papers_csv == Path("data/raw/example_papers.csv")
+    assert collection.corpus_records_jsonl == Path(
+        "data/processed/example_corpus_records.jsonl"
+    )
+    assert collection.corpus_snapshot_integrity_json == Path(
+        "data/processed/example_corpus_snapshot_integrity.json"
+    )
+
+
+def test_collection_artifacts_can_resolve_historical_openalex_paths(
+    tmp_path: Path,
+) -> None:
+    raw_dir = tmp_path / "data" / "raw"
+    raw_dir.mkdir(parents=True)
+    legacy_candidates = raw_dir / "legacy_openalex_candidates.jsonl"
+    legacy_deduped = raw_dir / "legacy_openalex_candidates_deduped.jsonl"
+    legacy_candidates.write_text("", encoding="utf-8")
+    legacy_deduped.write_text("", encoding="utf-8")
+
+    current = collection_artifacts("legacy", tmp_path)
+    compatible = collection_artifacts(
+        "legacy",
+        tmp_path,
+        prefer_existing_legacy=True,
+    )
+
+    assert current.candidates_jsonl == (
+        raw_dir / "legacy_provider_candidates.jsonl"
+    )
+    assert compatible.candidates_jsonl == legacy_candidates
+    assert compatible.deduped_candidates_jsonl == legacy_deduped
 
 
 def test_run_context_resolves_relative_paths(tmp_path: Path) -> None:

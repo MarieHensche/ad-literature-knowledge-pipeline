@@ -52,17 +52,23 @@ class CollectionArtifacts:
     """Derived artifact paths for the collection workflow."""
 
     review_overviews_jsonl: Path
+    review_provider_evidence_index_jsonl: Path
+    review_provider_response_pages_dir: Path
     review_overviews_full_text_jsonl: Path
     review_full_text_manifest_csv: Path
     plan_json: Path
     candidates_jsonl: Path
     deduped_candidates_jsonl: Path
+    provider_evidence_index_jsonl: Path
+    provider_response_pages_dir: Path
     candidate_screening_csv: Path
     full_text_availability_csv: Path
     calibration_papers_csv: Path
     calibration_papers_full_text_csv: Path
     calibration_full_text_manifest_csv: Path
     papers_csv: Path
+    corpus_records_jsonl: Path
+    corpus_snapshot_integrity_json: Path
 
 
 def processed_path(collection: str, suffix: str, base_dir: Path = Path(".")) -> Path:
@@ -156,11 +162,51 @@ def main_pipeline_artifacts(
 def collection_artifacts(
     collection: str,
     base_dir: Path = Path("."),
+    *,
+    prefer_existing_legacy: bool = False,
 ) -> CollectionArtifacts:
     """Build all conventional collection-workflow artifact paths."""
+    candidates_jsonl = raw_path(collection, "provider_candidates.jsonl", base_dir)
+    deduped_candidates_jsonl = raw_path(
+        collection,
+        "provider_candidates_deduped.jsonl",
+        base_dir,
+    )
+    legacy_candidates_jsonl = raw_path(
+        collection,
+        "openalex_candidates.jsonl",
+        base_dir,
+    )
+    legacy_deduped_candidates_jsonl = raw_path(
+        collection,
+        "openalex_candidates_deduped.jsonl",
+        base_dir,
+    )
+    if (
+        prefer_existing_legacy
+        and not candidates_jsonl.exists()
+        and legacy_candidates_jsonl.exists()
+    ):
+        candidates_jsonl = legacy_candidates_jsonl
+    if (
+        prefer_existing_legacy
+        and not deduped_candidates_jsonl.exists()
+        and legacy_deduped_candidates_jsonl.exists()
+    ):
+        deduped_candidates_jsonl = legacy_deduped_candidates_jsonl
     return CollectionArtifacts(
         review_overviews_jsonl=raw_path(
             collection, "review_overviews.jsonl", base_dir
+        ),
+        review_provider_evidence_index_jsonl=raw_path(
+            collection,
+            "review_provider_evidence_index.jsonl",
+            base_dir,
+        ),
+        review_provider_response_pages_dir=raw_path(
+            collection,
+            "review_provider_response_pages",
+            base_dir,
         ),
         review_overviews_full_text_jsonl=raw_path(
             collection, "review_overviews_full_text.jsonl", base_dir
@@ -169,9 +215,17 @@ def collection_artifacts(
             collection, "review_full_text_manifest.csv", base_dir
         ),
         plan_json=plan_path(collection, base_dir),
-        candidates_jsonl=raw_path(collection, "openalex_candidates.jsonl", base_dir),
-        deduped_candidates_jsonl=raw_path(
-            collection, "openalex_candidates_deduped.jsonl", base_dir
+        candidates_jsonl=candidates_jsonl,
+        deduped_candidates_jsonl=deduped_candidates_jsonl,
+        provider_evidence_index_jsonl=raw_path(
+            collection,
+            "provider_evidence_index.jsonl",
+            base_dir,
+        ),
+        provider_response_pages_dir=raw_path(
+            collection,
+            "provider_response_pages",
+            base_dir,
         ),
         candidate_screening_csv=raw_path(
             collection, "candidate_screening.csv", base_dir
@@ -189,6 +243,16 @@ def collection_artifacts(
             collection, "calibration_full_text_manifest.csv", base_dir
         ),
         papers_csv=raw_path(collection, "papers.csv", base_dir),
+        corpus_records_jsonl=processed_path(
+            collection,
+            "corpus_records.jsonl",
+            base_dir,
+        ),
+        corpus_snapshot_integrity_json=processed_path(
+            collection,
+            "corpus_snapshot_integrity.json",
+            base_dir,
+        ),
     )
 
 

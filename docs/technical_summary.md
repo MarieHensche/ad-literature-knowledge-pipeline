@@ -1,286 +1,528 @@
 # Technical Summary
 
-This project is a refactored research pipeline for converting literature
-metadata into structured knowledge tags and a Mantis-ready CSV.
+Status: reconciled with the implemented repository on 2026-09-02
 
-The script entry points remain stable for existing workflows, but the reusable
-implementation now lives under `ad_lit_pipeline/`.
+This project is a domain-adaptable research-literature pipeline with an
+Alzheimer early-detection default contract. It collects or imports papers,
+screens them, prepares full text, extracts structured tags, can generate an
+evidence-linked literature review, and emits Mantis-ready outputs.
 
-## Architecture
+It is not yet a complete scientific gap-discovery system. The strict scientific
+record, integrity, gap-ontology, and validity layers are implemented. Collection
+emits the five strict corpus-boundary records, and the direct Phase 2.4 bridge
+can add exact `Document` and resolvable `Passage` records. The default main
+pipeline does not yet consume that snapshot or run evidence-graph construction,
+counterretrieval, gap verification, or three-axis ranking.
+
+## Documentation Sources Of Truth
+
+- [README](../README.md) is the quick-start and operator guide.
+- This document describes implemented architecture and workflow boundaries.
+- [Pipeline registry](pipeline_registry.md) defines ordering, dependencies, and
+  capabilities.
+- [Run provenance](run_provenance.md) defines manifests, traces, and resume
+  behavior.
+- [Immutable provider evidence](provider_evidence.md) defines exact response
+  pages, sanitized request identity, candidate links, and tamper verification.
+- [Exact documents and passages](document_passages.md) defines source-byte and
+  normalized-text ownership, deterministic locators, and integrity checks.
+- [Continuous integration](continuous_integration.md) defines the offline
+  matrix, network guard, security boundary, and stable required check.
+- [Scientific validity](scientific_validity.md), [record contracts](record_contracts_v1.md),
+  and [schema migration](schema_migration_policy.md) define the durable
+  scientific layer that later stages will produce.
+- [Topic-structure policy](topic_structure_policy.md) defines portable domain
+  vocabulary and structural heuristics.
+- [Mantis integration](mantis_integration.md) defines local projections,
+  publication, and interpretation boundaries.
+- [Living implementation plan](gap_discovery_implementation_plan.md) is the only
+  active dependency-ordered roadmap and contains verified phase records.
+
+The retained [bootstrap/refinement plan](topic_contract_bootstrap_refinement_plan.md)
+is explicitly superseded and exists only to preserve old links.
+
+## Package Layout
 
 ```text
 scripts/                 Compatibility wrappers and direct step CLIs
-ad_lit_pipeline/cli/     Pipeline orchestration CLIs
-ad_lit_pipeline/core/    Step specs, artifact paths, manifests, runner helpers
+ad_lit_pipeline/cli/     Main and collection orchestration
+ad_lit_pipeline/corpus/  Corpus policy, identity, source-type, temporal rules
+ad_lit_pipeline/core/    Artifacts, registry, manifests, runner, provenance
 ad_lit_pipeline/io/      CSV, JSON, JSONL, YAML, and path helpers
-ad_lit_pipeline/llm/     Shared OpenAI client, schemas, and trace writer
-ad_lit_pipeline/prompts/ Prompt rendering and Markdown prompt templates
+ad_lit_pipeline/knowledge/
+                         Preliminary source, excerpt, and finding contracts
+ad_lit_pipeline/llm/     Shared LLM clients, schemas, and trace writing
+ad_lit_pipeline/mantis/  Versioned projections and publication adapter
+ad_lit_pipeline/prompts/ Prompt rendering and Markdown templates
 ad_lit_pipeline/providers/
-                         Candidate provider interfaces and OpenAlex provider
-ad_lit_pipeline/steps/   Pipeline task implementations
-ad_lit_pipeline/topics/  Topic contract loading and validation
-configs/topics/          Topic contracts
-data/raw/                Raw inputs and collection artifacts
-data/processed/          Main pipeline outputs
-runs/                    Run manifests and LLM traces
+                         Provider interfaces and OpenAlex implementation
+ad_lit_pipeline/records/ Strict v1 scientific records and integrity checks
+ad_lit_pipeline/steps/   Implemented pipeline behaviors
+ad_lit_pipeline/topics/  Topic contracts and portable policy handling
+ad_lit_pipeline/validity/
+                         Scientific terminology and lifecycle policy
+configs/mantis/          Versioned Mantis profile templates
+configs/policies/        Validity, gap-ontology, and topic-structure policies
+configs/topics/          Topic contracts and generic template
+data/raw/                Imported and collected paper artifacts
+data/processed/          Tagging, review, knowledge, and legacy Mantis outputs
+runs/                    Versioned run manifests and LLM traces
 ```
 
-The two orchestrated pipelines are declared in `ad_lit_pipeline/core/registry.py`.
+Reusable behavior belongs in `ad_lit_pipeline/`. Files in `scripts/` remain
+thin compatibility wrappers or direct CLIs.
 
-## Main Pipeline
+## Authoritative Pipeline Registry
+
+`ad_lit_pipeline/core/registry.py` contains **44 registered steps** and **10
+named pipelines**. Both orchestrated CLIs and the local UI use this registry;
+the UI does not maintain a separate order.
+
+| Pipeline ID | Purpose | Public activation |
+| --- | --- | --- |
+| `main` | Default import, screen, tag, audit, legacy Mantis CSV | `scripts/run_pipeline.py run` |
+| `main_with_calibration` | Main pipeline with primary-paper contract calibration | `--calibrate-topic-contract` |
+| `review` | Optional evidence-linked literature review | `--generate-review` or focused review options |
+| `knowledge_exports` | Preliminary source and excerpt JSONL | `--export-knowledge` |
+| `knowledge_findings` | Preliminary source, excerpt, and finding JSONL | `--extract-knowledge-findings` |
+| `collection` | Search and select papers from a supplied contract | `scripts/run_collection.py run --topic-contract ...` |
+| `collection_calibration` | Retained compatibility specification | Not assembled by the current public collection workflow |
+| `contract_bootstrap` | Generate and review-refine a contract | `--contract-bootstrap-only` |
+| `collection_with_contract` | Bootstrap a contract, then collect papers | Omit `--topic-contract` |
+| `mantis_delivery` | Strict v1 record projections and gated publication | Direct versioned Mantis CLIs |
+
+Dependencies are conditional ordering rules. They may be absent during a valid
+`--only-step` or `--from-step` run that consumes compatible existing artifacts.
+The runner still verifies that every selected step has an implementation before
+execution.
+
+`prepare_calibration_full_text` is the only compatibility spec constructed in
+the registry rather than exposed as a module-level `STEP`; its bound collection
+runtime delegates to the shared full-text implementation. The obsolete review
+scaffold was removed because it duplicated implemented review steps and was
+never registered.
+
+## Main Tagging Workflow
 
 Entry point:
 
 ```bash
-python scripts/run_pipeline.py run ...
+python scripts/run_pipeline.py run \
+  --papers data/raw/example_papers.csv \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --collection example
 ```
 
-Package CLI:
-
-```text
-ad_lit_pipeline/cli/run_pipeline.py
-```
-
-Steps:
-
-| Step | Module | Output |
-| --- | --- | --- |
-| `normalize_metadata` | `ad_lit_pipeline/steps/metadata/normalize.py` | `data/processed/<collection>_papers_normalized.csv` |
-| `screen_scope` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` | `data/processed/<collection>_scope_screened.csv` |
-| `prepare_full_text` | `ad_lit_pipeline/steps/full_text/prepare.py` | `data/processed/<collection>_scope_screened_full_text.csv`, `data/processed/<collection>_full_text_manifest.csv` |
-| `calibrate_topic_contract` | `ad_lit_pipeline/steps/tagging/calibrate_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
-| `review_tagging_categories` | `ad_lit_pipeline/steps/tagging/review_categories.py` | `data/processed/<collection>_tagging_categories_review.yaml`, topic contract YAML |
-| `normalize_tagging_config` | `ad_lit_pipeline/steps/tagging/normalize_config.py` | `data/processed/<collection>_tagging_config_normalized.json` |
-| `generate_tagging_rules` | `ad_lit_pipeline/steps/tagging/generate_rules.py` | `data/processed/<collection>_tagging_rules.json` |
-| `tag_papers` | `ad_lit_pipeline/steps/tagging/tag_papers.py` | `data/processed/<collection>_extraction_filled.csv` |
-| `audit_extraction` | `ad_lit_pipeline/steps/tagging/audit.py` | `data/processed/<collection>_extraction_audit.csv` |
-| `export_mantis` | `ad_lit_pipeline/steps/export/mantis.py` | `data/processed/<collection>_mantis_ready.csv` |
-
-Supported `--papers` formats are `.csv`, `.bib`, `.bibtex`, `.json`, `.jsonl`,
-and `.ris`. Non-CSV formats are imported to the canonical paper CSV before
+Supported paper inputs are `.csv`, `.bib`, `.bibtex`, `.json`, `.jsonl`, and
+`.ris`. Non-CSV inputs are imported to the canonical paper CSV before
 normalization.
 
-The `prepare_full_text` step resolves and extracts full text for included papers
-before LLM tagging. It uses local full-text paths when present, then tries open
-full-text locations from provider metadata, Unpaywall, Europe PMC, and CORE when
-configured. Extracted text is cached outside the project via
-`--full-text-cache-dir` or `AD_LIT_FULL_TEXT_CACHE`; the project stores only a
-manifest and text-path metadata. `calibrate_topic_contract` uses a selected
-set of included primary-paper full texts to refine the review-derived tagging
-ontology before rules are generated. `tag_papers` reads the extracted text and
-sends a bounded, knowledge-focused evidence view to the LLM.
+The default `main` pipeline is:
 
-Passing `--review-tagging-categories` inserts an optional human review step
-between contract calibration and `normalize_tagging_config`. On the first pass,
-the step writes `data/processed/<collection>_tagging_categories_review.yaml`
-with only category ids and values, records the run as paused, and waits for the
-user to edit the file and set `status: approved`. The user can remove
-categories, remove values, add values, add categories with explicit values, or
-add categories with `values: auto` / `values: []`. Auto-valued categories are
-completed from available review full text first and included-paper full text as
-fallback, then merged back into the topic contract before rules are generated.
-Resume with `--resume --run-id <run_id>` or rerun with
-`--from-step review_tagging_categories` after approving the review file.
-
-## Collection Pipeline
-
-Entry point:
-
-```bash
-python scripts/run_collection.py run ...
-```
-
-Package CLI:
-
-```text
-ad_lit_pipeline/cli/run_collection.py
-```
-
-Steps:
-
-| Step | Module | Output |
-| --- | --- | --- |
-| `generate_topic_contract` | `ad_lit_pipeline/steps/collection/generate_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
-| `fetch_review_overviews` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` | `data/raw/<collection>_review_overviews.jsonl` |
-| `prepare_review_full_text` | `ad_lit_pipeline/steps/collection/prepare_review_full_text.py` | `data/raw/<collection>_review_overviews_full_text.jsonl`, `data/raw/<collection>_review_full_text_manifest.csv` |
-| `refine_topic_contract` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` | `data/collection_plans/<collection>_topic_contract.yaml` |
-| `plan_search` | `ad_lit_pipeline/steps/collection/plan_search.py` | `data/collection_plans/<collection>_plan.json` |
-| `fetch_candidates` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` | `data/raw/<collection>_openalex_candidates.jsonl` |
-| `deduplicate_candidates` | `ad_lit_pipeline/steps/collection/deduplicate.py` | `data/raw/<collection>_openalex_candidates_deduped.jsonl` |
-| `screen_title_relevance` | `ad_lit_pipeline/steps/screening/title_relevance.py` | `data/raw/<collection>_candidate_screening.csv` |
-| `export_included_candidates` | `ad_lit_pipeline/steps/collection/export_included.py` | `data/raw/<collection>_papers.csv` |
-
-When no topic contract is supplied, collection first generates a draft contract,
-fetches a larger review/overview candidate pool, resolves available full text
-for that pool, selects the best review seeds only from candidates with readable
-extracted text, refines the contract's knowledge categories from those selected
-review full texts, and then continues into search planning. The planner can
-describe multiple provider types, but the current fetch layer implements only
-OpenAlex. Unsupported provider selections fail before any network fetch.
-
-Passing `--contract-bootstrap-only` runs only the contract-bootstrap steps and
-stops before search planning, so a user can review the generated contract before
-candidate collection.
-
-`prepare_review_full_text` reuses the same full-text extraction helpers as the
-main paper-tagging pipeline. It adapts OpenAlex review metadata, DOI landing
-pages, Unpaywall, Europe PMC, and CORE locations into cached text files for the
-review candidate pool. `refine_topic_contract` then filters to reviews with a
-readable `full_text_text_path`, selects the configured number of best matching
-reviews, and sends only bounded `full_text_evidence` from those selected texts
-to the LLM. Reviews without extracted full text are excluded from tag ontology
-generation; if no review full text is available, refinement fails instead of
-building tags from abstracts or metadata.
-
-When a reviewed topic contract is supplied, `--topic` is optional. Collection
-steps derive the planner and candidate-screening topic text from the contract's
-`research_topic` fields.
-
-Generated topic contracts include `topic_structure`, which defines one
-non-replaceable title anchor, main topic components with broad equivalent terms,
-and secondary replacement terms for non-anchor components. Collection fetches a
-scaled raw-candidate budget for the requested `--max-results` (currently four
-times the target count, with a floor of 30 and cap of 5000), screens up to that
-many candidate titles against this structure, and exports selected papers in
-tier order: anchor plus all main topics first, then anchor plus secondary
-substitutions.
-
-## Script-To-Module Map
-
-The original script names are kept as wrappers or direct CLIs:
-
-| Script | Package module |
+| Step | Primary output |
 | --- | --- |
-| `scripts/run_pipeline.py` | `ad_lit_pipeline/cli/run_pipeline.py` |
-| `scripts/run_collection.py` | `ad_lit_pipeline/cli/run_collection.py` |
-| `scripts/import_bibtex.py` | `ad_lit_pipeline/steps/importers/bibtex.py` |
-| `scripts/import_json_metadata.py` | `ad_lit_pipeline/steps/importers/json_metadata.py` |
-| `scripts/import_ris.py` | `ad_lit_pipeline/steps/importers/ris.py` |
-| `scripts/normalize_metadata.py` | `ad_lit_pipeline/steps/metadata/normalize.py` |
-| `scripts/screen_scope.py` | `ad_lit_pipeline/steps/screening/rule_based_scope.py` |
-| `scripts/calibrate_topic_contract.py` | `ad_lit_pipeline/steps/tagging/calibrate_topic_contract.py` |
-| `scripts/review_tagging_categories.py` | `ad_lit_pipeline/steps/tagging/review_categories.py` |
-| `scripts/normalize_tagging_config.py` | `ad_lit_pipeline/steps/tagging/normalize_config.py` |
-| `scripts/generate_tagging_rules.py` | `ad_lit_pipeline/steps/tagging/generate_rules.py` |
-| `scripts/tag_papers_with_llm.py` | `ad_lit_pipeline/steps/tagging/tag_papers.py` |
-| `scripts/audit_extraction.py` | `ad_lit_pipeline/steps/tagging/audit.py` |
-| `scripts/export_mantis_ready.py` | `ad_lit_pipeline/steps/export/mantis.py` |
-| `scripts/generate_topic_contract.py` | `ad_lit_pipeline/steps/collection/generate_topic_contract.py` |
-| `scripts/fetch_review_overviews.py` | `ad_lit_pipeline/steps/collection/fetch_review_overviews.py` |
-| `scripts/prepare_review_full_text.py` | `ad_lit_pipeline/steps/collection/prepare_review_full_text.py` |
-| `scripts/refine_topic_contract.py` | `ad_lit_pipeline/steps/collection/refine_topic_contract.py` |
-| `scripts/plan_library_search.py` | `ad_lit_pipeline/steps/collection/plan_search.py` |
-| `scripts/fetch_openalex_candidates.py` | `ad_lit_pipeline/steps/collection/fetch_candidates.py` and `ad_lit_pipeline/providers/openalex.py` |
-| `scripts/deduplicate_candidates.py` | `ad_lit_pipeline/steps/collection/deduplicate.py` |
-| `scripts/screen_title_relevance.py` | `ad_lit_pipeline/steps/screening/title_relevance.py` |
-| `scripts/screen_candidates_with_llm.py` | `ad_lit_pipeline/steps/screening/llm_candidate_screening.py` |
-| `scripts/export_screened_candidates_to_csv.py` | `ad_lit_pipeline/steps/collection/export_included.py` |
+| `normalize_metadata` | `<collection>_papers_normalized.csv` |
+| `screen_scope` | `<collection>_scope_screened.csv` |
+| `prepare_full_text` | Full-text CSV and manifest |
+| `normalize_tagging_config` | Normalized tagging configuration |
+| `generate_tagging_rules` | Tagging rules JSON |
+| `tag_papers` | `<collection>_extraction_filled.csv` |
+| `audit_extraction` | Extraction audit CSV |
+| `export_mantis` | Legacy `<collection>_mantis_ready.csv` |
 
-## Topic Contract
+These artifacts are written under `data/processed/` except for imported raw
+inputs. The legacy Mantis exporter is intentionally compatibility-preserving;
+its frozen limitations are recorded by the Step 1.1 fixture.
 
-Topic contracts in `configs/topics/` or `data/collection_plans/` are the source
-of truth for each pipeline run. Main tagging runs require an explicit
-`--topic-contract`; collection runs can generate and refine one automatically
-when no contract is supplied. A contract includes:
+Optional main-workflow switches are:
 
-- research topic title and description
-- include, exclude, and boundary scope criteria
-- rule-based include and exclude terms
-- candidate-screening policy
-- tagging fallback policy
-- allowed category values
-- enabled collection providers
+| Option | Effect |
+| --- | --- |
+| `--calibrate-topic-contract` | Refine tagging categories from selected included primary-paper full texts before rule generation |
+| `--review-tagging-categories` | Pause for human editing and approval of category IDs and values |
+| `--export-knowledge` | Insert preliminary source and evidence-excerpt exports after full-text preparation |
+| `--extract-knowledge-findings` | Insert both preliminary exports and LLM finding extraction |
+| `--extract-review-labels` | Produce the first portion of the review-only branch |
+| `--generate-review` | Run the complete literature-review branch |
+| `--review-review-label-values` | Pause for human approval of auto-discovered review values |
 
-Tagging categories are topic-specific knowledge dimensions. Generated contracts
-start from example placeholders, then the review-seeded refinement step replaces
-or improves them from extracted review full-text evidence only. New
-generated/refined contracts must contain at least six concrete knowledge
-categories and reject generic meta-categories. Categories and values are
-inferred from review full texts, then calibrated against selected primary-paper
-full texts, and should use `topic_structure.main_topics` as scaffolding for
-topic-specific dimensions. Details that apply only under one parent value
-should be represented as conditional categories with `applies_when`.
-Generated values should avoid `unclear`, `not_reported`, `mixed_or_unclear`,
-and `other`; missing or inapplicable details should usually be represented by
-optional or conditional categories instead. The audit step checks observed
-tag distributions after paper tagging: unused values and highly dominant values
-are reported as warnings. The quality checks also warn about boilerplate labels
-such as `study_design` and `population_group` that should be rewritten as
-topic-specific review-derived dimensions. Category values do not expand
-rule-based screening terms.
+`--review-tagging-categories` and `--review-review-label-values` record a paused
+run. After editing the generated YAML and setting `status: approved`, resume the
+same run or continue from the paused step.
 
-The legacy `configs/early_detection_tagging_config.yaml` is still supported by
-the direct normalization step, but orchestrated runs require `--topic-contract`.
+## Automated Collection Workflow
 
-## LLM Calls And Tracing
-
-LLM steps use the shared client in `ad_lit_pipeline/llm/client.py` and schemas
-from `ad_lit_pipeline/llm/schemas.py`.
-
-Prompt text lives in:
-
-```text
-ad_lit_pipeline/prompts/templates/
-```
-
-When a trace directory is provided, or when an orchestrated run uses the default
-`runs/<run_id>/traces` directory, each LLM call writes:
-
-```text
-*_system.txt
-*_prompt.md
-*_schema.json
-*_raw_response.json
-*_parsed.json
-*_metadata.json
-```
-
-The run manifest records these trace paths.
-
-OpenAI calls are bounded by `OPENAI_TIMEOUT_SECONDS` and
-`OPENAI_MAX_RETRIES`. The defaults are 45 seconds and zero SDK retries, so one
-slow title-screening or paper-tagging request cannot stall an entire run for many
-minutes. These values can be overridden in `.env` or the shell for specific
-tests.
-
-## Manifests And Resumability
-
-Each orchestrated run creates:
-
-```text
-runs/<run_id>/manifest.json
-```
-
-The manifest records:
-
-- run id, collection, pipeline name, model, and topic contract metadata
-- step status
-- input and output artifact paths, existence, and hashes
-- row counts
-- warnings
-- trace paths
-- failed step, when applicable
-
-`--resume --run-id <run_id>` resumes from the failed step recorded in the
-manifest. `--only-step`, `--from-step`, and `--dry-run` are implemented by
-`ad_lit_pipeline/core/runner.py`.
-
-## Current Limits
-
-- OpenAlex is the only implemented provider in `fetch_candidates`.
-- The Mantis export step requires at least one tagged extraction row.
-- Legacy schema files remain separate from topic contracts and can drift.
-- Generated files under `data/processed/`, `data/raw/`, and `runs/` should be
-  reviewed before committing.
-
-## Tests
-
-The test suite covers importers, non-LLM steps, topic-contract loading, prompt
-rendering, LLM tracing with fake clients, provider behavior, and CLI runner
-behavior.
-
-Run:
+Entry point with an existing contract:
 
 ```bash
-pytest
+python scripts/run_collection.py run \
+  --collection example \
+  --topic-contract configs/topics/early_detection_ad.yaml \
+  --max-results 50
 ```
+
+The `collection` pipeline runs:
+
+```text
+plan_search
+-> fetch_candidates
+-> deduplicate_candidates
+-> screen_title_relevance
+-> verify_full_text_availability
+-> backfill_candidates
+-> export_included_candidates
+-> materialize_corpus_snapshot
+```
+
+OpenAlex is the only implemented candidate provider. The planner receives only
+providers enabled by the topic contract, and unsupported providers fail before
+network access. Candidate records preserve provider identity, exact publication
+date, executed query/group/tier/rank, redacted provider URL, retrieval
+timestamps, duplicate observations, selected raw-record fields, canonical
+observation/raw hashes, raw JSONL location/hash, and screening provenance.
+Exact inclusive publication windows are applied to provider requests, checked
+again on returned candidates, carried into the canonical CSV, and enforced
+again during scope screening. Tiered query groups stop when the requested
+unique-candidate target is reached; additional planned query text is not
+evidence that every query ran or that corpus coverage is adequate.
+
+Every new OpenAlex response body is captured at the transport boundary before
+JSON interpretation and archived before candidate conversion. Exact bytes use
+a provider/content-addressed path, while an atomic
+provider-neutral JSONL index records the canonical credential-free request,
+query/group/tier/page context, response hash and URI, retrieval time, provider
+item update range, and exact result order. Each candidate links to its page,
+one-based result position, JSON pointer, and canonical raw-item hash. Initial
+fetch, contract-bootstrap review fetch, and backfill all verify page bytes and
+candidate links before success. Review-seed evidence uses a separate index so
+it cannot be confused with final-candidate retrieval evidence.
+
+After candidate export, `materialize_corpus_snapshot` resolves every selected
+candidate back to its exact archived page and item. It applies the shared
+source-type, work-identity, source-version, lifecycle, access, and inclusive
+cutoff policies, then emits `ScholarlyWork`, `SourceVersion`, `ProviderRecord`,
+`AccessLocation`, and one frozen `CorpusSnapshot`. Its companion integrity
+report records input hashes, exact observed query coverage, open-world
+limitations, record counts, collection validation, and the output hash. The
+record artifact is replaced atomically only after strict validation; a failed
+rebuild writes a failure report and preserves any older record artifact as
+explicitly stale.
+
+The generated artifacts are:
+
+- `data/processed/<collection>_corpus_records.jsonl`;
+- `data/processed/<collection>_corpus_snapshot_integrity.json`.
+
+New runs use `<collection>_provider_candidates*.jsonl`; old
+`<collection>_openalex_candidates*.jsonl` files remain readable for resume or
+artifact-based continuation and receive an explicit unavailable-evidence marker
+rather than fabricated provenance.
+
+When no contract is supplied, the preceding bootstrap pipeline is added:
+
+```text
+generate_topic_contract
+-> fetch_review_overviews
+-> prepare_review_full_text
+-> refine_topic_contract
+```
+
+Refinement uses only topic-relevant review or overview seeds with readable
+extracted full text. Seeds without usable text or enough topic evidence are
+excluded and counted. If no usable review full text remains, refinement raises
+a clear error rather than claiming a review-grounded ontology from metadata or
+abstracts.
+
+`--contract-bootstrap-only` stops after refinement so the generated YAML can be
+reviewed before collection. A supplied reviewed contract makes `--topic`
+optional because the research title and description come from the contract.
+
+The registered `collection_calibration` specification and its
+`--max-calibration-papers` compatibility parameter are not inserted into the
+current public collection workflow. Primary-paper calibration is available in
+the main tagging workflow through `--calibrate-topic-contract`.
+
+## Topic Contracts And Portable Policy
+
+Topic contracts define:
+
+- research title and description;
+- include, exclude, and boundary criteria;
+- rule-based screening terms;
+- title-candidate screening policy;
+- main topics, anchor, and secondary replacements;
+- tagging categories, values, dependencies, and fallback policy;
+- tagging evidence policy (`abstract_or_full_text` or `full_text_required`);
+- enabled providers, exact optional publication window, and search queries;
+- corpus semantics for cutoff resolution, earliest public availability,
+  languages, access, source/version retention, identity, missing dates, and
+  explicitly identified negative or null results; and
+- optional explicit topic-policy profile selection.
+
+`ad_lit_pipeline/corpus/` owns these provider-neutral Phase 2.1 semantics. The
+corpus specification is strict and versioned as `1.0.0`. An omitted
+specification resolves to the same compatibility default as a newly generated
+contract, so legacy contracts do not acquire different hidden behavior.
+Explicit `as_of` dates are inclusive; otherwise the run's UTC collection-start
+date is frozen as the cutoff. Temporal eligibility uses the earliest
+defensible public-availability date, never silently substitutes publication
+date, and routes missing, estimated, or cutoff-straddling dates to review and
+exclusion.
+
+Shared classification distinguishes canonical work kinds from provider labels
+and records resolved, provisional, or needs-review evidence. Identity order is
+DOI, stable provider identifier, then a normalized metadata fingerprint. The
+fingerprint is never treated as resolved identity. Source versions, including
+preprints, accepted manuscripts, versions of record, corrections, and
+retractions, remain distinct and are linked only when explicit evidence exists.
+These rules are also included, with a semantic hash, in run provenance.
+
+Generated and refined contracts contain a `topic_policy` reference with the
+policy ID, semantic version, semantic SHA-256, and selected profile IDs. The
+strict policy in `configs/policies/topic_structure_v1.yaml` is shared by
+generation, repair, refinement, validation, prompt rendering, rule screening,
+and review-overview filtering. Existing hand-written contracts without the
+reference remain supported by the default policy.
+
+The checked-in policy contains Alzheimer and computational-method profiles, but
+Python code is domain-generic. A new domain can add a profile, surface forms,
+family relations, exclusions, fallbacks, and anchor preference in policy data.
+
+## Evidence-Linked Review Workflow
+
+The complete optional review pipeline is:
+
+```text
+normalize_review_config
+-> filter_review_papers
+-> extract_review_labels
+-> normalize_review_label_values
+-> [optional review_review_label_values]
+-> validate_review_labels
+-> build_review_coverage_report
+-> build_review_evidence_map
+-> synthesize_review_sections
+-> edit_review_sections
+-> assemble_literature_review
+```
+
+It produces review eligibility, label, quality, coverage, evidence-map, section,
+Markdown, and LaTeX artifacts under `data/processed/`. Review generation is an
+implemented narrative workflow, not the obsolete placeholder that previously
+existed in `steps/review/scaffold.py`.
+
+The review evidence map and narrative citations do not silently become strict
+v1 `Claim`, `ClaimEvidence`, or graph records. That conversion requires later
+scientific-record steps and validation.
+
+## Preliminary Knowledge Exports
+
+`--export-knowledge` writes:
+
+```text
+data/processed/<collection>_sources.jsonl
+data/processed/<collection>_evidence_excerpts.jsonl
+```
+
+`--extract-knowledge-findings` implies those steps and additionally writes:
+
+```text
+data/processed/<collection>_findings.jsonl
+```
+
+These artifacts use contracts under `ad_lit_pipeline/knowledge/`. They preserve
+useful source and excerpt references, but they predate the strict v1 record
+model. They do not establish verified claims, corpus snapshots, graph
+relationships, gap candidates, counterretrieval results, or calibrated scores.
+They must not be supplied to the versioned Mantis projector as if they were a
+complete v1 record collection.
+
+Conventional paths for preliminary relationships, gaps, synthesis claims, and
+field summaries exist in the artifact helper, but no current registered
+production steps write them.
+
+## Scientific Validity And Versioned Records
+
+`ad_lit_pipeline/validity/` and
+`configs/policies/scientific_validity_v1.yaml` define qualified open-world gap
+language, evidence outcomes, lifecycle transitions, mandatory human review,
+and separation of extraction confidence, scientific confidence, evidence
+quality, coverage, uncertainty, novelty, importance, and feasibility.
+
+`ad_lit_pipeline/records/` implements 20 strict v1 record types with immutable
+dataclasses, deterministic typed IDs, JSON/JSONL codecs, exact dates, policy
+references, lineage, and Mantis record contracts. Collection integrity checks
+validate references, snapshot closure, chronology, ownership, artifact hashes,
+and passage offsets. The migration registry is deliberately empty because
+`1.0.0` is the only implemented schema.
+
+These layers are real and tested, but the current main pipeline does not emit a
+complete v1 record collection. Passing record validation demonstrates contract
+consistency, not that the current literature corpus has been scientifically
+verified.
+
+## Mantis Boundaries
+
+There are two separate Mantis paths:
+
+1. `export_mantis` is the frozen legacy paper/tag CSV at the end of the default
+   main pipeline.
+2. `export_mantis_views` consumes a complete v1 record JSONL and deterministically
+   produces paper, verified-claim, and verified-open-gap CSVs plus compiled
+   profiles and audit reports.
+
+The second path is offline. `publish_mantis_views` is a separate explicit action
+that refuses to run without `--publish`, targets exactly external
+`mantisai-cli==3.7.0`, creates private inactive maps, and writes sanitized
+immutable receipts. It has fake-runner tests but has not been exercised against
+a user account.
+
+Mantis positions, clusters, summaries, and interpretations are not evidence.
+`MantisInterpretation` is a non-evidentiary pre-candidate contract. Automated
+interpretation capture and expert writeback do not yet exist; a Mantis-derived
+hypothesis must acquire an independent deterministic signal and pass the same
+counterretrieval and verification gates as any other candidate.
+
+## Full Text, LLM Calls, And Traces
+
+Full-text preparation prefers configured local paths, then supported open-text
+locations including provider metadata, DOI resolution, Unpaywall, Europe PMC,
+and CORE when configured. Extracted text is cached outside the repository using
+`--full-text-cache-dir` or `AD_LIT_FULL_TEXT_CACHE`; project artifacts retain
+manifests and path metadata. Availability locators remain separate from the
+resolved extracted document. Remote extraction must match a DOI in front matter
+or the compact ordered paper title before it becomes usable tagging evidence.
+Extraction contract `3.0.0` retains exact downloaded or trusted-local source
+bytes separately from the normalized UTF-8 representation. The manifest records
+both hashes, source byte size/media type/retrieval time, the identity decision,
+extraction engine and version, a content-addressed structure artifact, page
+metadata when independently resolvable, resolved URL/source/license, and any
+failure. Historical remote text without exact source bytes is fetched again.
+Text cleanup preserves line and section boundaries for evidence selection.
+
+The Phase 2.4 direct materializer validates the frozen corpus, full-text
+identity, source bytes, representation, and structure before emitting strict
+`Document` and bounded document-order `Passage` records. General integrity
+validation independently checks source/text/structure hashes, exact character
+occurrence, and verified page-coordinate agreement. Failed source versions are
+written as audit issues without invented records. Default registry, resume, UI,
+and Mantis-paper integration remain Phase 2.5 work.
+
+Tagging uses an explicit state machine. A row is `tagged` only from a usable
+abstract, trusted local text, or identity-verified remote extracted full text;
+insufficient rows are
+`skipped_insufficient_evidence`, and per-paper model/validation failures are
+`failed`. Both non-tagged states preserve the input row and error while clearing
+claims and category values. Audit checks state consistency. The legacy Mantis
+export accepts only evidence-backed `tagged` rows and fails clearly when none
+are eligible.
+
+LLM calls route through `ad_lit_pipeline/llm/client.py`. Prompts live under
+`ad_lit_pipeline/prompts/templates/`, response schemas are strict, and parsed
+JSON receives semantic validation. Normal tests use fake clients.
+
+Traced calls write exact system text, prompts, schemas, raw responses, parsed
+JSON, and metadata under `runs/<run_id>/traces/<attempt_id>/`. Trace metadata and manifests
+record artifact hashes, safe request parameters, returned model metadata, and
+usage when available. Duplicate trace IDs cannot overwrite existing artifacts.
+Credentials are not stored.
+
+## Manifests, Resume, And UI
+
+Every orchestrated run writes `runs/<run_id>/manifest.json`. Manifest schema
+`1.0.0` records sanitized Git state, environment, invocation, selected steps,
+contracts, providers, prompts, response schemas, artifacts, traces, warnings,
+errors, and append-only attempts. Collection step results carry the emitted
+snapshot ID and record/integrity artifact references. The manifest's initial
+run-provenance block does not rewrite itself after the freeze; integrating the
+snapshot as a first-class resumed main-pipeline input remains Phase 2.5 work.
+
+An existing run ID is immutable unless `--resume` is explicit.
+`--resume --run-id <run_id>` appends a compatible attempt, preserves prior
+history, marks abruptly terminated attempts as interrupted, and resumes the
+originally selected sequence at its first incomplete step. Changed pipeline
+structure, effective options, model, topic contract, or topic-structure policy
+is rejected before execution. `--only-step`, `--from-step`, and `--dry-run` use
+the shared runner.
+
+The local UI starts with:
+
+```bash
+.venv/bin/python scripts/run_ui.py
+```
+
+It wraps the existing CLIs, uses the same registry, and can generate or edit
+topic contracts, start runs, tail logs, and inspect manifests. It does not add
+scientific semantics beyond the underlying steps.
+
+## Current Limitations
+
+- OpenAlex is the only implemented collection provider.
+- Clinical-trial registries, datasets, protocols, patents, and dedicated
+  negative-result sources are not integrated.
+- The collection workflow emits a canonical cutoff-bound snapshot and the first
+  five production record types. The main tagging workflow does not consume that
+  snapshot yet.
+- Work/version identity, source-type, negative/null, and inclusive `as_of`
+  semantics are frozen in provider-neutral policy and consumed by collection
+  snapshot materialization.
+- Immutable content-addressed raw response pages and complete provider page
+  logs are implemented for OpenAlex, including review-seed and backfill calls.
+  They are resolved into production `ProviderRecord` objects only for selected
+  corpus members during the final collection step.
+- Strict `Document` and `Passage` records can be emitted by the direct Phase 2.4
+  materializer. They are not yet part of the default registry-owned main
+  workflow, so Phase 2.5 must complete the snapshot handoff and artifact chain.
+- Preliminary findings are not verified v1 claims.
+- Evidence-graph, gap generation, counterretrieval, verification, scoring, and
+  expert-judgment workflows are not production steps yet.
+- The main pipeline cannot directly feed the versioned Mantis projector because
+  it does not produce a complete v1 record JSONL.
+- Live Mantis publication, incremental update behavior, Connection fields,
+  interpretation capture, and writeback remain unvalidated or unimplemented.
+- Legacy schemas and topic contracts can still drift.
+- Generated `data/raw/`, `data/processed/`, and `runs/` artifacts require review
+  before committing.
+
+## Verification
+
+The GitHub Actions workflow is configured to run the complete offline suite on
+Python 3.11 and 3.12 with different fixed hash seeds. The stable aggregate job
+is `foundation-gate`. Dependency installation may use the network; test
+execution blocks outbound TCP connections and receives no external-service
+secrets. Hosted Python 3.11/3.12 verification passed on 2026-08-31, and the
+stable gate is required on `dev061602` through repository ruleset 21912442. See
+[continuous integration](continuous_integration.md).
+
+The post-live hardening recorded on 2026-09-01 passes 641 offline tests locally
+on Python 3.12.2 under both fixed hash seeds. Implementation commit `7285aec`
+is pushed, and hosted Foundation CI run 33512451821 passes Python 3.11, Python
+3.12, and the stable `foundation-gate` for these corrections. Phase 2.1 adds 31
+focused corpus-semantic tests. Phase 2.2 adds exact response-page capture,
+candidate-link, redaction, backfill, and tamper tests; the complete offline
+suite passed 684 tests. Phase 2.3 adds canonical corpus materialization,
+strict-freeze, stable-ID, provenance-status, and stale-artifact tests; the
+complete offline suite passes 692 tests under the normal environment and both
+CI hash seeds. Phase 2.4 adds 14 exact-source, document/passage, cache,
+identity, locator, integrity, and failure regressions; the complete offline suite
+passes 706 tests under the normal environment and both CI hash seeds.
+
+Run focused structural and documentation checks with:
+
+```bash
+.venv/bin/python -m pytest -q \
+  tests/test_documentation_contract.py \
+  tests/test_pipeline_registry.py \
+  tests/test_cli_runner.py
+```
+
+Run the complete offline suite with:
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+Normal tests must not contact OpenAI, providers, full-text services, or Mantis.
+Historic per-step test totals and acceptance records live in the
+[living implementation plan](gap_discovery_implementation_plan.md), not here,
+so this technical description does not preserve stale milestone counts.

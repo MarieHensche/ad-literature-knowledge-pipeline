@@ -290,6 +290,7 @@ candidate_screening:
     learning, learners, instructors, or educational impact
 
 tagging:
+  evidence_policy: abstract_or_full_text
   fallback_policy:
     prefer_unclear_when_allowed: true
     prefer_mixed_or_unclear_when_unclear_missing: true
@@ -385,3 +386,49 @@ collection:
   preferred_provider: openalex
   max_results_default: 25
   exclude_openalex_review_type: false
+  publication_window: null
+  corpus_specification:
+    schema_version: "1.0.0"
+    as_of: null
+    as_of_resolution: collection_start_date
+    availability_date_rule: earliest_public_availability
+    allowed_source_types:
+      - research_article
+      - review
+      - protocol
+      - clinical_trial
+      - dataset
+      - patent
+      - thesis
+      - book
+      - book_chapter
+      - conference_output
+      - other
+    allowed_languages: []
+    include_unknown_language: true
+    access_policy: metadata_or_full_text
+    version_policy:
+      mode: retain_all_identified
+      retained_version_kinds:
+        - preprint
+        - submitted_manuscript
+        - accepted_manuscript
+        - version_of_record
+        - corrected_version
+        - retraction_notice
+        - protocol_version
+        - registry_version
+        - dataset_release
+        - patent_publication
+        - other
+      preferred_version_kind: version_of_record
+      link_versions_only_with_evidence: true
+    identity_policy:
+      ordered_bases:
+        - doi
+        - provider_id
+        - metadata_fingerprint
+      metadata_fingerprint_status: needs_review
+      ambiguous_identity_policy: review
+    unknown_date_policy: review_and_exclude
+    negative_null_result_policy: include_when_identified

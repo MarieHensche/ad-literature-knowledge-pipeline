@@ -1,0 +1,663 @@
+schema_version: "1.0.0"
+policy_id: topic_structure
+policy_version: "1.0.0"
+scope: cross_domain
+
+structural_vocabulary:
+  method_internal_subtype_terms:
+    - A.I.
+    - AI
+    - algorithm
+    - algorithm development
+    - algorithms
+    - artificial intelligence
+    - bioinformatics
+    - classification
+    - computational biology
+    - computational genomics
+    - computational modeling
+    - deep learning
+    - ensemble learning
+    - machine learning
+    - mathematical modeling
+    - ML
+    - modeling
+    - network analysis
+    - predictive modeling
+    - statistical modeling
+    - supervised learning
+    - systems biology
+    - unsupervised learning
+  method_topic_bare_domain_terms:
+    - amyloid plaques
+    - biomarker
+    - biomarkers
+    - cancer
+    - cognitive decline
+    - dementia
+    - gene expression
+    - genomics
+    - parkinson
+    - Parkinson's disease
+    - parkinsons disease
+    - patient cohort
+    - patient cohorts
+    - tau tangles
+  generic_secondary_bucket_ids:
+    - adjacent diseases
+    - dementia types
+    - disease types
+    - neurodegenerative diseases
+    - neurodegenerative disorders
+    - other diseases
+    - related diseases
+  generic_secondary_terms:
+    - cognitive impairments
+    - dementia types
+    - disease types
+    - diseases
+    - neurodegenerative diseases
+    - neurodegenerative disorders
+    - other diseases
+    - related diseases
+  review_topic_stopwords:
+    - abstract
+    - academic
+    - adaptive
+    - affects
+    - algorithmic
+    - analyses
+    - analysis
+    - analyzing
+    - application
+    - applications
+    - approach
+    - approaches
+    - aspect
+    - aspects
+    - assess
+    - assessing
+    - artificial
+    - automated
+    - based
+    - borderline
+    - chatbot
+    - chatbots
+    - chatgpt
+    - clearly
+    - deep
+    - directly
+    - discuss
+    - effect
+    - effects
+    - effectiveness
+    - evidence
+    - empirical
+    - exclude
+    - explore
+    - exploring
+    - focused
+    - focus
+    - generative
+    - impact
+    - impacts
+    - include
+    - implementation
+    - indicate
+    - indicates
+    - investigate
+    - investigates
+    - intelligent
+    - intelligence
+    - language
+    - large
+    - learning
+    - literature
+    - llm
+    - machine
+    - method
+    - methodologies
+    - methods
+    - meta
+    - model
+    - models
+    - outcome
+    - outcomes
+    - paper
+    - papers
+    - performance
+    - platform
+    - platforms
+    - processes
+    - only
+    - related
+    - relevant
+    - research
+    - role
+    - review
+    - reviews
+    - smart
+    - study
+    - studies
+    - studying
+    - subtopics
+    - summarizing
+    - support
+    - supported
+    - supporting
+    - systematic
+    - system
+    - systems
+    - technology
+    - technologies
+    - they
+    - title
+    - tool
+    - tools
+    - unrelated
+  screening_abbreviations:
+    artificial intelligence: [AI]
+    machine learning: [ML]
+    deep learning: [DL]
+    natural language processing: [NLP]
+    large language model: [LLM]
+    large language models: [LLM, LLMs]
+    electric vehicle: [EV]
+    electric vehicles: [EV, EVs]
+    greenhouse gas: [GHG]
+    greenhouse gases: [GHG, GHGs]
+    particulate matter: [PM]
+    nitrogen oxide: [NOx]
+    nitrogen oxides: [NOx]
+    grade point average: [GPA]
+    urban heat island: [UHI]
+    urban heat islands: [UHI]
+    internet of things: [IoT]
+    virtual reality: [VR]
+    augmented reality: [AR]
+    randomized controlled trial: [RCT]
+  topic_word_equivalents:
+    educational: [education]
+    concrete: [cement]
+    cement: [concrete]
+
+quality_rules:
+  main_topic_min_terms: 4
+  term_sets:
+    generic_topic_structure_terms:
+      - area
+      - areas
+      - context
+      - contexts
+      - domain
+      - domains
+      - education
+      - educational context
+      - educational contexts
+      - educational setting
+      - educational settings
+      - field
+      - fields
+      - learning
+      - learning environment
+      - learning environments
+      - method
+      - methods
+      - outcome
+      - outcomes
+      - performance metric
+      - performance metrics
+      - population
+      - populations
+      - research
+      - setting
+      - settings
+      - student outcomes
+      - students
+      - studies
+      - study
+      - digital technology
+      - digital technologies
+      - edtech
+      - educational technology
+      - educational technologies
+      - technology
+      - technologies
+      - tool
+      - tools
+      - topic
+      - topics
+    broad_umbrella_topic_structure_terms:
+      - analysis
+      - approach
+      - condition
+      - data analysis
+      - disease
+      - disorder
+      - method
+      - neurological disorder
+      - research
+      - science
+      - technology
+    title_field_component_words:
+      - classroom
+      - classrooms
+      - community
+      - communities
+      - context
+      - contexts
+      - environment
+      - environments
+      - hospital
+      - hospitals
+      - patient
+      - patients
+      - population
+      - populations
+      - school
+      - schools
+      - setting
+      - settings
+      - workplace
+      - workplaces
+    title_or_abstract_exception_topic_words:
+      - adoption
+      - calibration
+      - deployment
+      - evaluation
+      - evidence
+      - explanation
+      - explanatory
+      - feasibility
+      - implementation
+      - integration
+      - mechanism
+      - mechanisms
+      - mechanistic
+      - mediation
+      - mediator
+      - mediators
+      - metric
+      - metrics
+      - moderation
+      - moderator
+      - moderators
+      - pathway
+      - pathways
+      - process
+      - processes
+      - protocol
+      - protocols
+      - signal
+      - signals
+      - threshold
+      - thresholds
+      - usability
+      - validation
+      - workflow
+      - workflows
+    broad_umbrella_topic_words:
+      - ability
+      - abilities
+      - behavior
+      - behaviors
+      - cognition
+      - cognitive
+      - effect
+      - effects
+      - function
+      - functions
+      - impact
+      - impacts
+      - outcome
+      - outcomes
+      - performance
+    method_topic_words:
+      - analysis
+      - approach
+      - approaches
+      - computational
+      - method
+      - methods
+      - model
+      - modeling
+      - modelling
+      - models
+      - technique
+      - techniques
+    broad_criterion_topic_words:
+      - ecological
+      - eco
+      - environment
+      - environmental
+      - green
+      - renewable
+      - sustainability
+      - sustainable
+    generic_application_topic_words:
+      - advanced
+      - innovation
+      - innovations
+      - innovative
+      - novel
+      - science
+      - technology
+    application_process_or_property_words:
+      - approach
+      - approaches
+      - efficiency
+      - efficient
+      - impact
+      - impacts
+      - improvement
+      - improvements
+      - innovation
+      - innovations
+      - integrity
+      - method
+      - methods
+      - performance
+      - practice
+      - practices
+      - process
+      - processes
+      - strategy
+      - strategies
+      - technique
+      - techniques
+    broad_material_family_words:
+      - biodegradable
+      - biomaterial
+      - biomaterials
+      - bioplastic
+      - bioplastics
+      - bio
+      - based
+      - hybrid
+      - material
+      - materials
+    replacement_role_words:
+      - alternative
+      - alternatives
+      - replace
+      - replacement
+      - replacements
+      - substitute
+      - substitutes
+      - substitution
+    replacement_comparator_topic_words:
+      - alternative
+      - alternatives
+      - application
+      - applications
+      - comparator
+      - concrete
+      - material
+      - materials
+      - replace
+      - replacement
+      - replacements
+      - substitute
+      - substitutes
+    replacement_comparator_coverage_words:
+      - alternative
+      - alternatives
+      - comparator
+      - concrete
+      - replace
+      - replacement
+      - replacements
+      - substitute
+      - substitutes
+    replacement_target_stopwords:
+      - a
+      - an
+      - and
+      - application
+      - applications
+      - area
+      - areas
+      - case
+      - cases
+      - certain
+      - for
+      - in
+      - of
+      - some
+      - the
+      - to
+      - use
+      - uses
+      - with
+    application_component_qualifiers:
+      - architectural
+      - building
+      - classroom
+      - clinical
+      - construction
+      - educational
+      - housing
+      - industrial
+      - medical
+      - school
+      - structural
+      - workplace
+    application_component_heads:
+      - application
+      - applications
+      - context
+      - contexts
+      - environment
+      - environments
+      - lesson
+      - lessons
+      - material
+      - materials
+      - product
+      - products
+      - practice
+      - practices
+      - setting
+      - settings
+    source_anchor_stopwords:
+      - a
+      - an
+      - and
+      - as
+      - be
+      - could
+      - for
+      - in
+      - of
+      - the
+      - to
+      - use
+      - used
+      - using
+      - with
+    source_anchor_modifiers:
+      - chronic
+      - environmental
+      - green
+      - renewable
+      - sustainable
+    explicit_pair_stopwords:
+      - a
+      - an
+      - and
+      - effect
+      - effects
+      - for
+      - impact
+      - impacts
+      - in
+      - its
+      - of
+      - "on"
+      - research
+      - the
+      - their
+      - to
+      - use
+      - using
+      - with
+
+surface_form_display:
+  a.i.: A.I.
+  ad: AD
+  ai: AI
+  eeg: EEG
+  ehr: EHR
+  ehrs: EHRs
+  llm: LLM
+  llms: LLMs
+  mci: MCI
+  ml: ML
+  mri: MRI
+  pet: PET
+
+surface_form_groups:
+  - group_id: artificial_intelligence
+    label: artificial intelligence
+    abbreviations: [AI, A.I.]
+    full_forms: [artificial intelligence]
+  - group_id: machine_learning
+    label: machine learning
+    abbreviations: [ML]
+    full_forms: [machine learning]
+  - group_id: large_language_models
+    label: large language models
+    abbreviations: [LLM, LLMs]
+    full_forms: [large language model, large language models]
+  - group_id: alzheimer_disease
+    label: Alzheimer's disease
+    abbreviations: [AD]
+    full_forms: [Alzheimer's disease, Alzheimer disease]
+  - group_id: mild_cognitive_impairment
+    label: mild cognitive impairment
+    abbreviations: [MCI]
+    full_forms: [mild cognitive impairment]
+  - group_id: electroencephalography
+    label: electroencephalography
+    abbreviations: [EEG]
+    full_forms: [electroencephalography]
+  - group_id: magnetic_resonance_imaging
+    label: magnetic resonance imaging
+    abbreviations: [MRI]
+    full_forms: [magnetic resonance imaging]
+  - group_id: positron_emission_tomography
+    label: positron emission tomography
+    abbreviations: [PET]
+    full_forms: [positron emission tomography]
+  - group_id: electronic_health_records
+    label: electronic health records
+    abbreviations: [EHR, EHRs]
+    full_forms: [electronic health record, electronic health records]
+
+secondary_groups:
+  experimental_methods:
+    label: Experimental methods
+    field: title
+    terms: [experimental methods, laboratory methods, clinical methods]
+    retrieval_terms: [experimental methods, laboratory methods, clinical methods]
+    matching_terms: [experimental methods, laboratory methods, clinical methods, wet lab methods]
+    excluded_terms: [clinical trial, clinical trials, data collection, experimental design, experimental designs]
+  parkinsons_disease:
+    label: Parkinson's disease
+    field: title
+    terms: [Parkinson's disease, Parkinson disease, PD]
+    retrieval_terms: [Parkinson's disease, Parkinson disease]
+    matching_terms: [Parkinson's disease, Parkinson disease, PD, parkinsonism]
+    excluded_terms: [movement disorder, movement disorders]
+  cancer:
+    label: Cancer
+    field: title
+    terms: [cancer, neoplasm, tumor]
+    retrieval_terms: [cancer, neoplasm, tumor]
+    matching_terms: [cancer, neoplasm, tumor, tumour]
+    excluded_terms: []
+
+profiles:
+  computational_methods:
+    label: Computational methods
+    kind: method
+    requires_method_topic: true
+    signal_terms: [AI, algorithm, algorithms, artificial intelligence, bioinformatics, computational, computational biology, machine learning, ML]
+    family_terms: []
+    excluded_terms: []
+    completion_terms:
+      - machine learning
+      - ML
+      - artificial intelligence
+      - AI
+      - deep learning
+      - supervised learning
+      - unsupervised learning
+      - statistical modeling
+      - network analysis
+      - systems biology
+      - predictive modeling
+    fallback_secondary_group_ids: [experimental_methods]
+    anchor_over_kinds: []
+    guidance:
+      - Keep computational submethods in the parent method topic rather than representing them as adjacent secondary topics.
+      - When a clean adjacent method direction is needed, use the configured experimental-methods group.
+      - Remove bare research objects from method-topic terms; method terms should name methods, submethods, models, or method-qualified applications.
+  alzheimer_disease:
+    label: Alzheimer's disease
+    kind: disease
+    requires_method_topic: false
+    signal_terms: [AD, Alzheimer, Alzheimer disease, Alzheimer's disease, Alzheimers disease]
+    family_terms:
+      - AD
+      - Alzheimer
+      - Alzheimer disease
+      - Alzheimer's disease
+      - Alzheimers disease
+      - cognitive decline
+      - dementia
+      - dementia-related cognitive impairment
+      - dementia related cognitive impairment
+      - MCI
+      - mild cognitive impairment
+      - preclinical AD
+      - preclinical Alzheimer disease
+      - preclinical Alzheimer's disease
+      - preclinical Alzheimers disease
+      - preclinical disease
+      - prodromal AD
+      - prodromal Alzheimer disease
+      - prodromal Alzheimer's disease
+      - prodromal Alzheimers disease
+      - prodromal disease
+    excluded_terms: [amyloid plaque, amyloid plaques, amyloid pathology, memory loss, neurodegeneration, tau pathology, tau tangles]
+    completion_terms:
+      - Alzheimer's disease
+      - Alzheimer disease
+      - AD
+      - dementia
+      - cognitive decline
+      - mild cognitive impairment
+      - MCI
+      - prodromal Alzheimer's disease
+      - preclinical Alzheimer's disease
+      - dementia-related cognitive impairment
+    fallback_secondary_group_ids: [parkinsons_disease, cancer]
+    anchor_over_kinds: [method]
+    guidance:
+      - Treat the disease family as the non-replaceable anchor when it is paired with a method topic.
+      - Keep configured disease-family names, abbreviations, stages, and impairment states in the parent disease topic.
+      - Remove configured pathology, mechanism, biomarker, symptom, and process terms from disease-family topic terms.
+      - Use the configured adjacent-disease groups when no clean secondary group remains.
+
+generic_guidance:
+  - Each main topic represents exactly one necessary conceptual area; do not merge relationships or whole questions into one topic.
+  - The anchor is the non-replaceable title-screening concept and must use the title field.
+  - For source/tool/intervention/application questions, anchor on the named source when papers about the destination without that source would be off-topic.
+  - Main-topic terms remain component-pure and include useful in-family names, variants, subtypes, abbreviations, and surface forms.
+  - Retrieval terms are high-signal, component-pure, and limited to twelve; matching terms may be broader.
+  - Secondary topics are adjacent sibling directions, never aliases, versions, variants, examples, or internal subtypes of the parent.
+  - Every secondary group names one concept and contains only that concept's aliases and surface forms.
+  - Parent and secondary term groups remain disjoint.
+  - Generated main-topic fields default to title; title_or_abstract is reserved for explanatory details, and abstract-only main topics are not allowed.
+  - Preserve explicit user vocabulary and use configured concept profiles for domain-specific completion, exclusions, anchoring, and fallbacks.

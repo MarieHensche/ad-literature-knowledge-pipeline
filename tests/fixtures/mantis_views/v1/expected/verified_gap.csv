@@ -1,0 +1,6 @@
+title,semantic,point_id,gap_type,gap_status,research_question,novelty_score,novelty_scale_min,novelty_scale_max,novelty_uncertainty,importance_score,importance_scale_min,importance_scale_max,importance_uncertainty,feasibility_score,feasibility_scale_min,feasibility_scale_max,feasibility_uncertainty,score_calibration_status,coverage_status,supporting_claim_ids,decisive_verification_attempt_id,verification_completed_at,counterevidence_ids,counterretrieval_ids,retrieval_query_log_ids,uncertainty_reasons,as_of,snapshot_id
+Independent older-adult validation,"The source authors request independent older-adult validation.
+
+A verified future-work passage supplies the signal.
+
+Does the synthetic classifier validate in an independent older-adult cohort?",gap_fafa7c9e57b0c458b9f493de7e7486abda0c9ee9b6a53db2fdf91c71b80ebfe9,explicit_author_stated,verified_open,Does the synthetic classifier validate in an independent older-adult cohort?,0.5,0.0,1.0,0.2,0.7,0.0,1.0,0.2,0.8,0.0,1.0,0.2,uncalibrated,adequate_for_rule,claim_e19625a90439a8eecfa55482ca6aaefddf5b6edc469fb7c05c531d6b0e47adf1,verify_7a25db81d9da8c4461bc91ed181102f6ecc205e8165c648baab1ccfdf0a66253,2026-08-27T08:40:00Z,,fixture-counterretrieval-001,fixture-query-log-001,An author request does not establish field-wide novelty.,2026-08-27,snap_dadb5447f6ae83448ba7a9b54ad774e3396c94f76d3a507695b26f718667ab23

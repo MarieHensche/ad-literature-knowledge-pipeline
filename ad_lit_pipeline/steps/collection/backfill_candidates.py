@@ -8,6 +8,15 @@ from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.csv_io import read_csv_rows, write_csv_rows
 from ad_lit_pipeline.io.json_io import read_json_object
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
+from ad_lit_pipeline.providers.base import candidate_provider_dates
+from ad_lit_pipeline.providers.evidence import (
+    ProviderEvidenceArchive,
+    candidate_evidence_errors,
+    read_provider_evidence_index,
+    sha256_bytes,
+    unavailable_provider_evidence,
+    verify_provider_evidence,
+)
 from ad_lit_pipeline.steps.collection import (
     deduplicate,
     fetch_candidates,
@@ -26,11 +35,15 @@ STEP = StepSpec(
         "deduped_candidates_jsonl",
         "candidate_screening_csv",
         "topic_contract_yaml",
+        "provider_evidence_index_jsonl",
+        "provider_response_pages_dir",
     ],
     outputs=[
         "candidates_jsonl",
         "deduped_candidates_jsonl",
         "candidate_screening_csv",
+        "provider_evidence_index_jsonl",
+        "provider_response_pages_dir",
     ],
     uses_llm=True,
     description=(
@@ -168,6 +181,7 @@ def fetch_additional_candidates(
     mailto: str | None,
     sleep_seconds: float,
     backfill_round: int,
+    evidence_archive: ProviderEvidenceArchive | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     provider_name = fetch_candidates.provider_name_from_plan(plan)
     provider = fetch_candidates.get_provider(provider_name)
@@ -175,7 +189,21 @@ def fetch_additional_candidates(
     resolved_per_page = fetch_candidates.resolve_per_page(provider, per_page)
 
     fetch_additional = getattr(provider, "fetch_additional_candidates", None)
-    if callable(fetch_additional):
+    evidence_supported = bool(
+        getattr(provider, "supports_immutable_provider_evidence", False)
+    )
+    if callable(fetch_additional) and evidence_supported:
+        additional = fetch_additional(
+            plan,
+            existing_candidates,
+            missing,
+            resolved_per_page,
+            mailto,
+            sleep_seconds,
+            backfill_round=backfill_round,
+            evidence_archive=evidence_archive,
+        )
+    elif callable(fetch_additional):
         additional = fetch_additional(
             plan,
             existing_candidates,
@@ -185,6 +213,21 @@ def fetch_additional_candidates(
             sleep_seconds,
             backfill_round=backfill_round,
         )
+    elif evidence_supported:
+        expanded = provider.fetch_candidates(
+            plan,
+            len(existing_candidates) + missing,
+            resolved_per_page,
+            mailto,
+            sleep_seconds,
+            evidence_archive=evidence_archive,
+        )
+        existing_keys = {dedupe_key(candidate) for candidate in existing_candidates}
+        additional = [
+            candidate
+            for candidate in expanded
+            if dedupe_key(candidate) not in existing_keys
+        ][:missing]
     else:
         existing_keys = {dedupe_key(candidate) for candidate in existing_candidates}
         expanded = provider.fetch_candidates(
@@ -200,6 +243,18 @@ def fetch_additional_candidates(
             if dedupe_key(candidate) not in existing_keys
         ][:missing]
 
+    for candidate in additional:
+        candidate.setdefault(
+            "provider_evidence",
+            unavailable_provider_evidence(
+                "provider_adapter_does_not_emit_immutable_evidence"
+            ),
+        )
+
+    returned_count = len(additional)
+    additional, publication_window_rejections = (
+        fetch_candidates.enforce_candidate_publication_window(additional, plan)
+    )
     diagnostics = getattr(provider, "last_fetch_diagnostics", {})
     if not isinstance(diagnostics, dict):
         diagnostics = {}
@@ -208,6 +263,25 @@ def fetch_additional_candidates(
         "provider_max_per_page",
         fetch_candidates.provider_max_per_page(provider),
     )
+    diagnostics["provider_candidates_returned_this_round"] = returned_count
+    diagnostics["publication_window_rejections"] = len(
+        publication_window_rejections
+    )
+    diagnostics["publication_window_rejection_records"] = (
+        publication_window_rejections
+    )
+    diagnostics["provider_evidence_supported"] = evidence_supported
+    if evidence_archive is not None:
+        link_errors = candidate_evidence_errors(
+            additional,
+            read_provider_evidence_index(evidence_archive.index_path),
+            require_archived=evidence_supported,
+        )
+        if link_errors:
+            raise ValueError(
+                "backfill_candidates candidate evidence links failed: "
+                + "; ".join(link_errors)
+            )
     return additional, diagnostics
 
 
@@ -221,6 +295,11 @@ def write_combined_candidates(
         if candidates_path.exists()
         else read_jsonl_objects(deduped_path)
     )
+    for candidate in raw_candidates:
+        candidate.setdefault(
+            "provider_evidence",
+            unavailable_provider_evidence("historical_candidate_artifact"),
+        )
     combined_raw = [*raw_candidates, *new_candidates]
     write_jsonl(candidates_path, combined_raw)
     combined_deduped = deduplicate.deduplicate(combined_raw)
@@ -326,7 +405,29 @@ def run(
     availability_checker: verify_full_text_availability.URLChecker = (
         verify_full_text_availability.check_location
     ),
+    provider_evidence_index_path: Path | None = None,
+    provider_response_pages_dir: Path | None = None,
 ) -> StepResult:
+    default_index, default_archive = fetch_candidates.default_provider_evidence_paths(
+        candidates_path
+    )
+    evidence_index = provider_evidence_index_path or default_index
+    evidence_archive_root = provider_response_pages_dir or default_archive
+    evidence_archive = ProviderEvidenceArchive(
+        evidence_archive_root,
+        evidence_index,
+        append_existing=True,
+    )
+    evidence_archive.flush()
+    initial_evidence_verification = verify_provider_evidence(
+        evidence_index,
+        evidence_archive_root,
+    )
+    if not initial_evidence_verification.valid:
+        raise ValueError(
+            "backfill_candidates existing provider evidence verification failed: "
+            + "; ".join(initial_evidence_verification.errors)
+        )
     screening_rows = read_csv_rows(screening_path)
     initial_included = included_count(screening_rows)
     initial_screened = len(screening_rows)
@@ -394,6 +495,8 @@ def run(
                 "candidates_jsonl": candidates_path,
                 "deduped_candidates_jsonl": deduped_path,
                 "candidate_screening_csv": screening_path,
+                "provider_evidence_index_jsonl": evidence_index,
+                "provider_response_pages_dir": evidence_archive_root,
             },
             row_counts={
                 "backfill_triggered": 0,
@@ -421,6 +524,8 @@ def run(
                 "candidates_jsonl": candidates_path,
                 "deduped_candidates_jsonl": deduped_path,
                 "candidate_screening_csv": screening_path,
+                "provider_evidence_index_jsonl": evidence_index,
+                "provider_response_pages_dir": evidence_archive_root,
             },
             row_counts={
                 "backfill_triggered": 0,
@@ -451,6 +556,7 @@ def run(
     total_backfill_manual_review = 0
     total_backfill_llm_errors = 0
     total_backfill_llm_error_auto_excluded = 0
+    total_publication_window_rejections = 0
     backfill_stop_reason = "target_reached"
 
     combined_availability_rows = initial_availability_rows
@@ -480,7 +586,18 @@ def run(
             mailto,
             sleep_seconds,
             backfill_rounds,
+            evidence_archive,
         )
+        round_publication_rejections = int(
+            diagnostics.get("publication_window_rejections") or 0
+        )
+        total_publication_window_rejections += round_publication_rejections
+        if round_publication_rejections:
+            warnings.append(
+                "Rejected backfill candidates that did not prove publication-window "
+                f"eligibility: round={backfill_rounds} "
+                f"rejected={round_publication_rejections}."
+            )
         new_candidates = unseen_candidates(new_candidates, existing_candidates)
         diagnostics["new_candidates_after_seen_filter"] = len(new_candidates)
         diagnostics_by_round.append(diagnostics)
@@ -603,6 +720,17 @@ def run(
             f"target={target} eligible={final_verified_full_text}."
         )
 
+    evidence_archive.flush()
+    evidence_verification = verify_provider_evidence(
+        evidence_index,
+        evidence_archive_root,
+    )
+    if not evidence_verification.valid:
+        raise ValueError(
+            "backfill_candidates provider evidence verification failed: "
+            + "; ".join(evidence_verification.errors)
+        )
+
     return StepResult(
         step_name=STEP.name,
         inputs={
@@ -610,6 +738,8 @@ def run(
             "candidates_jsonl": candidates_path,
             "deduped_candidates_jsonl": deduped_path,
             "candidate_screening_csv": screening_path,
+            "provider_evidence_index_jsonl": evidence_index,
+            "provider_response_pages_dir": evidence_archive_root,
             "topic_contract_yaml": topic_contract_path,
         },
         outputs={
@@ -634,6 +764,7 @@ def run(
             "backfill_manual_review_rows": total_backfill_manual_review,
             "backfill_llm_error_rows": total_backfill_llm_errors,
             "backfill_llm_error_auto_excluded": total_backfill_llm_error_auto_excluded,
+            "publication_window_rejections": total_publication_window_rejections,
             "initial_pending_llm_finalized": initial_finalize_counts.get(
                 "llm_screened",
                 0,
@@ -644,6 +775,10 @@ def run(
             if full_text_required
             else 0,
             "final_deduped_candidates": len(combined_deduped),
+            "provider_response_pages": evidence_verification.record_count,
+            "provider_response_archive_files": (
+                evidence_verification.archive_file_count
+            ),
         },
         trace_paths=trace_paths,
         warnings=warnings,
@@ -654,6 +789,15 @@ def run(
             "require_full_text_availability": full_text_required,
             "fetch_diagnostics_by_round": diagnostics_by_round,
             "fetch_diagnostics": diagnostics_by_round[-1] if diagnostics_by_round else {},
+            "provider_dates": candidate_provider_dates(combined_deduped),
+            "provider_evidence": {
+                "schema_version": "1.0.0",
+                "status": "verified",
+                "index_sha256": sha256_bytes(evidence_index.read_bytes()),
+                "page_records": evidence_verification.record_count,
+                "archive_files": evidence_verification.archive_file_count,
+                "response_bytes": evidence_verification.total_response_bytes,
+            },
         },
     )
 
@@ -676,6 +820,16 @@ def main() -> None:
     )
     parser.add_argument("--sleep", type=float, default=0.2, help="Provider delay.")
     parser.add_argument("--trace-dir", default=None, help="Optional trace directory.")
+    parser.add_argument(
+        "--provider-evidence-index",
+        default=None,
+        help="Provider-neutral immutable response-page index JSONL.",
+    )
+    parser.add_argument(
+        "--provider-response-pages-dir",
+        default=None,
+        help="Content-addressed raw provider response-page directory.",
+    )
     parser.add_argument("--availability", default=None, help="Full-text availability CSV.")
     parser.add_argument(
         "--require-full-text-availability",
@@ -712,6 +866,16 @@ def main() -> None:
         require_full_text_availability=args.require_full_text_availability,
         full_text_availability_timeout=args.full_text_availability_timeout,
         full_text_availability_workers=args.full_text_availability_workers,
+        provider_evidence_index_path=(
+            Path(args.provider_evidence_index)
+            if args.provider_evidence_index
+            else None
+        ),
+        provider_response_pages_dir=(
+            Path(args.provider_response_pages_dir)
+            if args.provider_response_pages_dir
+            else None
+        ),
     )
     print(f"Backfill triggered: {result.row_counts.get('backfill_triggered', 0)}")
     print(f"Final included rows: {result.row_counts.get('final_included_rows', 0)}")

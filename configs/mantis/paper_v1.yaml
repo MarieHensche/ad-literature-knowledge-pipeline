@@ -1,0 +1,29 @@
+template_schema_version: 1.0.0
+profile_version: 1.0.0
+compatibility_version: 1.0.0
+record_kind: paper
+source_contract: mantis_paper_projection
+source_schema_version: 1.0.0
+eligible_statuses: [active, corrected]
+point_id_source_path: point_id
+fields:
+  - {output_name: title, source_path: title, mantis_type: Title, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: semantic, source_path: semantic, mantis_type: Semantic, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: 0}
+  - {output_name: point_id, source_path: point_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: work_id, source_path: work_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: source_version_id, source_path: source_version_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: work_kind, source_path: work_kind, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: source_type, source_path: source_type, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: lifecycle_status, source_path: lifecycle_status, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: publication_date, source_path: publication_date, mantis_type: Date, required: false, null_policy: empty, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: availability_date, source_path: availability_date, mantis_type: Date, required: false, null_policy: empty, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: venue, source_path: venue, mantis_type: Categoric, required: false, null_policy: empty, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: identifiers, source_path: identifiers, mantis_type: Links, required: false, null_policy: empty, multivalue_policy: join, separator: " | ", semantic_order: null}
+  - {output_name: snapshot_id, source_path: snapshot_id, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: snapshot_as_of, source_path: snapshot_as_of, mantis_type: Date, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+  - {output_name: paper_scope, source_path: paper_scope, mantis_type: Categoric, required: true, null_policy: error, multivalue_policy: error, separator: null, semantic_order: null}
+semantic_text: {strategy: title_then_abstract, separator: "\n\n"}
+row_sort_paths: [point_id]
+csv_policy: {encoding: utf-8, line_terminator: "\n", null_sentinel: "", quote_minimal: true}
+supported_tool_versions: [mantisai-cli==3.7.0]
+connection_compatibility_verified: false

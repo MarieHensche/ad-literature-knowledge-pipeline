@@ -10,15 +10,31 @@ from typing import Any
 
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.jsonl_io import write_jsonl
-from ad_lit_pipeline.providers.base import CandidateProvider
+from ad_lit_pipeline.providers.base import CandidateProvider, candidate_provider_dates
+from ad_lit_pipeline.providers.evidence import (
+    ProviderEvidenceArchive,
+    candidate_evidence_errors,
+    read_provider_evidence_index,
+    sha256_bytes,
+    unavailable_provider_evidence,
+    verify_provider_evidence,
+)
 from ad_lit_pipeline.providers.openalex import OpenAlexProvider
 from ad_lit_pipeline.topics.contract import collection_from_contract, load_topic_contract
+from ad_lit_pipeline.topics.policy import (
+    default_topic_structure_policy,
+    policy_abbreviations,
+)
 
 
 STEP = StepSpec(
     name="fetch_review_overviews",
     inputs=["topic_contract_yaml"],
-    outputs=["review_overviews_jsonl"],
+    outputs=[
+        "review_overviews_jsonl",
+        "review_provider_evidence_index_jsonl",
+        "review_provider_response_pages_dir",
+    ],
     uses_llm=False,
     description="Fetch a review and overview candidate pool for contract tags.",
 )
@@ -71,9 +87,12 @@ def normalize_text(value: object) -> str:
 
 
 def meaningful_tokens(value: object) -> set[str]:
+    abbreviations = policy_abbreviations(default_topic_structure_policy())
     tokens = set()
     for token in normalize_text(value).split():
-        if token not in STOPWORDS and (len(token) >= 3 or token == "ai"):
+        if token not in STOPWORDS and (
+            len(token) >= 3 or token in abbreviations
+        ):
             tokens.add(token)
     return tokens
 
@@ -410,36 +429,110 @@ def run(
     mailto: str | None = None,
     sleep_seconds: float = 0.2,
     provider: CandidateProvider | None = None,
+    provider_evidence_index_path: Path | None = None,
+    provider_response_pages_dir: Path | None = None,
 ) -> StepResult:
     topic_contract = load_topic_contract(topic_contract_path)
     plan = build_review_plan(topic_contract, max_results)
     provider = provider or OpenAlexProvider()
     provider.validate_plan(plan)
     pool_size = review_pool_size(max_results)
-    candidates = provider.fetch_candidates(
-        plan=plan,
-        max_results=pool_size,
-        per_page=per_page,
-        mailto=mailto,
-        sleep_seconds=sleep_seconds,
+    default_index = output_path.with_name(
+        f"{output_path.stem}_provider_evidence_index.jsonl"
     )
+    default_archive = output_path.with_name(
+        f"{output_path.stem}_provider_response_pages"
+    )
+    evidence_index = provider_evidence_index_path or default_index
+    evidence_archive_root = provider_response_pages_dir or default_archive
+    evidence_archive = ProviderEvidenceArchive(
+        evidence_archive_root,
+        evidence_index,
+        append_existing=False,
+    )
+    evidence_archive.flush()
+    evidence_supported = bool(
+        getattr(provider, "supports_immutable_provider_evidence", False)
+    )
+    if evidence_supported:
+        candidates = provider.fetch_candidates(
+            plan=plan,
+            max_results=pool_size,
+            per_page=per_page,
+            mailto=mailto,
+            sleep_seconds=sleep_seconds,
+            evidence_archive=evidence_archive,
+        )
+    else:
+        candidates = provider.fetch_candidates(
+            plan=plan,
+            max_results=pool_size,
+            per_page=per_page,
+            mailto=mailto,
+            sleep_seconds=sleep_seconds,
+        )
+    for candidate in candidates:
+        candidate.setdefault(
+            "provider_evidence",
+            unavailable_provider_evidence(
+                "provider_adapter_does_not_emit_immutable_evidence"
+            ),
+        )
+    evidence_verification = verify_provider_evidence(
+        evidence_index,
+        evidence_archive_root,
+    )
+    if not evidence_verification.valid:
+        raise ValueError(
+            "fetch_review_overviews provider evidence verification failed: "
+            + "; ".join(evidence_verification.errors)
+        )
+    link_errors = candidate_evidence_errors(
+        candidates,
+        read_provider_evidence_index(evidence_index),
+        require_archived=evidence_supported,
+    )
+    if link_errors:
+        raise ValueError(
+            "fetch_review_overviews candidate evidence links failed: "
+            + "; ".join(link_errors)
+        )
     candidate_pool = annotate_review_candidate_pool(topic_contract, candidates)
 
     write_jsonl(output_path, candidate_pool)
     return StepResult(
         step_name=STEP.name,
         inputs={"topic_contract_yaml": topic_contract_path},
-        outputs={"review_overviews_jsonl": output_path},
+        outputs={
+            "review_overviews_jsonl": output_path,
+            "review_provider_evidence_index_jsonl": evidence_index,
+            "review_provider_response_pages_dir": evidence_archive_root,
+        },
         row_counts={
             "review_overviews": len(candidate_pool),
             "review_overview_candidates": len(candidates),
             "review_candidate_pool": len(candidate_pool),
+            "provider_response_pages": evidence_verification.record_count,
+            "provider_response_archive_files": (
+                evidence_verification.archive_file_count
+            ),
         },
         metadata={
             "provider": provider.name,
+            "provider_dates": candidate_provider_dates(candidates),
             "search_queries": len(plan["search_queries"]),
             "max_review_overviews": max_results,
             "review_pool_size": pool_size,
+            "provider_evidence": {
+                "schema_version": "1.0.0",
+                "status": "verified",
+                "adapter_supports_immutable_evidence": evidence_supported,
+                "index_sha256": sha256_bytes(evidence_index.read_bytes()),
+                "page_records": evidence_verification.record_count,
+                "archive_files": evidence_verification.archive_file_count,
+                "response_bytes": evidence_verification.total_response_bytes,
+                "candidate_links_verified": len(candidates),
+            },
         },
     )
 
@@ -465,6 +558,16 @@ def main() -> None:
     parser.add_argument("--per-page", type=int, default=10, help="Provider page size.")
     parser.add_argument("--mailto", default=None, help="Optional email for OpenAlex.")
     parser.add_argument("--sleep", type=float, default=0.2, help="Delay between pages.")
+    parser.add_argument(
+        "--provider-evidence-index",
+        default=None,
+        help="Immutable review-provider response-page index JSONL.",
+    )
+    parser.add_argument(
+        "--provider-response-pages-dir",
+        default=None,
+        help="Content-addressed review-provider response pages.",
+    )
     args = parser.parse_args()
 
     result = run(
@@ -474,6 +577,16 @@ def main() -> None:
         args.per_page,
         args.mailto,
         args.sleep,
+        provider_evidence_index_path=(
+            Path(args.provider_evidence_index)
+            if args.provider_evidence_index
+            else None
+        ),
+        provider_response_pages_dir=(
+            Path(args.provider_response_pages_dir)
+            if args.provider_response_pages_dir
+            else None
+        ),
     )
     print(
         "Fetched review/overview candidate pool: "

@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 DEFAULT_MAX_EVIDENCE_CHARS = 24_000
+MIN_USABLE_FULL_TEXT_CHARS = 1_000
 
 SECTION_PRIORITY = [
     "abstract",

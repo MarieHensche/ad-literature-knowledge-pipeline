@@ -1,0 +1,349 @@
+schema_version: "1.0.0"
+ontology_id: gap_ontology
+ontology_version: "1.0.0"
+scope: cross_domain
+
+classes:
+  - class_id: explicit_author_stated
+    label: Explicit author-stated gap
+    definition: >
+      A source author explicitly identifies a bounded limitation, unanswered
+      question, or future-work need. The statement is a signal to check, not
+      evidence that the wider literature lacks the requested work.
+    allowed_signal_types:
+      - explicit_future_work_passage
+    minimum_support:
+      - A passage-verified claim directly attributes the bounded statement to the source authors.
+      - The candidate scope does not extend beyond the population, method, outcome, or context named in the passage.
+      - The exact source version and its public-availability date are known for the declared cutoff.
+    refuting_evidence:
+      - The cited passage does not entail the extracted future-work or limitation statement.
+      - Eligible evidence publicly available by the cutoff already addresses the bounded question.
+      - The apparent statement is produced by quotation, section, translation, or attribution error.
+    resolution_evidence:
+      - Later eligible evidence directly addresses the bounded request under the declared resolution rule.
+      - A later source version explicitly withdraws or corrects the statement and the correction satisfies the resolution rule.
+    coverage_assumptions:
+      - The cited source passage and relevant surrounding context are accessible and verified.
+      - Synonym, indexing, citation, and adjacent-literature searches are adequate for the declared rule before promotion.
+    open_world_limitations:
+      - An author-stated need is not proof of field-wide novelty or global absence.
+      - Eligible, unpublished, differently indexed, or adjacent work may exist outside the corpus snapshot.
+    human_annotation_questions:
+      - Does the passage directly request or identify the proposed research rather than make a generic caveat?
+      - Is the candidate scoped no more broadly than the authors' statement?
+      - Was eligible work already available by the candidate cutoff?
+
+  - class_id: corpus_sparse
+    label: Corpus-sparse evidence cell
+    definition: >
+      A declared query or graph cell contains fewer deduplicated eligible study
+      units than a predeclared threshold in one named corpus snapshot.
+    allowed_signal_types:
+      - eligible_unit_count_below_threshold
+    minimum_support:
+      - The query or graph cell, counted unit, eligibility rules, comparison operator, and threshold were declared before evaluating the count.
+      - The observed count is computed from deduplicated records eligible by the inclusive cutoff.
+      - Retrieval coverage is assessed for all dimensions required by the count rule.
+    refuting_evidence:
+      - Corrected retrieval, eligibility, entity resolution, or deduplication produces a count that meets the threshold.
+      - Provider, access, language, or indexing failure explains the low observed count.
+    resolution_evidence:
+      - A later snapshot contains enough eligible deduplicated units to satisfy the same versioned count rule.
+      - An approved replacement threshold or counted-unit definition is satisfied in a new candidate version.
+    coverage_assumptions:
+      - Provider, source-type, date, language, query-variant, synonym, access, and deduplication coverage are recorded.
+      - Coverage is adequate for the particular sparsity rule, not assumed globally complete.
+    open_world_limitations:
+      - Sparse means sparse only in the named corpus snapshot and cell.
+      - A below-threshold count does not establish scientific importance, feasibility, or global nonexistence.
+    human_annotation_questions:
+      - Is the counted unit scientifically meaningful and consistently deduplicated?
+      - Was the threshold declared independently of the observed result?
+      - Could a missing source, language, synonym, or inaccessible record explain the count?
+
+  - class_id: missing_graph_relation
+    label: Missing typed graph relation
+    definition: >
+      A predeclared typed relation between resolved eligible entities is not
+      represented in the evidence graph for the named snapshot and cutoff.
+    allowed_signal_types:
+      - typed_graph_relation_absent
+    minimum_support:
+      - Both endpoint entities, the relation type, direction, and eligible evidence rule are explicitly defined.
+      - Alias, synonym, entity-resolution, and inverse-relation checks find no eligible relation instance.
+      - The graph build and source coverage are adequate for this relation rule.
+    refuting_evidence:
+      - Eligible evidence available by the cutoff entails the typed relation.
+      - Entity aliasing, relation direction, ontology mapping, or graph-ingestion error explains the missing edge.
+    resolution_evidence:
+      - Later passage-verified evidence establishes the typed relation under the same comparability rule.
+      - A corrected graph build restores an eligible relation and the original candidate is classified as an artifact.
+    coverage_assumptions:
+      - Relevant entity aliases, relation predicates, source types, and passages were included in graph construction.
+      - Missing edges mean not represented in this snapshot, not known to be absent from science.
+    open_world_limitations:
+      - Graph absence can reflect corpus, extraction, ontology, indexing, access, or entity-resolution limitations.
+      - A missing relation does not by itself establish novelty, importance, causality, or feasibility.
+    human_annotation_questions:
+      - Are both entities and the requested relation scientifically coherent and correctly resolved?
+      - Could an alias, inverse relation, or ontology mismatch explain the absent edge?
+      - Is graph and corpus coverage adequate for this exact relation rule?
+
+  - class_id: contradictory
+    label: Contradictory evidence
+    definition: >
+      Passage-verified claims make materially incompatible assertions after
+      satisfying a declared population, method, outcome, design, and temporal
+      comparability key.
+    allowed_signal_types:
+      - comparable_verified_claims_incompatible
+    minimum_support:
+      - At least two passage-verified claims support materially incompatible assertions.
+      - The claims satisfy every required element of the declared comparability key.
+      - Numeric values, directions, populations, outcomes, methods, designs, and source versions have been checked.
+    refuting_evidence:
+      - The claims concern non-comparable populations, outcomes, methods, designs, exposure windows, or estimands.
+      - Extraction, unit, direction, version, or quotation error creates the apparent incompatibility.
+    resolution_evidence:
+      - Later eligible evidence or synthesis satisfies a predeclared rule that explains or adjudicates the incompatibility.
+      - A correction removes one incompatible claim and the corrected evidence no longer meets the contradiction rule.
+    coverage_assumptions:
+      - Searches include evidence supporting each direction and terminology used by each literature cluster.
+      - Directness, study quality, precision, and consistency remain separate from extraction confidence.
+    open_world_limitations:
+      - Opposite directions in non-comparable contexts are not contradictions.
+      - A contradiction class does not identify which claim is scientifically true or imply misconduct.
+    human_annotation_questions:
+      - Are all material comparability-key elements genuinely aligned?
+      - Could units, outcome timing, adjustment sets, or design differences explain the apparent conflict?
+      - Does the proposed resolution rule answer the contradiction rather than merely add another study?
+
+  - class_id: underrepresented_population
+    label: Underrepresented population
+    definition: >
+      Eligible evidence for a declared population is below a predeclared count,
+      proportion, or comparator-based representation threshold in the named
+      corpus snapshot.
+    allowed_signal_types:
+      - population_representation_below_threshold
+    minimum_support:
+      - The target population, denominator or comparator, counted unit, and representation threshold are explicitly defined.
+      - Population labels and aliases are normalized without silently merging materially different groups.
+      - Eligible counts or proportions are reproducible from source-version evidence by the cutoff.
+    refuting_evidence:
+      - Corrected population mapping, denominator selection, or retrieval meets the declared threshold.
+      - The comparator is scientifically inappropriate or the target population cannot be identified reliably from available reporting.
+    resolution_evidence:
+      - Later eligible studies raise representation above the same versioned threshold.
+      - Later reporting supplies the missing stratified evidence and satisfies the declared representation rule.
+    coverage_assumptions:
+      - Population synonyms, geographic terms, demographic reporting, languages, and relevant source types are covered.
+      - Missing or unreported population attributes are counted separately from confirmed non-inclusion.
+    open_world_limitations:
+      - Underrepresentation is relative to the declared corpus, denominator, comparator, and threshold.
+      - Low representation does not automatically establish importance, ethical priority, or recruitment feasibility.
+    human_annotation_questions:
+      - Is the target population defined respectfully and at a scientifically meaningful granularity?
+      - Is the denominator or comparator appropriate for the research question?
+      - Could missing demographic reporting be mistaken for non-inclusion?
+
+  - class_id: method_transfer
+    label: Method-transfer gap
+    definition: >
+      A method has verified use in a source context but no eligible verified use
+      in a predeclared target context within the named snapshot and cutoff.
+    allowed_signal_types:
+      - source_context_method_present_target_context_absent
+    minimum_support:
+      - Passage-verified evidence establishes actual use of the method in the source context.
+      - The target context and acceptable transfer evidence are defined before the absence check.
+      - Method aliases, predecessor names, adaptations, and adjacent target-context literatures have been searched.
+    refuting_evidence:
+      - Eligible target-context use was available by the cutoff under an alias, adaptation, or adjacent discipline.
+      - The source and target contexts are not comparable enough for transfer to be a coherent candidate.
+    resolution_evidence:
+      - Later eligible evidence applies and evaluates the method in the target context under the declared rule.
+      - A later protocol or dataset alone resolves the gap only if the type-specific rule explicitly accepts it.
+    coverage_assumptions:
+      - Method vocabulary, versions, abbreviations, source and target contexts, and adjacent disciplines are covered.
+      - Coverage is adequate for target-context use, not assumed exhaustive for all method applications.
+    open_world_limitations:
+      - No retrieved transfer is not proof that no transfer has occurred globally or remains unpublished.
+      - Transfer potential, scientific value, safety, and feasibility require separate assessment.
+    human_annotation_questions:
+      - Are source and target contexts comparable enough for the proposed transfer?
+      - Were method aliases, adaptations, and adjacent disciplines searched adequately?
+      - What evidence would count as a successful transfer rather than mere mention?
+
+  - class_id: outdated_evidence
+    label: Outdated evidence
+    definition: >
+      The newest eligible evidence for a declared question predates a
+      predeclared age threshold at the inclusive cutoff.
+    allowed_signal_types:
+      - latest_eligible_evidence_older_than_threshold
+    minimum_support:
+      - The question, eligible evidence types, availability-date rule, age threshold, and cutoff are declared.
+      - Exact source-version availability dates are known for records used to identify the newest eligible evidence.
+      - Searches for newer versions, corrections, preprints, registries, and adjacent terminology are complete for the rule.
+    refuting_evidence:
+      - Eligible newer evidence or a newer source version was publicly available by the cutoff.
+      - Unknown or incorrect availability dates make the age comparison unsafe.
+    resolution_evidence:
+      - Later eligible evidence satisfies the question-specific recency and evidence rule.
+      - A corrected source chronology shows the evidence was not outdated at the original cutoff.
+    coverage_assumptions:
+      - Version history, preprints, publications, corrections, registries, and date fields needed by the rule are covered.
+      - Records with unknown public-availability dates are excluded from temporal claims and reported as uncertainty.
+    open_world_limitations:
+      - Age alone does not show that evidence is wrong, obsolete, important to update, or feasible to replace.
+      - The newest retrieved record may not be the newest evidence outside the corpus snapshot.
+    human_annotation_questions:
+      - Is the recency threshold justified for the pace and risk of this field?
+      - Are public-availability dates and source-version relationships reliable?
+      - Would newer evidence materially change a decision, theory, or practice?
+
+  - class_id: missing_direct_comparison
+    label: Missing direct comparison
+    definition: >
+      Two or more alternatives have eligible evidence independently, but fewer
+      eligible head-to-head comparisons than a predeclared threshold are
+      represented in the named snapshot.
+    allowed_signal_types:
+      - direct_comparison_count_below_threshold
+    minimum_support:
+      - Passage-verified evidence establishes eligible use or evaluation of every alternative independently.
+      - The comparison design, alternatives, outcomes, population, counted unit, and threshold are declared.
+      - Direct-comparison aliases and comparative design terminology have been searched.
+    refuting_evidence:
+      - An eligible direct comparison available by the cutoff meets the declared rule.
+      - One alternative lacks independent eligible evidence or the alternatives are not scientifically comparable.
+    resolution_evidence:
+      - A later eligible head-to-head study satisfies the declared comparison and outcome rule.
+      - A later eligible comparative dataset or protocol resolves the gap only when the resolution rule explicitly permits it.
+    coverage_assumptions:
+      - Comparative designs, alternative names, outcomes, populations, registries, protocols, and adjacent literatures are covered.
+      - Indirect comparison evidence is represented separately and not silently treated as head-to-head evidence.
+    open_world_limitations:
+      - No retrieved direct comparison is scoped to the named corpus and rule.
+      - A direct comparison is not automatically ethical, necessary, adequately powered, or practically feasible.
+    human_annotation_questions:
+      - Are the alternatives, population, and outcome sufficiently comparable for a direct study?
+      - Was indirect evidence incorrectly classified as a direct comparison or vice versa?
+      - Would a head-to-head design be ethical and decision-relevant?
+
+  - class_id: poorly_connected
+    label: Poorly connected evidence region
+    definition: >
+      A declared evidence-graph node set has connectivity below a predeclared
+      metric threshold in a versioned graph built from one corpus snapshot.
+    allowed_signal_types:
+      - graph_connectivity_below_threshold
+    minimum_support:
+      - The graph version, eligible node and edge types, subgraph, metric, direction, and threshold are declared.
+      - Entity resolution, duplicate handling, and graph construction complete without material unresolved errors.
+      - The observed metric is reproducible from the frozen graph artifact.
+    refuting_evidence:
+      - Corrected ingestion, entity resolution, edge typing, or deduplication raises connectivity above the threshold.
+      - The metric or threshold does not correspond to a scientifically meaningful connection for this question.
+    resolution_evidence:
+      - Later passage-verified relations raise connectivity above the same versioned threshold.
+      - A corrected graph build classifies the original candidate as an artifact rather than a scientific resolution.
+    coverage_assumptions:
+      - Graph coverage includes relevant source types, relation types, aliases, and accessible passages.
+      - Structural metrics are interpreted only within the frozen graph and construction policy.
+    open_world_limitations:
+      - Low graph connectivity can reflect corpus, extraction, ontology, or entity-resolution choices.
+      - Map distance or graph sparsity is not scientific support, novelty, importance, or causality.
+    human_annotation_questions:
+      - Does the chosen graph metric represent a scientifically meaningful kind of connection?
+      - Could extraction, entity resolution, or edge policy explain the low connectivity?
+      - What new evidence would constitute resolution rather than a cosmetic graph change?
+
+  - class_id: weak_evidence
+    label: Weak evidence base
+    definition: >
+      A declared evidence body fails a predeclared evidence-quality rule whose
+      reporting quality, study quality, directness, precision, and consistency
+      components remain explicit.
+    allowed_signal_types:
+      - evidence_quality_below_threshold
+    minimum_support:
+      - The evidence body contains passage-verified claims linked to eligible source versions.
+      - The versioned quality rule, component assessments, threshold, and synthesis method are recorded.
+      - Evidence quality is not inferred from extraction confidence, model confidence, or legacy evidence-strength labels.
+    refuting_evidence:
+      - Corrected component assessments or newly found evidence show that the body met the threshold by the cutoff.
+      - The synthesis combined non-comparable claims or used an invalid quality rule.
+    resolution_evidence:
+      - Later eligible evidence causes the full component-based evidence body to satisfy the declared quality rule.
+      - Better reporting alone resolves the gap only when the failed rule component was reporting quality.
+    coverage_assumptions:
+      - Positive, negative, mixed, null, and inconclusive evidence and relevant source types are searched.
+      - Inaccessible evidence, missing data, study-quality uncertainty, and inconsistency remain explicit components.
+    open_world_limitations:
+      - Weak evidence does not mean the scientific claim is false or unsupported in every context.
+      - More studies do not necessarily improve quality, importance, or feasibility.
+    human_annotation_questions:
+      - Are reporting quality, study quality, directness, precision, and consistency assessed separately?
+      - Does the threshold reflect a declared decision context rather than model confidence?
+      - What specific evidence-quality component must improve for resolution?
+
+  - class_id: dataset_reuse_validation
+    label: Dataset reuse or validation gap
+    definition: >
+      A dataset has verified use in a declared context but eligible independent
+      reuse, external validation, or cross-context validation is below a
+      predeclared threshold.
+    allowed_signal_types:
+      - independent_dataset_validation_count_below_threshold
+    minimum_support:
+      - Source evidence identifies the dataset and verifies its use in the declared originating context.
+      - Independence, reuse or validation type, target context, counted unit, and threshold are explicitly defined.
+      - Dataset aliases, versions, repositories, derived datasets, and publications are resolved and searched.
+    refuting_evidence:
+      - Eligible independent reuse or validation available by the cutoff satisfies the rule.
+      - Dataset alias, version lineage, author overlap, or context classification was resolved incorrectly.
+    resolution_evidence:
+      - Later eligible independent reuse or validation satisfies the declared target-context and threshold rule.
+      - A corrected linkage to existing validation classifies the original candidate as an artifact.
+    coverage_assumptions:
+      - Dataset names, persistent identifiers, versions, repositories, citations, author groups, and relevant contexts are covered.
+      - Missing dataset identifiers and inaccessible repositories are recorded as uncertainty rather than absence.
+    open_world_limitations:
+      - No retrieved reuse or validation is limited to the declared corpus, independence rule, and cutoff.
+      - Reuse count alone does not establish dataset quality, generalizability, importance, or feasibility.
+    human_annotation_questions:
+      - Is the proposed validation genuinely independent under the declared rule?
+      - Are dataset versions and derived datasets linked correctly?
+      - Is the target context scientifically meaningful and sufficiently distinct?
+
+  - class_id: unlinked_protocol_trial_result
+    label: Unlinked protocol or trial result
+    definition: >
+      An eligible protocol or registered trial has reached a predeclared result-
+      availability condition and grace period, but no eligible result record is
+      linked or retrieved in the named snapshot.
+    allowed_signal_types:
+      - protocol_result_link_absent_after_grace_period
+    minimum_support:
+      - The protocol or trial identity, registry version, status, expected completion, grace period, and eligible result types are recorded.
+      - Identifier, investigator, title, intervention, citation, repository, and registry-result searches are complete for the rule.
+      - The cutoff is later than the declared result-availability condition plus grace period.
+    refuting_evidence:
+      - An eligible result, publication, preprint, dataset, or registry result was publicly available by the cutoff.
+      - Registry status, completion date, identifier linkage, or grace-period calculation was incorrect.
+    resolution_evidence:
+      - A later eligible result becomes publicly available and is linked to the protocol or trial.
+      - A later registry correction establishes that results were not yet expected under the rule.
+    coverage_assumptions:
+      - Registry histories, publications, preprints, repositories, investigator names, identifiers, and result fields are searched.
+      - Withdrawn, terminated, delayed, ongoing, inaccessible, and unknown-status records are distinguished.
+    open_world_limitations:
+      - An unlinked result may be unpublished, inaccessible, delayed, reported under another identifier, or absent only from the corpus.
+      - Lack of a public result does not prove a null or negative result, misconduct, importance, or permanent nonpublication.
+    human_annotation_questions:
+      - Is the protocol or trial genuinely past the declared result-availability condition and grace period?
+      - Were alternate identifiers, investigators, titles, repositories, and registry histories searched?
+      - Could status ambiguity or inaccessible reporting explain the missing link?

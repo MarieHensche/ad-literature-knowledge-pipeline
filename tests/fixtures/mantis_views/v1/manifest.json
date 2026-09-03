@@ -1,0 +1,32 @@
+{
+  "manifest_version": "1.0.0",
+  "fixture_id": "step_1_7_mantis_views_v1",
+  "recorded_date": "2026-08-27",
+  "copyright_status": "All records and output text are fictional and purpose-written for tests.",
+  "source_builder": "tests.mantis_fixtures.mantis_records",
+  "source_jsonl_sha256": "91f81efcfd44d50ca2ceab0fe9a4b94294bdb4fb9b5fcb43ed69d9f35cf12422",
+  "profile_template_sha256": {
+    "paper": "f1f3a35240a9b3ac44ba80b85b7f5eed86742db2358826445b10265f5a26a5d6",
+    "verified_claim": "da6b583d7fec96a80b4109331ffefa0f25f6d1bc7e7a2a4e4d215161234d0401",
+    "verified_gap": "b70d89dd4429d3f2b546eec327ef371b45b7d0ca85ac05f583d466ebf0581666"
+  },
+  "views": {
+    "paper": {
+      "rows": 1,
+      "csv_sha256": "e5a357cd05c83f70330d9ef9d9ecab50117127cf318320ee56497276f4e9c576"
+    },
+    "verified_claim": {
+      "rows": 1,
+      "csv_sha256": "52abd4bb221977211cf1036932c66815928993857d192a5af0865850fa6be982"
+    },
+    "verified_gap": {
+      "rows": 1,
+      "csv_sha256": "cf700168c2bd4bfd69cf59c05205388ab6e089d726870f0f192ebf6d240f4429"
+    }
+  },
+  "eligibility_contract": {
+    "paper": "Active snapshot-member SourceVersion with eligible time and active/corrected lifecycle.",
+    "verified_claim": "Active Claim with at least one supported or contradicted ClaimEvidence in an eligible snapshot source.",
+    "verified_gap": "Verified-open GapCandidate with a completed decisive verification, no unresolved checks, and a matching three-dimensional GapScore."
+  }
+}

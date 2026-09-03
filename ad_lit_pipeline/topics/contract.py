@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ad_lit_pipeline.corpus.specification import validate_corpus_specification
 from ad_lit_pipeline.io.yaml_io import read_yaml_object
 from ad_lit_pipeline.topics.matching import (
     DEFAULT_TOPIC_FIELD,
@@ -13,12 +15,26 @@ from ad_lit_pipeline.topics.matching import (
     VALID_TOPIC_FIELDS,
     secondary_topic_groups_from_structure,
 )
+from ad_lit_pipeline.topics.policy import (
+    TopicConceptProfile,
+    TopicStructurePolicy,
+    default_topic_structure_policy,
+    selected_profile_ids,
+    topic_profile,
+    validate_topic_policy_reference,
+)
 
 
 LEGACY_TOPIC_FIT_CATEGORY_ID = "main_topic_category"
 LEGACY_RESEARCH_TARGET_CATEGORY_ID = "research_target"
 REQUIRED_TOPIC_CATEGORY_IDS: tuple[str, ...] = ()
 VALID_CATEGORY_SELECTIONS = {"single", "multi"}
+TAGGING_EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT = "abstract_or_full_text"
+TAGGING_EVIDENCE_POLICY_FULL_TEXT_REQUIRED = "full_text_required"
+VALID_TAGGING_EVIDENCE_POLICIES = {
+    TAGGING_EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT,
+    TAGGING_EVIDENCE_POLICY_FULL_TEXT_REQUIRED,
+}
 GENERATED_TAGGING_MIN_CATEGORIES = 6
 GENERATED_TAG_LABEL_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 RETIRED_TAGGING_CATEGORY_IDS = {
@@ -129,498 +145,50 @@ MERGED_TOPIC_PHRASE_CONNECTORS = (
     " effects on ",
     " outcomes in ",
 )
-GENERIC_TOPIC_STRUCTURE_TERMS = {
-    "area",
-    "areas",
-    "context",
-    "contexts",
-    "domain",
-    "domains",
-    "education",
-    "educational context",
-    "educational contexts",
-    "educational setting",
-    "educational settings",
-    "field",
-    "fields",
-    "learning",
-    "learning environment",
-    "learning environments",
-    "method",
-    "methods",
-    "outcome",
-    "outcomes",
-    "performance metric",
-    "performance metrics",
-    "population",
-    "populations",
-    "research",
-    "setting",
-    "settings",
-    "student outcomes",
-    "students",
-    "studies",
-    "study",
-    "digital technology",
-    "digital technologies",
-    "edtech",
-    "educational technology",
-    "educational technologies",
-    "technology",
-    "technologies",
-    "tool",
-    "tools",
-    "topic",
-    "topics",
-}
-BROAD_UMBRELLA_TOPIC_STRUCTURE_TERMS = {
-    "analysis",
-    "approach",
-    "condition",
-    "data analysis",
-    "disease",
-    "disorder",
-    "method",
-    "neurological disorder",
-    "research",
-    "science",
-    "technology",
-}
-TITLE_FIELD_COMPONENT_WORDS = {
-    "classroom",
-    "classrooms",
-    "community",
-    "communities",
-    "context",
-    "contexts",
-    "environment",
-    "environments",
-    "hospital",
-    "hospitals",
-    "patient",
-    "patients",
-    "population",
-    "populations",
-    "school",
-    "schools",
-    "setting",
-    "settings",
-    "workplace",
-    "workplaces",
-}
-TITLE_OR_ABSTRACT_EXCEPTION_TOPIC_WORDS = {
-    "adoption",
-    "calibration",
-    "deployment",
-    "evaluation",
-    "evidence",
-    "explanation",
-    "explanatory",
-    "feasibility",
-    "implementation",
-    "integration",
-    "mechanism",
-    "mechanisms",
-    "mechanistic",
-    "mediation",
-    "mediator",
-    "mediators",
-    "metric",
-    "metrics",
-    "moderation",
-    "moderator",
-    "moderators",
-    "pathway",
-    "pathways",
-    "process",
-    "processes",
-    "protocol",
-    "protocols",
-    "signal",
-    "signals",
-    "threshold",
-    "thresholds",
-    "usability",
-    "validation",
-    "workflow",
-    "workflows",
-}
-BROAD_UMBRELLA_TOPIC_WORDS = {
-    "ability",
-    "abilities",
-    "behavior",
-    "behaviors",
-    "cognition",
-    "cognitive",
-    "effect",
-    "effects",
-    "function",
-    "functions",
-    "impact",
-    "impacts",
-    "outcome",
-    "outcomes",
-    "performance",
-}
-METHOD_TOPIC_WORDS = {
-    "analysis",
-    "approach",
-    "approaches",
-    "computational",
-    "method",
-    "methods",
-    "model",
-    "modeling",
-    "modelling",
-    "models",
-    "technique",
-    "techniques",
-}
-METHOD_INTERNAL_SUBTYPE_TERMS = {
-    "a.i.",
-    "ai",
-    "algorithm",
-    "algorithm development",
-    "algorithms",
-    "artificial intelligence",
-    "bioinformatics",
-    "classification",
-    "computational biology",
-    "computational genomics",
-    "computational modeling",
-    "deep learning",
-    "ensemble learning",
-    "machine learning",
-    "mathematical modeling",
-    "ml",
-    "modeling",
-    "network analysis",
-    "predictive modeling",
-    "statistical modeling",
-    "supervised learning",
-    "systems biology",
-    "unsupervised learning",
-}
-METHOD_TOPIC_BARE_DOMAIN_TERMS = {
-    "amyloid plaques",
-    "biomarker",
-    "biomarkers",
-    "cancer",
-    "cognitive decline",
-    "dementia",
-    "gene expression",
-    "genomics",
-    "parkinson",
-    "parkinson's disease",
-    "parkinsons disease",
-    "patient cohort",
-    "patient cohorts",
-    "tau tangles",
-}
-ALZHEIMER_DISEASE_SIGNAL_TERMS = {
-    "ad",
-    "alzheimer",
-    "alzheimer disease",
-    "alzheimer's disease",
-    "alzheimers disease",
-}
-ALZHEIMER_DISEASE_FAMILY_TERMS = {
-    "ad",
-    "alzheimer",
-    "alzheimer disease",
-    "alzheimer's disease",
-    "alzheimers disease",
-    "cognitive decline",
-    "dementia",
-    "dementia-related cognitive impairment",
-    "dementia related cognitive impairment",
-    "mci",
-    "mild cognitive impairment",
-    "preclinical ad",
-    "preclinical alzheimer disease",
-    "preclinical alzheimer's disease",
-    "preclinical alzheimers disease",
-    "preclinical disease",
-    "prodromal ad",
-    "prodromal alzheimer disease",
-    "prodromal alzheimer's disease",
-    "prodromal alzheimers disease",
-    "prodromal disease",
-}
-ALZHEIMER_DISEASE_NON_FAMILY_TERMS = {
-    "amyloid plaque",
-    "amyloid plaques",
-    "amyloid pathology",
-    "memory loss",
-    "neurodegeneration",
-    "tau pathology",
-    "tau tangles",
-}
-PARKINSONS_DISEASE_SIGNAL_TERMS = {
-    "parkinson disease",
-    "parkinson's disease",
-    "parkinsons disease",
-    "pd",
-}
-PARKINSONS_DISEASE_NON_FAMILY_TERMS = {
-    "movement disorder",
-    "movement disorders",
-}
-EXPERIMENTAL_METHODS_SIGNAL_TERMS = {
-    "clinical method",
-    "clinical methods",
-    "experimental method",
-    "experimental methods",
-    "laboratory method",
-    "laboratory methods",
-    "wet lab method",
-    "wet lab methods",
-}
-EXPERIMENTAL_METHODS_NON_FAMILY_TERMS = {
-    "clinical trial",
-    "clinical trials",
-    "data collection",
-    "experimental design",
-    "experimental designs",
-}
-GENERIC_SECONDARY_TOPIC_BUCKET_IDS = {
-    "adjacent diseases",
-    "dementia types",
-    "disease types",
-    "neurodegenerative diseases",
-    "neurodegenerative disorders",
-    "other diseases",
-    "related diseases",
-}
-GENERIC_SECONDARY_TOPIC_TERMS = {
-    "cognitive impairments",
-    "dementia types",
-    "disease types",
-    "diseases",
-    "neurodegenerative diseases",
-    "neurodegenerative disorders",
-    "other diseases",
-    "related diseases",
-}
-COMMON_SURFACE_FORM_GROUPS = (
-    {
-        "label": "artificial intelligence",
-        "abbreviations": {"ai", "a.i."},
-        "full_forms": {"artificial intelligence"},
-    },
-    {
-        "label": "machine learning",
-        "abbreviations": {"ml"},
-        "full_forms": {"machine learning"},
-    },
-    {
-        "label": "large language models",
-        "abbreviations": {"llm", "llms"},
-        "full_forms": {"large language model", "large language models"},
-    },
-    {
-        "label": "Alzheimer's disease",
-        "abbreviations": {"ad"},
-        "full_forms": {"alzheimer's disease", "alzheimer disease"},
-    },
-    {
-        "label": "mild cognitive impairment",
-        "abbreviations": {"mci"},
-        "full_forms": {"mild cognitive impairment"},
-    },
-    {
-        "label": "electroencephalography",
-        "abbreviations": {"eeg"},
-        "full_forms": {"electroencephalography"},
-    },
-    {
-        "label": "magnetic resonance imaging",
-        "abbreviations": {"mri"},
-        "full_forms": {"magnetic resonance imaging"},
-    },
-    {
-        "label": "positron emission tomography",
-        "abbreviations": {"pet"},
-        "full_forms": {"positron emission tomography"},
-    },
-    {
-        "label": "electronic health records",
-        "abbreviations": {"ehr", "ehrs"},
-        "full_forms": {
-            "electronic health record",
-            "electronic health records",
-        },
-    },
-)
-BROAD_CRITERION_TOPIC_WORDS = {
-    "ecological",
-    "eco",
-    "environment",
-    "environmental",
-    "green",
-    "renewable",
-    "sustainability",
-    "sustainable",
-}
-GENERIC_APPLICATION_TOPIC_WORDS = {
-    "advanced",
-    "innovation",
-    "innovations",
-    "innovative",
-    "novel",
-    "science",
-    "technology",
-}
-APPLICATION_PROCESS_OR_PROPERTY_WORDS = {
-    "approach",
-    "approaches",
-    "efficiency",
-    "efficient",
-    "impact",
-    "impacts",
-    "improvement",
-    "improvements",
-    "innovation",
-    "innovations",
-    "integrity",
-    "method",
-    "methods",
-    "performance",
-    "practice",
-    "practices",
-    "process",
-    "processes",
-    "strategy",
-    "strategies",
-    "technique",
-    "techniques",
-}
-BROAD_MATERIAL_FAMILY_WORDS = {
-    "biodegradable",
-    "biomaterial",
-    "biomaterials",
-    "bioplastic",
-    "bioplastics",
-    "bio",
-    "based",
-    "hybrid",
-    "material",
-    "materials",
-}
-MAIN_TOPIC_MIN_TERMS = 4
-REPLACEMENT_ROLE_WORDS = {
-    "alternative",
-    "alternatives",
-    "replace",
-    "replacement",
-    "replacements",
-    "substitute",
-    "substitutes",
-    "substitution",
-}
-CONCRETE_COMPARATOR_TOPIC_WORDS = {
-    "alternative",
-    "alternatives",
-    "application",
-    "applications",
-    "comparator",
-    "concrete",
-    "material",
-    "materials",
-    "replace",
-    "replacement",
-    "replacements",
-    "substitute",
-    "substitutes",
-}
-CONCRETE_COMPARATOR_COVERAGE_WORDS = {
-    "alternative",
-    "alternatives",
-    "comparator",
-    "concrete",
-    "replace",
-    "replacement",
-    "replacements",
-    "substitute",
-    "substitutes",
-}
-REPLACEMENT_TARGET_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "application",
-    "applications",
-    "area",
-    "areas",
-    "case",
-    "cases",
-    "certain",
-    "for",
-    "in",
-    "of",
-    "some",
-    "the",
-    "to",
-    "use",
-    "uses",
-    "with",
-}
-APPLICATION_COMPONENT_QUALIFIERS = {
-    "architectural",
-    "building",
-    "classroom",
-    "clinical",
-    "construction",
-    "educational",
-    "housing",
-    "industrial",
-    "medical",
-    "school",
-    "structural",
-    "workplace",
-}
-APPLICATION_COMPONENT_HEADS = {
-    "application",
-    "applications",
-    "context",
-    "contexts",
-    "environment",
-    "environments",
-    "lesson",
-    "lessons",
-    "material",
-    "materials",
-    "product",
-    "products",
-    "practice",
-    "practices",
-    "setting",
-    "settings",
-}
-SOURCE_ANCHOR_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "as",
-    "be",
-    "could",
-    "for",
-    "in",
-    "of",
-    "the",
-    "to",
-    "use",
-    "used",
-    "using",
-    "with",
-}
-SOURCE_ANCHOR_MODIFIERS = {
-    "chronic",
-    "environmental",
-    "green",
-    "renewable",
-    "sustainable",
-}
+_QUALITY_TERM_SETS = default_topic_structure_policy().quality_term_sets
+GENERIC_TOPIC_STRUCTURE_TERMS = _QUALITY_TERM_SETS[
+    "generic_topic_structure_terms"
+]
+BROAD_UMBRELLA_TOPIC_STRUCTURE_TERMS = _QUALITY_TERM_SETS[
+    "broad_umbrella_topic_structure_terms"
+]
+TITLE_FIELD_COMPONENT_WORDS = _QUALITY_TERM_SETS["title_field_component_words"]
+TITLE_OR_ABSTRACT_EXCEPTION_TOPIC_WORDS = _QUALITY_TERM_SETS[
+    "title_or_abstract_exception_topic_words"
+]
+BROAD_UMBRELLA_TOPIC_WORDS = _QUALITY_TERM_SETS["broad_umbrella_topic_words"]
+METHOD_TOPIC_WORDS = _QUALITY_TERM_SETS["method_topic_words"]
+BROAD_CRITERION_TOPIC_WORDS = _QUALITY_TERM_SETS[
+    "broad_criterion_topic_words"
+]
+GENERIC_APPLICATION_TOPIC_WORDS = _QUALITY_TERM_SETS[
+    "generic_application_topic_words"
+]
+APPLICATION_PROCESS_OR_PROPERTY_WORDS = _QUALITY_TERM_SETS[
+    "application_process_or_property_words"
+]
+BROAD_MATERIAL_FAMILY_WORDS = _QUALITY_TERM_SETS[
+    "broad_material_family_words"
+]
+MAIN_TOPIC_MIN_TERMS = default_topic_structure_policy().main_topic_min_terms
+REPLACEMENT_ROLE_WORDS = _QUALITY_TERM_SETS["replacement_role_words"]
+REPLACEMENT_COMPARATOR_TOPIC_WORDS = _QUALITY_TERM_SETS[
+    "replacement_comparator_topic_words"
+]
+REPLACEMENT_COMPARATOR_COVERAGE_WORDS = _QUALITY_TERM_SETS[
+    "replacement_comparator_coverage_words"
+]
+REPLACEMENT_TARGET_STOPWORDS = _QUALITY_TERM_SETS[
+    "replacement_target_stopwords"
+]
+APPLICATION_COMPONENT_QUALIFIERS = _QUALITY_TERM_SETS[
+    "application_component_qualifiers"
+]
+APPLICATION_COMPONENT_HEADS = _QUALITY_TERM_SETS[
+    "application_component_heads"
+]
+SOURCE_ANCHOR_STOPWORDS = _QUALITY_TERM_SETS["source_anchor_stopwords"]
+SOURCE_ANCHOR_MODIFIERS = _QUALITY_TERM_SETS["source_anchor_modifiers"]
 CRUCIAL_TOPIC_STRUCTURE_ISSUE_CODES = {
     "abstract_only_main_topic_field",
     "anchor_field_not_title",
@@ -954,8 +522,15 @@ def validate_secondary_topics(
     raise ValueError("topic_structure.secondary_topics must be a mapping or list.")
 
 
-def validate_topic_contract(contract: dict[str, Any]) -> None:
+def validate_topic_contract(
+    contract: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> None:
     """Validate the topic contract shape needed by current pipeline steps."""
+    validate_topic_policy_reference(
+        contract,
+        policy or default_topic_structure_policy(),
+    )
     require_non_empty_string(contract.get("topic_id"), "topic_id")
 
     research_topic = require_mapping(contract.get("research_topic"), "research_topic")
@@ -995,6 +570,13 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
         )
 
     tagging = require_mapping(contract.get("tagging"), "tagging")
+    evidence_policy = tagging.get("evidence_policy")
+    if (
+        evidence_policy is not None
+        and evidence_policy not in VALID_TAGGING_EVIDENCE_POLICIES
+    ):
+        allowed = ", ".join(sorted(VALID_TAGGING_EVIDENCE_POLICIES))
+        raise ValueError(f"tagging.evidence_policy must be one of: {allowed}")
     require_mapping(tagging.get("fallback_policy"), "tagging.fallback_policy")
     categories = require_mapping(tagging.get("categories"), "tagging.categories")
     if not categories:
@@ -1046,6 +628,54 @@ def validate_topic_contract(contract: dict[str, Any]) -> None:
     )
     if preferred_provider not in allowed_providers:
         raise ValueError("collection.preferred_provider must be allowed.")
+
+    publication_window = collection.get("publication_window")
+    if publication_window is not None:
+        publication_window_map = require_mapping(
+            publication_window, "collection.publication_window"
+        )
+        unexpected_keys = sorted(
+            set(publication_window_map).difference({"start", "end"})
+        )
+        if unexpected_keys:
+            raise ValueError(
+                "collection.publication_window contains unsupported field(s): "
+                + ", ".join(unexpected_keys)
+            )
+        start_text = require_non_empty_string(
+            publication_window_map.get("start"),
+            "collection.publication_window.start",
+        )
+        end_text = require_non_empty_string(
+            publication_window_map.get("end"),
+            "collection.publication_window.end",
+        )
+        parsed_dates = []
+        for field_name, value in (("start", start_text), ("end", end_text)):
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+                raise ValueError(
+                    "collection.publication_window."
+                    f"{field_name} must use YYYY-MM-DD."
+                )
+            try:
+                parsed_dates.append(date.fromisoformat(value))
+            except ValueError as exc:
+                raise ValueError(
+                    "collection.publication_window."
+                    f"{field_name} must be a valid calendar date."
+                ) from exc
+        if parsed_dates[0] > parsed_dates[1]:
+            raise ValueError(
+                "collection.publication_window.start must not follow "
+                "collection.publication_window.end."
+            )
+
+    corpus_specification = collection.get("corpus_specification")
+    if corpus_specification is not None:
+        validate_corpus_specification(
+            corpus_specification,
+            "collection.corpus_specification",
+        )
 
     if "search_queries" in collection:
         search_queries = require_list(
@@ -1355,12 +985,17 @@ def generated_tagging_quality_warnings(contract: dict[str, Any]) -> list[str]:
     return warnings
 
 
-def normalized_topic_words(value: object) -> set[str]:
+def normalized_topic_words(
+    value: object,
+    policy: TopicStructurePolicy | None = None,
+) -> set[str]:
     """Return non-trivial words used for conservative topic-overlap checks."""
+    active_policy = policy or default_topic_structure_policy()
+    word_equivalents = active_policy.topic_word_equivalents
     normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold())
     words = set()
     for word in normalized.split():
-        if word in {"ai", "ml"}:
+        if len(word) == 2 and word.isalnum():
             words.add(word)
             continue
         if len(word) < 3 or word in {
@@ -1377,8 +1012,7 @@ def normalized_topic_words(value: object) -> set[str]:
         words.add(word)
         if len(word) > 3 and word.endswith("s"):
             words.add(word[:-1])
-        if word == "educational":
-            words.add("education")
+        words.update(word_equivalents.get(word, ()))
     return words
 
 
@@ -1391,22 +1025,28 @@ def normalized_topic_term(value: object) -> str:
     )
 
 
-def topic_component_words(topic: dict[str, Any]) -> set[str]:
+def topic_component_words(
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> set[str]:
     words = set()
     for key in ("topic_id", "label"):
-        words.update(normalized_topic_words(topic.get(key)))
+        words.update(normalized_topic_words(topic.get(key), policy))
     terms = topic.get("terms")
     if isinstance(terms, list):
         for term in terms:
-            words.update(normalized_topic_words(term))
+            words.update(normalized_topic_words(term, policy))
     return words
 
 
-def topic_core_words(topic: dict[str, Any]) -> set[str]:
+def topic_core_words(
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> set[str]:
     """Return words from topic id and label, excluding broad role words."""
     words = set()
     for key in ("topic_id", "label"):
-        words.update(normalized_topic_words(topic.get(key)))
+        words.update(normalized_topic_words(topic.get(key), policy))
     return {
         word
         for word in words
@@ -1425,51 +1065,96 @@ def topic_core_words(topic: dict[str, Any]) -> set[str]:
     }
 
 
-def is_replacement_topic(topic_id: str, topic: dict[str, Any]) -> bool:
-    words = normalized_topic_words(f"{topic_id} {topic.get('label') or ''}")
-    return bool(words.intersection(REPLACEMENT_ROLE_WORDS))
-
-
-def is_application_topic(topic_id: str, topic: dict[str, Any]) -> bool:
-    words = normalized_topic_words(f"{topic_id} {topic.get('label') or ''}")
+def is_replacement_topic(
+    topic_id: str,
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
+    active_policy = policy or default_topic_structure_policy()
+    words = normalized_topic_words(
+        f"{topic_id} {topic.get('label') or ''}", active_policy
+    )
     return bool(
-        words.intersection(APPLICATION_COMPONENT_QUALIFIERS)
-        and words.intersection(APPLICATION_COMPONENT_HEADS)
+        words.intersection(active_policy.quality_term_sets["replacement_role_words"])
     )
 
 
-def is_method_topic(topic_id: str, topic: dict[str, Any]) -> bool:
-    words = normalized_topic_words(f"{topic_id} {topic.get('label') or ''}")
-    return bool(words.intersection(METHOD_TOPIC_WORDS))
+def is_application_topic(
+    topic_id: str,
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
+    active_policy = policy or default_topic_structure_policy()
+    words = normalized_topic_words(
+        f"{topic_id} {topic.get('label') or ''}", active_policy
+    )
+    return bool(
+        words.intersection(
+            active_policy.quality_term_sets["application_component_qualifiers"]
+        )
+        and words.intersection(
+            active_policy.quality_term_sets["application_component_heads"]
+        )
+    )
+
+
+def is_method_topic(
+    topic_id: str,
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
+    active_policy = policy or default_topic_structure_policy()
+    words = normalized_topic_words(
+        f"{topic_id} {topic.get('label') or ''}", active_policy
+    )
+    return bool(
+        words.intersection(active_policy.quality_term_sets["method_topic_words"])
+    )
 
 
 def is_title_or_abstract_exception_topic(
     topic_id: str,
     topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
 ) -> bool:
     """Return whether a main topic is a detail/explanatory dimension."""
-    words = normalized_topic_words(f"{topic_id} {topic.get('label') or ''}")
-    return bool(words.intersection(TITLE_OR_ABSTRACT_EXCEPTION_TOPIC_WORDS))
+    active_policy = policy or default_topic_structure_policy()
+    words = normalized_topic_words(
+        f"{topic_id} {topic.get('label') or ''}", active_policy
+    )
+    return bool(
+        words.intersection(
+            active_policy.quality_term_sets[
+                "title_or_abstract_exception_topic_words"
+            ]
+        )
+    )
 
 
 def replacement_term_allowed_words(
     topic_id: str,
     topic: dict[str, Any],
     replacement_targets: list[str],
+    policy: TopicStructurePolicy | None = None,
 ) -> set[str]:
-    words = normalized_topic_words(f"{topic_id} {topic.get('label') or ''}")
-    words.update(REPLACEMENT_ROLE_WORDS)
+    active_policy = policy or default_topic_structure_policy()
+    words = normalized_topic_words(
+        f"{topic_id} {topic.get('label') or ''}", active_policy
+    )
+    words.update(active_policy.quality_term_sets["replacement_role_words"])
     words.update(replacement_targets)
-    if "concrete" in words:
-        words.add("cement")
-    if "cement" in words:
-        words.add("concrete")
     return words
 
 
-def broad_material_family_words(term_words: set[str]) -> set[str]:
+def broad_material_family_words(
+    term_words: set[str],
+    policy: TopicStructurePolicy | None = None,
+) -> set[str]:
     """Return broad material/source words, ignoring plain material(s) alone."""
-    material_words = term_words.intersection(BROAD_MATERIAL_FAMILY_WORDS)
+    active_policy = policy or default_topic_structure_policy()
+    material_words = term_words.intersection(
+        active_policy.quality_term_sets["broad_material_family_words"]
+    )
     specific_material_words = material_words - {"material", "materials"}
     if specific_material_words:
         return material_words
@@ -1502,91 +1187,125 @@ def topic_surface_form_terms(topic: dict[str, Any]) -> set[str]:
     return terms
 
 
-def method_internal_subtype_matches(value: object) -> list[str]:
+def method_internal_subtype_matches(
+    value: object,
+    policy: TopicStructurePolicy | None = None,
+) -> list[str]:
     """Return known method-subtype phrases contained in a term."""
+    active_policy = policy or default_topic_structure_policy()
     normalized = normalized_topic_term(value)
     padded = f" {normalized} "
     return sorted(
         subtype
-        for subtype in METHOD_INTERNAL_SUBTYPE_TERMS
+        for subtype in active_policy.method_internal_subtype_terms
         if normalized == subtype or f" {subtype} " in padded
     )
 
 
-def is_alzheimer_disease_topic(topic_id: str, topic: dict[str, Any]) -> bool:
-    """Return whether a topic represents the Alzheimer disease family."""
-    surface_terms = topic_surface_form_terms(topic)
-    surface_terms.add(normalized_topic_term(topic_id))
-    surface_terms.add(normalized_topic_term(topic.get("label")))
-    return bool(surface_terms.intersection(ALZHEIMER_DISEASE_SIGNAL_TERMS))
+def concept_profile_for_topic(
+    topic_id: str,
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+    allowed_profile_ids: tuple[str, ...] | None = None,
+) -> TopicConceptProfile | None:
+    """Return the configured concept profile matching a main topic."""
+    active_policy = policy or default_topic_structure_policy()
+    return topic_profile(
+        active_policy,
+        topic_id,
+        topic,
+        is_method=is_method_topic(topic_id, topic, active_policy),
+        allowed_profile_ids=allowed_profile_ids,
+    )
 
 
-def disease_family_variant_matches(
+def concept_family_variant_matches(
     parent_topic_id: str,
     parent_topic: dict[str, Any],
     value: object,
+    policy: TopicStructurePolicy | None = None,
+    allowed_profile_ids: tuple[str, ...] | None = None,
 ) -> list[str]:
-    """Return known in-family disease variants contained in a term."""
-    if not is_alzheimer_disease_topic(parent_topic_id, parent_topic):
+    """Return configured in-family variants contained in a term."""
+    profile = concept_profile_for_topic(
+        parent_topic_id,
+        parent_topic,
+        policy,
+        allowed_profile_ids,
+    )
+    if profile is None:
         return []
     normalized = normalized_topic_term(value)
-    if normalized in ALZHEIMER_DISEASE_FAMILY_TERMS:
+    if normalized in profile.family_terms:
         return [normalized]
     return []
 
 
-def alzheimer_disease_non_family_term_matches(value: object) -> bool:
-    """Return whether a term names pathology/process, not the disease family."""
-    return normalized_topic_term(value) in ALZHEIMER_DISEASE_NON_FAMILY_TERMS
+def concept_excluded_term_matches(
+    parent_topic_id: str,
+    parent_topic: dict[str, Any],
+    value: object,
+    policy: TopicStructurePolicy | None = None,
+    allowed_profile_ids: tuple[str, ...] | None = None,
+) -> bool:
+    """Return whether a profile excludes a term from its parent topic."""
+    profile = concept_profile_for_topic(
+        parent_topic_id,
+        parent_topic,
+        policy,
+        allowed_profile_ids,
+    )
+    return bool(
+        profile is not None
+        and normalized_topic_term(value) in profile.excluded_terms
+    )
 
 
-def parkinsons_disease_non_family_term_matches(value: object) -> bool:
-    """Return whether a Parkinson secondary term is an umbrella descriptor."""
-    return normalized_topic_term(value) in PARKINSONS_DISEASE_NON_FAMILY_TERMS
+def secondary_group_excluded_term_matches(
+    group_id: object,
+    value: object,
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
+    """Return whether a configured secondary group excludes a term."""
+    active_policy = policy or default_topic_structure_policy()
+    normalized_group_id = normalize_tagging_label(str(group_id or ""))
+    group = active_policy.secondary_groups.get(normalized_group_id)
+    return bool(
+        group is not None
+        and normalized_topic_term(value) in group.excluded_terms
+    )
 
 
-def experimental_methods_non_family_term_matches(value: object) -> bool:
-    """Return whether an experimental-method secondary term is not a method family."""
-    return normalized_topic_term(value) in EXPERIMENTAL_METHODS_NON_FAMILY_TERMS
-
-
-def generic_secondary_topic_bucket_matches(value: object) -> bool:
+def generic_secondary_topic_bucket_matches(
+    value: object,
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
     """Return whether a secondary topic id/label is a vague bucket."""
-    return normalized_topic_term(value) in GENERIC_SECONDARY_TOPIC_BUCKET_IDS
+    active_policy = policy or default_topic_structure_policy()
+    return normalized_topic_term(value) in active_policy.generic_secondary_bucket_ids
 
 
-def generic_secondary_topic_term_matches(value: object) -> bool:
+def generic_secondary_topic_term_matches(
+    value: object,
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
     """Return whether a secondary term is a generic neighborhood descriptor."""
-    return normalized_topic_term(value) in GENERIC_SECONDARY_TOPIC_TERMS
+    active_policy = policy or default_topic_structure_policy()
+    return normalized_topic_term(value) in active_policy.generic_secondary_terms
 
 
-EXPLICIT_PAIR_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "effect",
-    "effects",
-    "for",
-    "impact",
-    "impacts",
-    "in",
-    "its",
-    "of",
-    "on",
-    "research",
-    "the",
-    "their",
-    "to",
-    "use",
-    "using",
-    "with",
-}
+EXPLICIT_PAIR_STOPWORDS = _QUALITY_TERM_SETS["explicit_pair_stopwords"]
 
 
-def explicit_and_concept_pairs(topic_description: str | None) -> list[tuple[str, str]]:
+def explicit_and_concept_pairs(
+    topic_description: str | None,
+    policy: TopicStructurePolicy | None = None,
+) -> list[tuple[str, str]]:
     """Return conservative adjacent concept pairs explicitly joined by 'and'."""
     if not topic_description:
         return []
+    active_policy = policy or default_topic_structure_policy()
+    stopwords = active_policy.quality_term_sets["explicit_pair_stopwords"]
     raw_tokens = re.findall(r"[A-Za-z][A-Za-z0-9'-]*", topic_description.casefold())
     pairs: list[tuple[str, str]] = []
     seen = set()
@@ -1596,12 +1315,12 @@ def explicit_and_concept_pairs(topic_description: str | None) -> list[tuple[str,
 
         left = ""
         for candidate in reversed(raw_tokens[:index]):
-            if candidate not in EXPLICIT_PAIR_STOPWORDS and len(candidate) >= 3:
+            if candidate not in stopwords and len(candidate) >= 3:
                 left = candidate
                 break
         right = ""
         for candidate in raw_tokens[index + 1 :]:
-            if candidate not in EXPLICIT_PAIR_STOPWORDS and len(candidate) >= 3:
+            if candidate not in stopwords and len(candidate) >= 3:
                 right = candidate
                 break
         if not left or not right or left == right:
@@ -1614,15 +1333,24 @@ def explicit_and_concept_pairs(topic_description: str | None) -> list[tuple[str,
     return pairs
 
 
-def topic_description_words(topic_description: str | None) -> set[str]:
+def topic_description_words(
+    topic_description: str | None,
+    policy: TopicStructurePolicy | None = None,
+) -> set[str]:
     if not topic_description:
         return set()
-    return normalized_topic_words(topic_description)
+    return normalized_topic_words(topic_description, policy)
 
 
-def topic_mentions_concrete_comparator(topic_description: str | None) -> bool:
-    words = topic_description_words(topic_description)
-    if words.intersection(CONCRETE_COMPARATOR_TOPIC_WORDS):
+def topic_mentions_replacement_comparator(
+    topic_description: str | None,
+    policy: TopicStructurePolicy | None = None,
+) -> bool:
+    active_policy = policy or default_topic_structure_policy()
+    words = topic_description_words(topic_description, active_policy)
+    if words.intersection(
+        active_policy.quality_term_sets["replacement_comparator_topic_words"]
+    ):
         return True
     text = f" {str(topic_description or '').casefold()} "
     return any(
@@ -1639,10 +1367,15 @@ def topic_mentions_concrete_comparator(topic_description: str | None) -> bool:
     )
 
 
-def explicit_replacement_targets(topic_description: str | None) -> list[str]:
+def explicit_replacement_targets(
+    topic_description: str | None,
+    policy: TopicStructurePolicy | None = None,
+) -> list[str]:
     """Return concrete concepts named as replacement targets in the user topic."""
     if not topic_description:
         return []
+    active_policy = policy or default_topic_structure_policy()
+    stopwords = active_policy.quality_term_sets["replacement_target_stopwords"]
     text = str(topic_description).casefold()
     patterns = (
         (
@@ -1663,8 +1396,11 @@ def explicit_replacement_targets(topic_description: str | None) -> list[str]:
     seen = set()
     for pattern in patterns:
         for match in re.finditer(pattern, text):
-            for word in normalized_topic_words(match.group(1)):
-                if word in REPLACEMENT_TARGET_STOPWORDS or len(word) < 3:
+            # Preserve the user's lexical order. normalized_topic_words() returns
+            # a set and also adds configured equivalents, so iterating it here
+            # made the extracted target depend on Python's hash seed.
+            for word in re.findall(r"[a-z][a-z0-9'-]*", match.group(1)):
+                if word in stopwords or len(word) < 3:
                     continue
                 if word in seen:
                     continue
@@ -1676,20 +1412,24 @@ def explicit_replacement_targets(topic_description: str | None) -> list[str]:
 
 def explicit_application_components(
     topic_description: str | None,
+    policy: TopicStructurePolicy | None = None,
 ) -> list[tuple[str, str, set[str]]]:
     """Return named application/domain components from replacement questions."""
     if not topic_description:
         return []
+    active_policy = policy or default_topic_structure_policy()
+    qualifiers = active_policy.quality_term_sets["application_component_qualifiers"]
+    heads = active_policy.quality_term_sets["application_component_heads"]
     text = str(topic_description).casefold()
     tokens = re.findall(r"[a-z][a-z0-9'-]*", text)
     components: list[tuple[str, str, set[str]]] = []
     seen = set()
     for qualifier, head in zip(tokens, tokens[1:]):
-        if qualifier not in APPLICATION_COMPONENT_QUALIFIERS:
+        if qualifier not in qualifiers:
             continue
-        if head not in APPLICATION_COMPONENT_HEADS:
+        if head not in heads:
             continue
-        words = normalized_topic_words(f"{qualifier} {head}")
+        words = normalized_topic_words(f"{qualifier} {head}", active_policy)
         if len(words) < 2:
             continue
         display = f"{qualifier} {head}"
@@ -1703,10 +1443,14 @@ def explicit_application_components(
 
 def explicit_source_anchor_candidates(
     topic_description: str | None,
+    policy: TopicStructurePolicy | None = None,
 ) -> list[tuple[str, set[str]]]:
     """Return likely non-replaceable sources from use/application questions."""
     if not topic_description:
         return []
+    active_policy = policy or default_topic_structure_policy()
+    stopwords = active_policy.quality_term_sets["source_anchor_stopwords"]
+    modifiers = active_policy.quality_term_sets["source_anchor_modifiers"]
     text = str(topic_description).casefold()
     token_group = r"([a-z][a-z0-9'-]*(?:\s+[a-z][a-z0-9'-]*){0,4})"
     patterns = (
@@ -1726,11 +1470,11 @@ def explicit_source_anchor_candidates(
                 source_words.append(word)
             words = []
             for word in source_words:
-                normalized_words = normalized_topic_words(word)
+                normalized_words = normalized_topic_words(word, active_policy)
                 for normalized in normalized_words:
-                    if normalized in SOURCE_ANCHOR_STOPWORDS:
+                    if normalized in stopwords:
                         continue
-                    if normalized in SOURCE_ANCHOR_MODIFIERS:
+                    if normalized in modifiers:
                         continue
                     words.append(normalized)
             if not words:
@@ -1744,7 +1488,10 @@ def explicit_source_anchor_candidates(
     return candidates
 
 
-def topic_text_words(topic: dict[str, Any]) -> set[str]:
+def topic_text_words(
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+) -> set[str]:
     """Return words from ids, labels, and terms for explicit-pair checks."""
     texts = [topic.get("topic_id"), topic.get("label")]
     for key in ("terms", "retrieval_terms", "matching_terms"):
@@ -1753,21 +1500,52 @@ def topic_text_words(topic: dict[str, Any]) -> set[str]:
             texts.extend(values)
     words = set()
     for text in texts:
-        words.update(normalized_topic_words(text))
+        words.update(normalized_topic_words(text, policy))
     return words
 
 
 def generated_topic_structure_quality_issue_records(
     contract: dict[str, Any],
     topic_description: str | None = None,
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
 ) -> list[TopicStructureQualityIssue]:
     """Find weak LLM-generated topic decompositions.
 
     These checks are intentionally conservative. They catch obvious merged
-    component labels such as ``ai_in_school`` while allowing multi-word concepts
-    that function as one area, such as ``early_detection`` or ``climate_change``.
+    component labels that merge relationships while allowing multi-word
+    concepts that function as one coherent area.
     """
     issues: list[TopicStructureQualityIssue] = []
+    active_policy = policy or default_topic_structure_policy()
+    quality_terms = active_policy.quality_term_sets
+    GENERIC_TOPIC_STRUCTURE_TERMS = quality_terms["generic_topic_structure_terms"]
+    BROAD_UMBRELLA_TOPIC_STRUCTURE_TERMS = quality_terms[
+        "broad_umbrella_topic_structure_terms"
+    ]
+    TITLE_FIELD_COMPONENT_WORDS = quality_terms["title_field_component_words"]
+    BROAD_UMBRELLA_TOPIC_WORDS = quality_terms["broad_umbrella_topic_words"]
+    BROAD_CRITERION_TOPIC_WORDS = quality_terms["broad_criterion_topic_words"]
+    GENERIC_APPLICATION_TOPIC_WORDS = quality_terms[
+        "generic_application_topic_words"
+    ]
+    APPLICATION_PROCESS_OR_PROPERTY_WORDS = quality_terms[
+        "application_process_or_property_words"
+    ]
+    REPLACEMENT_ROLE_WORDS = quality_terms["replacement_role_words"]
+    REPLACEMENT_COMPARATOR_COVERAGE_WORDS = quality_terms[
+        "replacement_comparator_coverage_words"
+    ]
+    APPLICATION_COMPONENT_QUALIFIERS = quality_terms[
+        "application_component_qualifiers"
+    ]
+    APPLICATION_COMPONENT_HEADS = quality_terms["application_component_heads"]
+    MAIN_TOPIC_MIN_TERMS = active_policy.main_topic_min_terms
+    active_profile_ids = (
+        profile_ids
+        if profile_ids is not None
+        else selected_profile_ids(active_policy, contract, topic_description)
+    )
     topic_structure = require_mapping(
         contract.get("topic_structure"), "topic_structure"
     )
@@ -1788,18 +1566,20 @@ def generated_topic_structure_quality_issue_records(
     for topic in topic_maps:
         topic_id = str(topic.get("topic_id") or "").strip()
         if topic_id:
-            words_by_topic_id[topic_id] = topic_component_words(topic)
-            core_words_by_topic_id[topic_id] = topic_core_words(topic)
+            words_by_topic_id[topic_id] = topic_component_words(topic, active_policy)
+            core_words_by_topic_id[topic_id] = topic_core_words(topic, active_policy)
 
     main_topic_text_words = {
-        str(topic.get("topic_id") or "").strip(): topic_text_words(topic)
+        str(topic.get("topic_id") or "").strip(): topic_text_words(
+            topic, active_policy
+        )
         for topic in topic_maps
         if str(topic.get("topic_id") or "").strip()
     }
     main_topic_core_words = set()
     for words in core_words_by_topic_id.values():
         main_topic_core_words.update(words)
-    for left, right in explicit_and_concept_pairs(topic_description):
+    for left, right in explicit_and_concept_pairs(topic_description, active_policy):
         if left in main_topic_core_words and right in main_topic_core_words:
             continue
         for topic_id, words in main_topic_text_words.items():
@@ -1823,12 +1603,15 @@ def generated_topic_structure_quality_issue_records(
                 )
             )
 
-    description_words = topic_description_words(topic_description)
-    has_concrete_comparator = topic_mentions_concrete_comparator(topic_description)
-    comparator_covered = bool(
-        main_topic_core_words.intersection(CONCRETE_COMPARATOR_COVERAGE_WORDS)
+    description_words = topic_description_words(topic_description, active_policy)
+    has_replacement_comparator = topic_mentions_replacement_comparator(
+        topic_description,
+        active_policy,
     )
-    if has_concrete_comparator and not comparator_covered:
+    comparator_covered = bool(
+        main_topic_core_words.intersection(REPLACEMENT_COMPARATOR_COVERAGE_WORDS)
+    )
+    if has_replacement_comparator and not comparator_covered:
         for topic_id, core_words in core_words_by_topic_id.items():
             if not core_words.intersection(BROAD_CRITERION_TOPIC_WORDS):
                 continue
@@ -1849,7 +1632,10 @@ def generated_topic_structure_quality_issue_records(
                     ),
                 )
             )
-    replacement_targets = explicit_replacement_targets(topic_description)
+    replacement_targets = explicit_replacement_targets(
+        topic_description,
+        active_policy,
+    )
     for target in replacement_targets:
         if target in main_topic_core_words:
             continue
@@ -1870,7 +1656,8 @@ def generated_topic_structure_quality_issue_records(
         )
     if replacement_targets:
         for label, display, component_words in explicit_application_components(
-            topic_description
+            topic_description,
+            active_policy,
         ):
             if any(
                 component_words.issubset(core_words)
@@ -1896,35 +1683,40 @@ def generated_topic_structure_quality_issue_records(
 
     anchor_topic_id = str(topic_structure.get("anchor_topic_id") or "").strip()
     anchor_core_words = core_words_by_topic_id.get(anchor_topic_id, set())
-    alzheimer_topic_ids = [
-        topic_id
-        for topic_id, topic in topic_by_id.items()
-        if is_alzheimer_disease_topic(topic_id, topic)
-    ]
+    preferred_anchor_topic_ids = []
+    for topic_id, topic in topic_by_id.items():
+        profile = concept_profile_for_topic(
+            topic_id,
+            topic,
+            active_policy,
+            active_profile_ids,
+        )
+        if profile is not None and "method" in profile.anchor_over_kinds:
+            preferred_anchor_topic_ids.append(topic_id)
     anchor_topic = topic_by_id.get(anchor_topic_id)
     if (
-        alzheimer_topic_ids
+        preferred_anchor_topic_ids
         and anchor_topic is not None
-        and not is_alzheimer_disease_topic(anchor_topic_id, anchor_topic)
-        and is_method_topic(anchor_topic_id, anchor_topic)
+        and is_method_topic(anchor_topic_id, anchor_topic, active_policy)
     ):
+        preferred_topic_id = preferred_anchor_topic_ids[0]
         issues.append(
             TopicStructureQualityIssue(
                 code="disease_research_anchor_expected",
                 topic_id=anchor_topic_id or None,
-                value=alzheimer_topic_ids[0],
+                value=preferred_topic_id,
                 message=(
                     "topic_structure.anchor_topic_id is "
                     f"`{anchor_topic_id}`, a method component, while "
-                    f"`{alzheimer_topic_ids[0]}` represents Alzheimer's "
-                    "disease. For disease-specific method research, the "
-                    "disease is the non-replaceable title anchor; method "
-                    "components can have adjacent method secondaries."
+                    f"`{preferred_topic_id}` matches a configured concept "
+                    "profile that takes precedence over method anchors. The "
+                    "configured disease is the non-replaceable title anchor."
                 ),
             )
         )
     for display, candidate_words in explicit_source_anchor_candidates(
-        topic_description
+        topic_description,
+        active_policy,
     ):
         if candidate_words.intersection(anchor_core_words):
             continue
@@ -1953,7 +1745,8 @@ def generated_topic_structure_quality_issue_records(
         )
     rich_term_topic_ids: dict[str, str] = {}
     for display, candidate_words in explicit_source_anchor_candidates(
-        topic_description
+        topic_description,
+        active_policy,
     ):
         for topic_id, core_words in core_words_by_topic_id.items():
             if candidate_words.intersection(core_words):
@@ -1993,7 +1786,8 @@ def generated_topic_structure_quality_issue_records(
                 )
             )
         component_words = normalized_topic_words(
-            f"{topic_id} {topic.get('label') or ''}"
+            f"{topic_id} {topic.get('label') or ''}",
+            active_policy,
         )
         if (
             topic_id != anchor_topic_id
@@ -2016,7 +1810,11 @@ def generated_topic_structure_quality_issue_records(
         if (
             topic_id != anchor_topic_id
             and field == "title_or_abstract"
-            and not is_title_or_abstract_exception_topic(topic_id, topic)
+            and not is_title_or_abstract_exception_topic(
+                topic_id,
+                topic,
+                active_policy,
+            )
         ):
             issues.append(
                 TopicStructureQualityIssue(
@@ -2045,9 +1843,7 @@ def generated_topic_structure_quality_issue_records(
                     message=(
                         f"topic_structure.main_topics.{topic_id}.topic_id looks "
                         "like it merges multiple concept areas. Split required "
-                        "areas into separate main topics, for example `ai`, "
-                        "`school`, and `student_performance` instead of "
-                        "`ai_in_school`."
+                        "areas into separate, component-pure main topics."
                     ),
                 )
             )
@@ -2072,7 +1868,7 @@ def generated_topic_structure_quality_issue_records(
 
         if (
             topic_id in rich_term_topic_ids
-            and not is_replacement_topic(topic_id, topic)
+            and not is_replacement_topic(topic_id, topic, active_policy)
             and unique_string_count(topic.get("terms")) < MAIN_TOPIC_MIN_TERMS
         ):
             issues.append(
@@ -2095,19 +1891,25 @@ def generated_topic_structure_quality_issue_records(
         other_topic_words = set()
         other_core_words = set()
         own_core_words = core_words_by_topic_id.get(topic_id, set())
-        replacement_topic = is_replacement_topic(topic_id, topic)
-        application_topic = is_application_topic(topic_id, topic)
-        method_topic = is_method_topic(topic_id, topic)
-        alzheimer_topic = is_alzheimer_disease_topic(topic_id, topic)
+        replacement_topic = is_replacement_topic(topic_id, topic, active_policy)
+        application_topic = is_application_topic(topic_id, topic, active_policy)
+        method_topic = is_method_topic(topic_id, topic, active_policy)
+        concept_profile = concept_profile_for_topic(
+            topic_id,
+            topic,
+            active_policy,
+            active_profile_ids,
+        )
         replacement_allowed_words = replacement_term_allowed_words(
             topic_id,
             topic,
             replacement_targets,
+            active_policy,
         )
         surface_terms = topic_surface_form_terms(topic)
-        for group in COMMON_SURFACE_FORM_GROUPS:
-            abbreviations = group["abbreviations"]
-            full_forms = group["full_forms"]
+        for group in active_policy.surface_form_groups:
+            abbreviations = group.abbreviations
+            full_forms = group.full_forms
             has_abbreviation = bool(surface_terms.intersection(abbreviations))
             has_full_form = bool(surface_terms.intersection(full_forms))
             if has_abbreviation == has_full_form:
@@ -2120,11 +1922,11 @@ def generated_topic_structure_quality_issue_records(
                 TopicStructureQualityIssue(
                     code="missing_common_surface_form",
                     topic_id=topic_id,
-                    value=str(group["label"]),
+                    value=group.label,
                     message=(
                         "topic_structure.main_topics."
                         f"{topic_id} uses common surface form(s) "
-                        f"{present_terms} for {group['label']} but is missing "
+                        f"{present_terms} for {group.label} but is missing "
                         f"the common {missing_kind}. Include commonly used "
                         "abbreviations, full forms, spelling/punctuation "
                         "variants, and synonyms explicitly when they matter; "
@@ -2161,8 +1963,17 @@ def generated_topic_structure_quality_issue_records(
                         )
                     )
 
-                term_words = normalized_topic_words(term)
-                if alzheimer_topic and alzheimer_disease_non_family_term_matches(term):
+                term_words = normalized_topic_words(term, active_policy)
+                if (
+                    concept_profile is not None
+                    and concept_excluded_term_matches(
+                        topic_id,
+                        topic,
+                        term,
+                        active_policy,
+                        active_profile_ids,
+                    )
+                ):
                     issues.append(
                         TopicStructureQualityIssue(
                             code="main_topic_non_family_term",
@@ -2172,20 +1983,18 @@ def generated_topic_structure_quality_issue_records(
                                 "topic_structure.main_topics."
                                 f"{topic_id}.{key} contains `{term}`, which "
                                 "is pathology, mechanism, symptom, or process "
-                                "language rather than an Alzheimer's disease "
-                                "surface form. Disease main-topic terms should "
-                                "name the disease family itself: names, "
-                                "abbreviations, variants, stages, subtypes, "
-                                "or related impairment states such as AD, "
-                                "Alzheimer disease, dementia, MCI, mild "
-                                "cognitive impairment, prodromal disease, or "
-                                "preclinical disease."
+                                "language excluded by configured concept "
+                                f"profile `{concept_profile.profile_id}`. "
+                                "Parent terms should use that profile's "
+                                "configured family names, variants, stages, "
+                                "subtypes, abbreviations, and surface forms."
                             ),
                         )
                     )
                 if (
                     method_topic
-                    and normalized_topic_term(term) in METHOD_TOPIC_BARE_DOMAIN_TERMS
+                    and normalized_topic_term(term)
+                    in active_policy.method_topic_bare_domain_terms
                 ):
                     issues.append(
                         TopicStructureQualityIssue(
@@ -2197,10 +2006,8 @@ def generated_topic_structure_quality_issue_records(
                                 f"{topic_id}.{key} contains bare domain/object "
                                 f"term `{term}`. Method-topic terms should "
                                 "name methods, submethods, approaches, models, "
-                                "or method-qualified applications. Use phrases "
-                                "such as computational genomics or genomic "
-                                "analysis instead of bare domain terms when "
-                                "they are intended as methods."
+                                "or method-qualified applications instead of "
+                                "bare domain terms."
                             ),
                         )
                     )
@@ -2225,7 +2032,10 @@ def generated_topic_structure_quality_issue_records(
                             ),
                         )
                     )
-                material_family_words = broad_material_family_words(term_words)
+                material_family_words = broad_material_family_words(
+                    term_words,
+                    active_policy,
+                )
                 own_component_words = words_by_topic_id.get(topic_id, own_core_words)
                 if material_family_words and not term_words.intersection(
                     own_component_words
@@ -2276,10 +2086,8 @@ def generated_topic_structure_quality_issue_records(
                                     f"{topic_id}.{key} contains `{term}`, "
                                     "which uses broad criterion or motivation "
                                     "language. Replacement/comparator topics "
-                                    "should stay focused on substitution terms, "
-                                    "such as concrete replacement, concrete "
-                                    "alternative, cement substitute, or the "
-                                    "equivalent target-specific wording."
+                                    "should stay focused on target-specific "
+                                    "substitution wording."
                                 ),
                             )
                         )
@@ -2383,9 +2191,9 @@ def generated_topic_structure_quality_issue_records(
                                     "which uses broad criterion or motivation "
                                     "language. Application/domain topics "
                                     "should name the application area itself; "
-                                    "keep sustainability or green criteria in "
-                                    "scope, screening, or tagging unless they "
-                                    "are part of the user's exact required "
+                                    "keep broad criterion or motivation terms "
+                                    "in scope, screening, or tagging unless "
+                                    "they are part of the user's exact required "
                                     "domain phrase."
                                 ),
                             )
@@ -2458,13 +2266,20 @@ def generated_topic_structure_quality_issue_records(
         parent_topic = topic_by_id.get(main_topic_id)
         if parent_topic is None:
             continue
-        parent_is_replacement = is_replacement_topic(main_topic_id, parent_topic)
-        parent_is_application = is_application_topic(main_topic_id, parent_topic)
-        parent_is_method = is_method_topic(main_topic_id, parent_topic)
+        parent_is_replacement = is_replacement_topic(
+            main_topic_id, parent_topic, active_policy
+        )
+        parent_is_application = is_application_topic(
+            main_topic_id, parent_topic, active_policy
+        )
+        parent_is_method = is_method_topic(
+            main_topic_id, parent_topic, active_policy
+        )
         parent_replacement_allowed_words = replacement_term_allowed_words(
             main_topic_id,
             parent_topic,
             replacement_targets,
+            active_policy,
         )
         group_id = str(group.get("secondary_topic_id") or "").strip()
         parent_terms = set()
@@ -2498,7 +2313,7 @@ def generated_topic_structure_quality_issue_records(
 
         for key, term in group_text_values:
             if key in {"secondary_topic_id", "label"} and (
-                generic_secondary_topic_bucket_matches(term)
+                generic_secondary_topic_bucket_matches(term, active_policy)
             ):
                 issues.append(
                     TopicStructureQualityIssue(
@@ -2512,14 +2327,13 @@ def generated_topic_structure_quality_issue_records(
                             "secondary topic must name one adjacent concept, "
                             "and that secondary topic's terms must be aliases, "
                             "variants, or surface forms of that one secondary "
-                            "concept. Use separate groups such as "
-                            "`parkinsons_disease` and `cancer` instead of "
-                            "`related_diseases` or `other_diseases`."
+                            "concept. Use separate, specifically named groups "
+                            "instead of generic related/other buckets."
                         ),
                     )
                 )
             if key in {"terms", "retrieval_terms", "matching_terms"} and (
-                generic_secondary_topic_term_matches(term)
+                generic_secondary_topic_term_matches(term, active_policy)
             ):
                 issues.append(
                     TopicStructureQualityIssue(
@@ -2532,19 +2346,17 @@ def generated_topic_structure_quality_issue_records(
                             f"`{term}`, which is a generic neighborhood "
                             "descriptor rather than a term for this secondary "
                             "topic. Secondary-topic terms must belong to the "
-                            "family of the secondary topic itself. For "
-                            "example, a `parkinsons_disease` secondary can "
-                            "use Parkinson's disease, Parkinson disease, or "
-                            "PD; it should not use dementia types, "
-                            "neurodegenerative diseases, or cognitive "
-                            "impairments."
+                            "family of the secondary topic itself, using the "
+                            "configured group's aliases and surface forms "
+                            "rather than generic neighborhood descriptors."
                         ),
                     )
                 )
             if key in {"terms", "retrieval_terms", "matching_terms"}:
-                secondary_group_key = normalized_topic_term(group_id)
-                if secondary_group_key == "parkinsons disease" and (
-                    parkinsons_disease_non_family_term_matches(term)
+                if secondary_group_excluded_term_matches(
+                    group_id,
+                    term,
+                    active_policy,
                 ):
                     issues.append(
                         TopicStructureQualityIssue(
@@ -2554,37 +2366,19 @@ def generated_topic_structure_quality_issue_records(
                             message=(
                                 "topic_structure.secondary_topics."
                                 f"{main_topic_id}.{group_id}.{key} contains "
-                                f"`{term}`, which is an umbrella descriptor, "
-                                "not a Parkinson's disease surface form. A "
-                                "`parkinsons_disease` secondary should use "
-                                "terms such as Parkinson's disease, Parkinson "
-                                "disease, PD, or parkinsonism."
+                                f"`{term}`, which is excluded by the "
+                                f"configured `{group_id}` secondary-group "
+                                "policy. Use only that group's configured "
+                                "family terms and surface forms."
                             ),
                         )
                     )
-                if secondary_group_key == "experimental methods" and (
-                    experimental_methods_non_family_term_matches(term)
-                ):
-                    issues.append(
-                        TopicStructureQualityIssue(
-                            code="secondary_topic_non_family_term",
-                            topic_id=main_topic_id,
-                            value=term,
-                            message=(
-                                "topic_structure.secondary_topics."
-                                f"{main_topic_id}.{group_id}.{key} contains "
-                                f"`{term}`, which is not a focused "
-                                "experimental-method family term. An "
-                                "`experimental_methods` secondary should use "
-                                "terms such as experimental methods, "
-                                "laboratory methods, clinical methods, or wet "
-                                "lab methods."
-                            ),
-                        )
-                    )
-            term_words = normalized_topic_words(term)
+            term_words = normalized_topic_words(term, active_policy)
             if parent_is_replacement:
-                material_family_words = broad_material_family_words(term_words)
+                material_family_words = broad_material_family_words(
+                    term_words,
+                    active_policy,
+                )
                 if material_family_words and not term_words.intersection(
                     parent_replacement_allowed_words
                 ):
@@ -2599,9 +2393,7 @@ def generated_topic_structure_quality_issue_records(
                                 f"`{term}`, which is broad material-family or "
                                 "material-property wording. Secondary "
                                 "replacements for a replacement/comparator "
-                                "topic should stay target-specific, such as "
-                                "cement substitution or the equivalent "
-                                "comparator wording."
+                                "topic should stay target-specific."
                             ),
                         )
                     )
@@ -2720,16 +2512,15 @@ def generated_topic_structure_quality_issue_records(
                                 f"`{term}`, which uses broad criterion or "
                                 "motivation language. Secondary groups for an "
                                 "application/domain topic should use adjacent "
-                                "application wording, not sustainability, "
-                                "green, renewable, or eco-friendly criteria. "
-                                "For building-material topics, use fallback "
-                                "groups such as construction products, "
-                                "building products, structural materials, or "
-                                "insulation materials when appropriate."
+                                "application wording rather than broad "
+                                "criterion or motivation language."
                             ),
                         )
                     )
-                material_family_words = broad_material_family_words(term_words)
+                material_family_words = broad_material_family_words(
+                    term_words,
+                    active_policy,
+                )
                 if material_family_words and not term_words.intersection(
                     core_words_by_topic_id.get(main_topic_id, set())
                 ):
@@ -2742,11 +2533,8 @@ def generated_topic_structure_quality_issue_records(
                                 "topic_structure.secondary_topics."
                                 f"{main_topic_id}.{group_id}.{key} contains "
                                 f"`{term}`, which is broad material-family or "
-                                "material-property wording. Use adjacent "
-                                "application/domain terms such as construction "
-                                "products, building products, structural "
-                                "materials, or insulation materials when "
-                                "appropriate."
+                                "material-property wording. Use clean adjacent "
+                                "application/domain terms when appropriate."
                             ),
                         )
                     )
@@ -2779,7 +2567,10 @@ def generated_topic_structure_quality_issue_records(
                 {
                     subtype
                     for term in substantive_group_terms
-                    for subtype in method_internal_subtype_matches(term)
+                    for subtype in method_internal_subtype_matches(
+                        term,
+                        active_policy,
+                    )
                 }
             )
             if subtype_terms:
@@ -2794,9 +2585,8 @@ def generated_topic_structure_quality_issue_records(
                             f"subtype term(s) {subtype_terms}. Secondary "
                             "topics should be adjacent sibling directions, "
                             "not narrower internal parts of the parent. Move "
-                            "machine learning, deep learning, statistical "
-                            "modeling, network analysis, and similar method "
-                            "subtypes into the parent method topic."
+                            "configured method subtypes into the parent method "
+                            "topic."
                         ),
                     )
                 )
@@ -2804,10 +2594,12 @@ def generated_topic_structure_quality_issue_records(
             {
                 variant
                 for term in substantive_group_terms
-                for variant in disease_family_variant_matches(
+                for variant in concept_family_variant_matches(
                     main_topic_id,
                     parent_topic,
                     term,
+                    active_policy,
+                    active_profile_ids,
                 )
             }
         )
@@ -2822,13 +2614,10 @@ def generated_topic_structure_quality_issue_records(
                         f"{main_topic_id}.{group_id} contains in-family "
                         f"disease variant term(s) {disease_family_terms}. "
                         "Secondary topics should be adjacent sibling "
-                        "directions, such as other diseases or application "
-                        "areas, not other names, stages, variants, or "
-                        "impairment states from the parent disease family. "
-                        "Move Alzheimer's disease variants such as dementia, "
-                        "MCI, mild cognitive impairment, cognitive decline, "
-                        "prodromal disease, or preclinical disease into the "
-                        "parent disease topic."
+                        "directions, not names, stages, variants, or other "
+                        "in-family forms from the parent concept profile. "
+                        "Move configured family variants into the parent "
+                        "topic."
                     ),
                 )
             )
@@ -2856,6 +2645,8 @@ def generated_topic_structure_quality_issue_records(
 def generated_topic_structure_quality_issues(
     contract: dict[str, Any],
     topic_description: str | None = None,
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
 ) -> list[str]:
     """Return human-readable generated topic-structure issue messages."""
     return [
@@ -2863,6 +2654,8 @@ def generated_topic_structure_quality_issues(
         for issue in generated_topic_structure_quality_issue_records(
             contract,
             topic_description=topic_description,
+            policy=policy,
+            profile_ids=profile_ids,
         )
     ]
 
@@ -2877,6 +2670,8 @@ def is_crucial_topic_structure_issue(
 def generated_topic_structure_crucial_issue_records(
     contract: dict[str, Any],
     topic_description: str | None = None,
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
 ) -> list[TopicStructureQualityIssue]:
     """Return topic-structure issues that should block or force review."""
     return [
@@ -2884,6 +2679,8 @@ def generated_topic_structure_crucial_issue_records(
         for issue in generated_topic_structure_quality_issue_records(
             contract,
             topic_description=topic_description,
+            policy=policy,
+            profile_ids=profile_ids,
         )
         if is_crucial_topic_structure_issue(issue)
     ]
@@ -2892,6 +2689,8 @@ def generated_topic_structure_crucial_issue_records(
 def generated_topic_structure_crucial_issues(
     contract: dict[str, Any],
     topic_description: str | None = None,
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
 ) -> list[str]:
     """Return human-readable crucial topic-structure issue messages."""
     return [
@@ -2899,6 +2698,8 @@ def generated_topic_structure_crucial_issues(
         for issue in generated_topic_structure_crucial_issue_records(
             contract,
             topic_description=topic_description,
+            policy=policy,
+            profile_ids=profile_ids,
         )
     ]
 
@@ -2907,11 +2708,15 @@ def validate_generated_topic_structure_quality(
     contract: dict[str, Any],
     label: str = "Generated topic contract",
     topic_description: str | None = None,
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
 ) -> None:
     """Raise when a generated/refined contract violates crucial structure rules."""
     issues = generated_topic_structure_crucial_issue_records(
         contract,
         topic_description=topic_description,
+        policy=policy,
+        profile_ids=profile_ids,
     )
     if issues:
         joined = "\n- ".join(

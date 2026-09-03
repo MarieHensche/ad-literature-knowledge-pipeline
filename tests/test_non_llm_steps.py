@@ -7,6 +7,8 @@ import sys
 from http.client import InvalidURL
 from pathlib import Path
 
+import pytest
+
 from ad_lit_pipeline.io.jsonl_io import read_jsonl_objects, write_jsonl
 from ad_lit_pipeline.steps.collection import fetch_candidates as fetch_candidates_step
 from ad_lit_pipeline.steps.collection import verify_full_text_availability
@@ -21,9 +23,16 @@ from ad_lit_pipeline.steps.collection.select_calibration_papers import (
     run as run_select_calibration_papers,
 )
 from ad_lit_pipeline.steps.full_text import prepare as full_text_prepare
-from ad_lit_pipeline.steps.full_text.prepare import FullTextResult
 from ad_lit_pipeline.steps.full_text.evidence import build_knowledge_evidence
+from ad_lit_pipeline.steps.full_text.identity import assess_document_identity
+from ad_lit_pipeline.steps.full_text.prepare import FullTextResult
 from ad_lit_pipeline.steps.full_text.prepare import run as run_prepare_full_text
+from ad_lit_pipeline.steps.export.mantis import run as run_export_mantis
+from ad_lit_pipeline.steps.tagging.audit import run as run_audit_extraction
+from ad_lit_pipeline.steps.tagging.evidence_policy import (
+    EVIDENCE_POLICY_FULL_TEXT_REQUIRED,
+    assess_tagging_evidence,
+)
 from ad_lit_pipeline.topics.contract import load_topic_contract
 from ad_lit_pipeline.topics.matching import (
     annotate_candidate_topic_matches,
@@ -119,6 +128,51 @@ def test_normalize_metadata_example_cli(tmp_path: Path) -> None:
     assert rows[0]["abstract_available"] == "yes"
     assert rows[0]["full_text_available"] == "no"
     assert rows[0]["metadata_notes"] == "missing_full_text_path"
+
+
+def test_normalize_metadata_preserves_unknown_structured_columns(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "papers.csv"
+    output_path = tmp_path / "normalized.csv"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Provenance-preserving study",
+                "year": "2024",
+                "doi": "10.1/example",
+                "abstract": "A sufficiently detailed abstract for testing.",
+                "provider_id": "W123",
+                "publication_date": "2024-03-04",
+                "duplicate_provenance_json": '[{"query_id":"q2"}]',
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "provider_id",
+            "publication_date",
+            "duplicate_provenance_json",
+        ],
+    )
+
+    run_script(
+        "scripts/normalize_metadata.py",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+    )
+
+    rows = read_csv(output_path)
+    assert rows[0]["provider_id"] == "W123"
+    assert rows[0]["publication_date"] == "2024-03-04"
+    assert rows[0]["duplicate_provenance_json"] == '[{"query_id":"q2"}]'
 
 
 def test_fetch_review_overviews_builds_review_only_openalex_plan(tmp_path: Path) -> None:
@@ -307,6 +361,7 @@ def test_screen_scope_preserves_metadata_and_appends_contract_fields(
             "scope_reason",
             "scope_matched_include_terms",
             "scope_matched_exclude_terms",
+            "scope_publication_window_status",
         ]
         rows = list(reader)
 
@@ -425,6 +480,7 @@ def test_prepare_full_text_uses_local_text_and_writes_manifest(
     assert result.row_counts["local_texts"] == 1
     assert rows[0]["full_text_status"] == "local_text_extracted"
     assert rows[0]["full_text_source"] == "local_file"
+    assert rows[0]["full_text_usable_for_tagging"] == "yes"
     assert text_path.exists()
     assert manifest_rows[0]["paper_id"] == "p1"
     assert int(manifest_rows[0]["full_text_chars"]) >= 1000
@@ -487,8 +543,67 @@ def test_prepare_full_text_reuses_existing_text_path(tmp_path: Path) -> None:
     assert rows[0]["full_text_status"] == "local_text_extracted"
     assert rows[0]["full_text_source"] == "collection_workflow"
     assert rows[0]["full_text_text_path"] == str(full_text)
+    assert rows[0]["full_text_usable_for_tagging"] == "yes"
     assert int(rows[0]["full_text_chars"]) >= 1000
     assert manifest_rows[0]["full_text_text_path"] == str(full_text)
+
+
+def test_prepare_full_text_distinguishes_verified_url_from_usable_text(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "scope_screened.csv"
+    output_path = tmp_path / "scope_screened_full_text.csv"
+    manifest_path = tmp_path / "full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Reachable landing page without extractable text",
+                "abstract": "",
+                "full_text_available": "yes",
+                "full_text_availability_status": "verified",
+                "full_text_url": "https://example.org/landing",
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "abstract",
+            "full_text_available",
+            "full_text_availability_status",
+            "full_text_url",
+            "scope_decision",
+        ],
+    )
+    monkeypatch.setattr(
+        full_text_prepare,
+        "resolve_full_text",
+        lambda row, cache_dir, unpaywall_email, core_api_key: FullTextResult(
+            status="extraction_failed",
+            error="landing page contained no extractable scholarly text",
+        ),
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    row = read_csv(output_path)[0]
+    manifest_row = read_csv(manifest_path)[0]
+    assert row["full_text_available"] == "yes"
+    assert row["full_text_availability_status"] == "verified"
+    assert row["full_text_status"] == "extraction_failed"
+    assert row["full_text_usable_for_tagging"] == "no"
+    assert manifest_row["full_text_usable_for_tagging"] == "no"
+    assert result.row_counts["usable_full_texts"] == 0
+    assert result.row_counts["extraction_failures"] == 1
 
 
 def test_prepare_full_text_continues_after_invalid_pdf_response(
@@ -550,7 +665,8 @@ def test_prepare_full_text_continues_after_invalid_pdf_response(
     rows = read_csv(output_path)
     assert result.row_counts["local_texts"] == 1
     assert rows[0]["full_text_status"] == "html_text_extracted"
-    assert rows[0]["full_text_url"] == "https://example.org/full-text"
+    assert rows[0]["full_text_url"] == "https://example.org/bad.pdf"
+    assert rows[0]["full_text_resolved_url"] == "https://example.org/full-text"
     assert int(rows[0]["full_text_chars"]) >= 1000
 
 
@@ -566,7 +682,11 @@ def test_prepare_full_text_ignores_template_download_links(
         "<html><body>"
         '<a href="/plosone/article/figure/image?size=original&download=&id=<%= doi %>">'
         "download</a>"
-        + "<p>Postpartum digital mental health intervention evidence.</p>" * 40
+        + (
+            "<p>Digital intervention for postpartum depression: "
+            "mental health evidence.</p>"
+        )
+        * 40
         + "</body></html>"
     ).encode("utf-8")
     requested_urls = []
@@ -616,6 +736,160 @@ def test_prepare_full_text_ignores_template_download_links(
     assert result.row_counts["local_texts"] == 1
     assert rows[0]["full_text_status"] == "html_text_extracted"
     assert rows[0]["full_text_error"] == ""
+
+
+def test_document_identity_requires_front_matter_doi_or_compact_full_title() -> None:
+    row = {
+        "doi": "10.1234/target",
+        "title": "Artificial intelligence for Alzheimer disease research",
+    }
+    title_match = assess_document_identity(
+        {**row, "doi": ""},
+        (
+            "Artificial intelligence for Alzheimer disease research\n"
+            + "Methods and findings. " * 100
+        ),
+    )
+    doi_match = assess_document_identity(
+        row,
+        "Article header DOI 10.1234/target\n" + "Body text. " * 100,
+    )
+    generic_overlap = assess_document_identity(
+        {**row, "doi": ""},
+        (
+            "Artificial intelligence methods are surveyed. "
+            + "unrelated material " * 20
+            + "Alzheimer disease research is discussed elsewhere."
+        ),
+    )
+    references_only_doi = assess_document_identity(
+        row,
+        "Unrelated article front matter. " * 900 + "10.1234/target",
+    )
+    doi_prefix_only = assess_document_identity(
+        row,
+        "Article header DOI 10.1234/target-extra\n" + "Body text. " * 100,
+    )
+
+    assert title_match.status == "verified_title"
+    assert doi_match.status == "verified_doi"
+    assert generic_overlap.status == "mismatch"
+    assert references_only_doi.status == "mismatch"
+    assert doi_prefix_only.status == "mismatch"
+
+
+def test_prepare_full_text_preserves_section_boundaries() -> None:
+    cleaned = full_text_prepare.clean_extracted_text(
+        " Methods  \n  Participants and design.  \n\n\n Results\n Outcome. "
+    )
+
+    assert cleaned == (
+        "Methods\nParticipants and design.\n\nResults\nOutcome."
+    )
+
+
+def test_prepare_full_text_rejects_wrong_remote_document_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "scope.csv"
+    output_path = tmp_path / "full_text.csv"
+    manifest_path = tmp_path / "full_text_manifest.csv"
+    cache_dir = tmp_path / "cache"
+    wrong_text = (
+        "ADNI data use acknowledgements and administrative information.\n"
+        * 40
+    )
+
+    monkeypatch.setattr(
+        full_text_prepare,
+        "request_bytes",
+        lambda url: (b"%PDF-mocked", "application/pdf", url),
+    )
+    monkeypatch.setattr(
+        full_text_prepare,
+        "extract_pdf_text",
+        lambda data: wrong_text,
+    )
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": (
+                    "Machine learning for Alzheimer disease diagnosis using MRI"
+                ),
+                "year": "2024",
+                "doi": "",
+                "abstract": "A diagnostic imaging study.",
+                "full_text_url": "https://example.org/wrong.pdf",
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "abstract",
+            "full_text_url",
+            "scope_decision",
+        ],
+    )
+
+    result = run_prepare_full_text(
+        input_path,
+        output_path,
+        manifest_path,
+        cache_dir,
+    )
+
+    row = read_csv(output_path)[0]
+    assert row["full_text_status"] == "identity_mismatch"
+    assert row["full_text_identity_status"] == "mismatch"
+    assert row["full_text_usable_for_tagging"] == "no"
+    assert row["full_text_text_path"] == ""
+    assert row["full_text_url"] == "https://example.org/wrong.pdf"
+    assert row["full_text_resolved_url"] == "https://example.org/wrong.pdf"
+    assert result.row_counts["identity_failures"] == 1
+
+
+def test_tagging_evidence_policy_rejects_placeholders_and_unverified_text(
+    tmp_path: Path,
+) -> None:
+    wrong_text_path = tmp_path / "wrong.txt"
+    wrong_text_path.write_text(
+        "Administrative acknowledgements from another dataset.\n" * 40,
+        encoding="utf-8",
+    )
+    placeholder = assess_tagging_evidence(
+        {"abstract": "N/A", "full_text_status": "extraction_failed"}
+    )
+    abstract_only_strict = assess_tagging_evidence(
+        {
+            "abstract": "A substantive abstract reports diagnostic performance.",
+            "full_text_status": "not_available",
+        },
+        evidence_policy=EVIDENCE_POLICY_FULL_TEXT_REQUIRED,
+    )
+    wrong_remote = assess_tagging_evidence(
+        {
+            "title": "Artificial intelligence for Alzheimer diagnosis",
+            "doi": "",
+            "abstract": "A substantive abstract remains a valid fallback.",
+            "full_text_status": "pdf_text_extracted",
+            "full_text_resolved_url": "https://example.org/wrong.pdf",
+            "full_text_text_path": str(wrong_text_path),
+        }
+    )
+
+    assert placeholder.eligible is False
+    assert placeholder.basis == "none"
+    assert abstract_only_strict.eligible is False
+    assert "fallback is disabled" in abstract_only_strict.warning
+    assert wrong_remote.eligible is True
+    assert wrong_remote.basis == "abstract"
+    assert "document identity did not match" in wrong_remote.warning
 
 
 def test_candidate_locations_ignore_core_timeout(monkeypatch) -> None:
@@ -760,6 +1034,254 @@ collection:
     assert "student outcomes" not in rows[0]["scope_matched_include_terms"]
     assert rows[1]["scope_decision"] == "include"
     assert "grade point average" not in rows[1]["scope_matched_include_terms"]
+
+
+def test_screen_scope_does_not_report_missing_phrase_qualifiers(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "normalized.csv"
+    output_path = tmp_path / "screened.csv"
+    contract_path = tmp_path / "contract.yaml"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Alzheimer's disease diagnosis",
+                "year": "2024",
+                "doi": "",
+                "abstract": "A dementia diagnosis model.",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Prodromal Alzheimer's disease",
+                "year": "2024",
+                "doi": "",
+                "abstract": "Differential diagnosis of dementia.",
+            },
+        ],
+        ["paper_id", "title", "year", "doi", "abstract"],
+    )
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract["rule_based_screening"]["include_terms"] = [
+        "Alzheimer's disease",
+        "prodromal Alzheimer's disease",
+        "dementia differential diagnosis",
+        "differential diagnosis of dementia",
+    ]
+    from ad_lit_pipeline.io.yaml_io import write_yaml_object
+
+    write_yaml_object(contract_path, contract)
+
+    run_script(
+        "scripts/screen_scope.py",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--topic-contract",
+        str(contract_path),
+    )
+
+    rows = read_csv(output_path)
+    first_matches = rows[0]["scope_matched_include_terms"].split("; ")
+    second_matches = rows[1]["scope_matched_include_terms"].split("; ")
+    assert "Alzheimer's disease" in first_matches
+    assert "prodromal Alzheimer's disease" not in first_matches
+    assert "dementia differential diagnosis" not in first_matches
+    assert "differential diagnosis of dementia" not in first_matches
+    assert "Alzheimer's disease" in second_matches
+    assert "prodromal Alzheimer's disease" in second_matches
+    assert "differential diagnosis of dementia" in second_matches
+    assert "dementia differential diagnosis" not in second_matches
+
+
+def test_screen_scope_enforces_exact_publication_window_boundaries(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "normalized.csv"
+    output_path = tmp_path / "screened.csv"
+    contract_path = tmp_path / "contract.yaml"
+    rows = [
+        {
+            "paper_id": paper_id,
+            "title": "Artificial intelligence in Alzheimer disease",
+            "year": year,
+            "publication_date": publication_date,
+            "doi": "",
+            "abstract": "A relevant Alzheimer disease study.",
+        }
+        for paper_id, year, publication_date in [
+            ("start", "2020", "2020-01-01"),
+            ("end", "2026", "2026-06-19"),
+            ("after", "2026", "2026-06-20"),
+            ("year_mismatch", "2025", "2024-06-20"),
+            ("whole_year", "2021", ""),
+            ("boundary_without_date", "2026", ""),
+        ]
+    ]
+    write_csv(
+        input_path,
+        rows,
+        [
+            "paper_id",
+            "title",
+            "year",
+            "publication_date",
+            "doi",
+            "abstract",
+        ],
+    )
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract["collection"]["publication_window"] = {
+        "start": "2020-01-01",
+        "end": "2026-06-19",
+    }
+    from ad_lit_pipeline.io.yaml_io import write_yaml_object
+
+    write_yaml_object(contract_path, contract)
+
+    run_script(
+        "scripts/screen_scope.py",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--topic-contract",
+        str(contract_path),
+    )
+
+    screened = {row["paper_id"]: row for row in read_csv(output_path)}
+    assert screened["start"]["scope_decision"] == "include"
+    assert screened["start"]["scope_publication_window_status"] == (
+        "eligible_exact_date"
+    )
+    assert screened["end"]["scope_decision"] == "include"
+    assert screened["after"]["scope_decision"] == "exclude_or_route_elsewhere"
+    assert screened["after"]["scope_publication_window_status"] == (
+        "after_publication_window"
+    )
+    assert screened["year_mismatch"]["scope_decision"] == (
+        "exclude_or_route_elsewhere"
+    )
+    assert screened["year_mismatch"]["scope_publication_window_status"] == (
+        "publication_date_year_mismatch"
+    )
+    assert screened["whole_year"]["scope_decision"] == "include"
+    assert screened["whole_year"]["scope_publication_window_status"] == (
+        "eligible_whole_year"
+    )
+    assert screened["boundary_without_date"]["scope_decision"] == (
+        "exclude_or_route_elsewhere"
+    )
+    assert screened["boundary_without_date"][
+        "scope_publication_window_status"
+    ] == "missing_exact_boundary_date"
+
+
+def test_screen_scope_enforces_publication_window_carried_by_corpus_row(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "normalized.csv"
+    output_path = tmp_path / "screened.csv"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Artificial intelligence in Alzheimer disease",
+                "year": "2026",
+                "publication_date": "2026-06-20",
+                "doi": "",
+                "abstract": "A relevant Alzheimer disease study.",
+                "corpus_publication_window_start": "2020-01-01",
+                "corpus_publication_window_end": "2026-06-19",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "publication_date",
+            "doi",
+            "abstract",
+            "corpus_publication_window_start",
+            "corpus_publication_window_end",
+        ],
+    )
+
+    run_script(
+        "scripts/screen_scope.py",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--topic-contract",
+        "configs/topics/early_detection_ad.yaml",
+    )
+
+    row = read_csv(output_path)[0]
+    assert row["scope_decision"] == "exclude_or_route_elsewhere"
+    assert row["scope_publication_window_status"] == "after_publication_window"
+
+
+def test_screen_scope_rejects_contract_and_corpus_window_mismatch(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "normalized.csv"
+    output_path = tmp_path / "screened.csv"
+    contract_path = tmp_path / "contract.yaml"
+    write_csv(
+        input_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Artificial intelligence in Alzheimer disease",
+                "year": "2024",
+                "publication_date": "2024-01-01",
+                "doi": "",
+                "abstract": "A relevant Alzheimer disease study.",
+                "corpus_publication_window_start": "2019-01-01",
+                "corpus_publication_window_end": "2026-06-19",
+                "corpus_publication_window_inclusive": "true",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "publication_date",
+            "doi",
+            "abstract",
+            "corpus_publication_window_start",
+            "corpus_publication_window_end",
+            "corpus_publication_window_inclusive",
+        ],
+    )
+    contract = load_topic_contract(ROOT / "configs/topics/early_detection_ad.yaml")
+    contract["collection"]["publication_window"] = {
+        "start": "2020-01-01",
+        "end": "2026-06-19",
+    }
+    from ad_lit_pipeline.io.yaml_io import write_yaml_object
+
+    write_yaml_object(contract_path, contract)
+
+    run_script(
+        "scripts/screen_scope.py",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--topic-contract",
+        str(contract_path),
+    )
+
+    row = read_csv(output_path)[0]
+    assert row["scope_decision"] == "exclude_or_route_elsewhere"
+    assert row["scope_publication_window_status"] == (
+        "publication_window_constraint_mismatch"
+    )
 
 
 def test_deduplicate_candidates_prefers_doi_and_abstract(tmp_path: Path) -> None:
@@ -1059,8 +1581,53 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
         "url": "https://example.test",
         "rank": 1,
         "retrieval_date": "2026-05-25",
+        "retrieved_at": "2026-05-25T10:11:12+00:00",
+        "corpus_publication_window_start": "2020-01-01",
+        "corpus_publication_window_end": "2026-06-19",
+        "corpus_publication_window_inclusive": True,
+        "query": "early detection Alzheimer",
+        "query_index": 2,
+        "query_rank": 3,
+        "query_reason": "Primary retrieval query.",
+        "query_url": "https://api.openalex.org/works?filter=example",
+        "retrieval_group_id": "tier_0",
+        "retrieval_tier": 0,
+        "retrieval_query_id": "tier_0_all_main",
+        "retrieval_logical_query_id": "tier_0_all_main",
+        "retrieval_iteration": 1,
+        "retrieval_phase": "strict",
         "dedupe_key": "doi:10.123/example",
         "duplicate_count": 1,
+        "in_fetch_duplicate_count": 1,
+        "duplicate_provenance": [
+            {
+                "provider_id": "W2",
+                "retrieval_query_id": "tier_1_secondary",
+            }
+        ],
+        "in_fetch_duplicate_provenance": [
+            {
+                "provider_id": "W1",
+                "query_index": 4,
+                "retrieval_query_id": "tier_0_repeat",
+            }
+        ],
+        "retrieval_query_blocks": [
+            {"topic_id": "early_detection", "terms": ["early detection"]}
+        ],
+        "full_text_locations": [
+            {"url": "https://example.test/full.pdf", "is_oa": True}
+        ],
+        "raw_record": {
+            "id": "W1",
+            "publication_date": "2024-03-04",
+            "updated_date": "2026-05-20T10:00:00Z",
+            "type": "article",
+            "type_crossref": "journal-article",
+            "language": "en",
+            "is_retracted": False,
+            "cited_by_count": 12,
+        },
         "topic_matches": {
             "main_topic_values": {
                 "early_detection": [{"value": "early detection", "field": "title"}],
@@ -1123,41 +1690,61 @@ def test_export_included_candidates_to_canonical_csv(tmp_path: Path) -> None:
     )
 
     rows = read_csv(output_path)
-    assert rows == [
-        {
-            "paper_id": "paper_1",
-            "title": "Detection Study",
-            "year": "2024",
-            "doi": "10.123/example",
-            "abstract": "Early detection abstract.",
-            "authors": "A. Author",
-            "venue": "Journal",
-            "url": "https://example.test",
-            "source": "collected:openalex",
-            "full_text_path": "",
-            "full_text_availability_status": "",
-            "full_text_availability_source": "",
-            "full_text_url": "",
-            "full_text_url_kind": "",
-            "full_text_url_checked_at": "",
-            "full_text_url_content_type": "",
-            "full_text_license": "",
-            "full_text_is_open_access": "",
-            "full_text_availability_error": "",
-            "notes": (
-                "provider=openalex; provider_id=W1; source_rank=1; "
-                "retrieval_date=2026-05-25; screening_confidence=high; "
-                "screening_reason=Directly relevant.; title_anchor_present=yes; "
-                "title_relevance_tier=0; "
-                "title_matched_main_topics=early_detection; disease_state; "
-                "dedupe_key=doi:10.123/example; "
-                "duplicate_count=1; "
-                "topic_main_matches=disease_state=Alzheimer@abstract, "
-                "early_detection=early detection@title; "
-                "topic_secondary_matches=evidence_signal=biomarker@abstract"
-            ),
-        }
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["paper_id"] == "paper_1"
+    assert row["title"] == "Detection Study"
+    assert row["provider"] == "openalex"
+    assert row["provider_id"] == "W1"
+    assert row["publication_date"] == "2024-03-04"
+    assert row["corpus_publication_window_start"] == "2020-01-01"
+    assert row["corpus_publication_window_end"] == "2026-06-19"
+    assert row["corpus_publication_window_inclusive"] == "true"
+    assert row["provider_record_updated_at"] == "2026-05-20T10:00:00Z"
+    assert row["provider_source_type"] == "article"
+    assert row["canonical_work_kind"] == "research_article"
+    assert row["source_type_classification_status"] == "resolved"
+    assert json.loads(row["source_type_classification_evidence_json"]) == [
+        "provider_type:type=article"
     ]
+    assert json.loads(row["source_type_review_reasons_json"]) == []
+    assert row["provider_evidence_status"] == "unavailable"
+    assert row["provider_page_evidence_id"] == ""
+    assert json.loads(row["provider_evidence_json"]) == {
+        "reason": "historical_candidate_artifact",
+        "schema_version": "1.0.0",
+        "status": "unavailable",
+    }
+    assert row["provider_crossref_type"] == "journal-article"
+    assert row["language"] == "en"
+    assert row["is_retracted"] == "false"
+    assert row["cited_by_count"] == "12"
+    assert row["source_rank"] == "1"
+    assert row["retrieval_date"] == "2026-05-25"
+    assert row["retrieved_at"] == "2026-05-25T10:11:12+00:00"
+    assert row["source_query"] == "early detection Alzheimer"
+    assert row["source_query_index"] == "2"
+    assert row["source_query_rank"] == "3"
+    assert row["source_query_reason"] == "Primary retrieval query."
+    assert row["retrieval_tier"] == "0"
+    assert row["retrieval_phase"] == "strict"
+    assert row["dedupe_key"] == "doi:10.123/example"
+    assert row["duplicate_count"] == "1"
+    assert row["in_fetch_duplicate_count"] == "1"
+    assert json.loads(row["duplicate_provenance_json"])[0]["provider_id"] == "W2"
+    assert json.loads(row["in_fetch_duplicate_provenance_json"])[0][
+        "query_index"
+    ] == 4
+    assert json.loads(row["retrieval_query_blocks_json"])[0]["topic_id"] == (
+        "early_detection"
+    )
+    assert json.loads(row["full_text_locations_json"])[0]["is_oa"] is True
+    assert len(row["candidate_observation_sha256"]) == 64
+    assert len(row["raw_record_sha256"]) == 64
+    assert row["raw_record_source_path"] == str(candidates_path)
+    assert row["raw_record_source_line"] == "1"
+    assert len(row["raw_record_source_file_sha256"]) == 64
+    assert "screening_reason=Directly relevant." in row["notes"]
 
 
 def test_export_included_candidates_orders_by_title_tier_and_caps(
@@ -1524,6 +2111,154 @@ def test_fetch_candidates_defaults_to_provider_max_per_page(
     assert provider.per_page == 100
     assert result.metadata["per_page"] == 100
     assert result.metadata["provider_max_per_page"] == 100
+
+
+def test_fetch_candidates_rejects_unproven_publication_window_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    output_path = tmp_path / "candidates.jsonl"
+    write_json(
+        plan_path,
+        {
+            "recommended_provider": "openalex",
+            "provider_specific_plan": {
+                "provider": "openalex",
+                "query": "AI Alzheimer",
+            },
+            "corpus_constraints": {
+                "publication_window": {
+                    "start": "2020-01-01",
+                    "end": "2026-06-19",
+                    "inclusive": True,
+                }
+            },
+        },
+    )
+
+    class FakeProvider:
+        name = "openalex"
+        max_per_page = 100
+        last_fetch_diagnostics = {}
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            pass
+
+        def fetch_candidates(
+            self,
+            plan: dict[str, object],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+        ) -> list[dict[str, object]]:
+            return [
+                {
+                    "provider": "openalex",
+                    "provider_id": provider_id,
+                    "publication_date": publication_date,
+                }
+                for provider_id, publication_date in [
+                    ("before", "2019-12-31"),
+                    ("start", "2020-01-01"),
+                    ("end", "2026-06-19"),
+                    ("after", "2026-06-20"),
+                    ("missing", ""),
+                ]
+            ]
+
+    monkeypatch.setitem(
+        fetch_candidates_step.PROVIDERS,
+        "openalex",
+        FakeProvider(),
+    )
+
+    result = fetch_candidates_step.run(
+        plan_path,
+        output_path,
+        max_results=5,
+    )
+
+    assert [row["provider_id"] for row in read_jsonl_objects(output_path)] == [
+        "start",
+        "end",
+    ]
+    for row in read_jsonl_objects(output_path):
+        assert row["corpus_publication_window_start"] == "2020-01-01"
+        assert row["corpus_publication_window_end"] == "2026-06-19"
+        assert row["corpus_publication_window_inclusive"] is True
+    assert result.row_counts["provider_candidates_returned"] == 5
+    assert result.row_counts["publication_window_rejections"] == 3
+    assert result.row_counts["fetched_candidates"] == 2
+    assert {
+        row["reason"]
+        for row in result.metadata["publication_window_rejections"]
+    } == {
+        "before_publication_window",
+        "after_publication_window",
+        "missing_or_invalid_exact_publication_date",
+    }
+
+
+def test_fetch_candidates_reports_target_limited_query_coverage(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    output_path = tmp_path / "candidates.jsonl"
+    write_json(
+        plan_path,
+        {
+            "recommended_provider": "openalex",
+            "provider_specific_plan": {
+                "provider": "openalex",
+                "query": "AI Alzheimer",
+            },
+        },
+    )
+
+    class FakeProvider:
+        name = "openalex"
+        max_per_page = 100
+        last_fetch_diagnostics = {
+            "planned_logical_query_count": 3,
+            "planned_execution_query_count": 3,
+            "executed_logical_query_count": 1,
+            "executed_query_count": 1,
+        }
+
+        def validate_plan(self, plan: dict[str, object]) -> None:
+            pass
+
+        def fetch_candidates(
+            self,
+            plan: dict[str, object],
+            max_results: int,
+            per_page: int,
+            mailto: str | None,
+            sleep_seconds: float,
+        ) -> list[dict[str, object]]:
+            return [{"provider": "openalex", "provider_id": "W1"}]
+
+    monkeypatch.setitem(
+        fetch_candidates_step.PROVIDERS,
+        "openalex",
+        FakeProvider(),
+    )
+
+    result = fetch_candidates_step.run(
+        plan_path,
+        output_path,
+        max_results=1,
+    )
+
+    assert result.row_counts["planned_execution_query_count"] == 3
+    assert result.row_counts["executed_query_count"] == 1
+    assert result.warnings == [
+        "Tiered retrieval reached the unique-candidate target before all "
+        "planned execution queries ran: executed=1 planned=3."
+    ]
 
 
 def test_verify_full_text_availability_skips_excluded_candidates(
@@ -2523,3 +3258,240 @@ def test_export_mantis_ready_filters_to_core_and_adjacent_topics(tmp_path: Path)
     assert rows[1]["title"] == "Adjacent Study"
     assert rows[1]["categoric"] == "adjacent_but_relevant"
     assert "Exported 2 Mantis rows" in result.stdout
+
+
+def test_audit_and_mantis_preserve_but_do_not_publish_untaggable_rows(
+    tmp_path: Path,
+) -> None:
+    extraction_path = tmp_path / "extraction.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    audit_path = tmp_path / "audit.csv"
+    mantis_path = tmp_path / "mantis.csv"
+    write_csv(
+        extraction_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Evidence-backed study",
+                "year": "2024",
+                "doi": "10.123/evidence",
+                "tagging_status": "tagged",
+                "tagging_evidence_basis": "abstract",
+                "tagging_error": "",
+                "main_knowledge_claim": "The abstract reports a result.",
+                "review_status": "ai_tagged",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Title-only paper",
+                "year": "2023",
+                "doi": "10.123/title-only",
+                "tagging_status": "skipped_insufficient_evidence",
+                "tagging_evidence_basis": "none",
+                "tagging_error": (
+                    "no usable abstract or extracted full text is available "
+                    "(full_text_status=extraction_failed)"
+                ),
+                "main_knowledge_claim": "",
+                "review_status": "",
+            },
+        ],
+        [
+            "paper_id",
+            "title",
+            "year",
+            "doi",
+            "tagging_status",
+            "tagging_evidence_basis",
+            "tagging_error",
+            "main_knowledge_claim",
+            "review_status",
+        ],
+    )
+    write_json(
+        config_path,
+        {
+            "categories": [
+                {
+                    "category_id": "review_status",
+                    "allowed_values": [{"value": "ai_tagged"}],
+                }
+            ]
+        },
+    )
+    write_json(
+        rules_path,
+        {
+            "rules": [
+                {
+                    "category_id": "review_status",
+                    "selection": "single",
+                    "required": True,
+                }
+            ]
+        },
+    )
+
+    audit_result = run_audit_extraction(
+        extraction_path,
+        config_path,
+        rules_path,
+        audit_path,
+    )
+    mantis_result = run_export_mantis(extraction_path, mantis_path)
+
+    assert read_csv(audit_path) == [
+        {
+            "paper_id": "p2",
+            "field": "tagging_evidence_basis",
+            "value": "none",
+            "issue": "tagging_skipped_insufficient_evidence",
+        }
+    ]
+    assert audit_result.row_counts == {"rows_audited": 2, "issues_found": 1}
+    assert [row["paper_id"] for row in read_csv(mantis_path)] == ["p1"]
+    assert mantis_result.row_counts == {
+        "input_rows": 2,
+        "mantis_rows": 1,
+        "skipped_not_mantis_relevant": 1,
+    }
+
+
+def test_audit_rejects_inconsistent_tagging_state_rows(tmp_path: Path) -> None:
+    extraction_path = tmp_path / "extraction.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    audit_path = tmp_path / "audit.csv"
+    write_csv(
+        extraction_path,
+        [
+            {
+                "paper_id": "tagged_without_evidence",
+                "tagging_status": "tagged",
+                "tagging_evidence_basis": "none",
+                "tagging_error": "",
+                "main_knowledge_claim": "A stale claim.",
+                "review_status": "ai_tagged",
+            },
+            {
+                "paper_id": "skipped_with_stale_tags",
+                "tagging_status": "skipped_insufficient_evidence",
+                "tagging_evidence_basis": "none",
+                "tagging_error": "Insufficient evidence.",
+                "main_knowledge_claim": "Must not survive.",
+                "review_status": "ai_tagged",
+            },
+            {
+                "paper_id": "failed_without_error",
+                "tagging_status": "failed",
+                "tagging_evidence_basis": "abstract",
+                "tagging_error": "",
+                "main_knowledge_claim": "",
+                "review_status": "",
+            },
+        ],
+        [
+            "paper_id",
+            "tagging_status",
+            "tagging_evidence_basis",
+            "tagging_error",
+            "main_knowledge_claim",
+            "review_status",
+        ],
+    )
+    write_json(
+        config_path,
+        {
+            "categories": [
+                {
+                    "category_id": "review_status",
+                    "allowed_values": [{"value": "ai_tagged"}],
+                }
+            ]
+        },
+    )
+    write_json(
+        rules_path,
+        {
+            "rules": [
+                {
+                    "category_id": "review_status",
+                    "selection": "single",
+                    "required": True,
+                }
+            ]
+        },
+    )
+
+    run_audit_extraction(
+        extraction_path,
+        config_path,
+        rules_path,
+        audit_path,
+    )
+
+    issues = {
+        (row["paper_id"], row["field"], row["issue"])
+        for row in read_csv(audit_path)
+    }
+    assert (
+        "tagged_without_evidence",
+        "tagging_evidence_basis",
+        "tagged_without_usable_evidence",
+    ) in issues
+    assert (
+        "skipped_with_stale_tags",
+        "main_knowledge_claim",
+        "non_tagged_row_has_stale_extraction",
+    ) in issues
+    assert (
+        "skipped_with_stale_tags",
+        "review_status",
+        "non_tagged_row_has_stale_extraction",
+    ) in issues
+    assert (
+        "failed_without_error",
+        "tagging_error",
+        "non_tagged_row_missing_error",
+    ) in issues
+    assert (
+        "failed_without_error",
+        "tagging_evidence_basis",
+        "tagging_failed",
+    ) in issues
+
+
+def test_mantis_export_fails_when_all_new_schema_rows_are_ineligible(
+    tmp_path: Path,
+) -> None:
+    extraction_path = tmp_path / "extraction.csv"
+    output_path = tmp_path / "mantis.csv"
+    write_csv(
+        extraction_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Title-only paper",
+                "tagging_status": "skipped_insufficient_evidence",
+                "tagging_evidence_basis": "none",
+                "tagging_error": "No usable evidence.",
+                "main_knowledge_claim": "",
+                "review_status": "",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "tagging_status",
+            "tagging_evidence_basis",
+            "tagging_error",
+            "main_knowledge_claim",
+            "review_status",
+        ],
+    )
+
+    with pytest.raises(ValueError, match="No evidence-backed tagged rows"):
+        run_export_mantis(extraction_path, output_path)
+
+    assert not output_path.exists()

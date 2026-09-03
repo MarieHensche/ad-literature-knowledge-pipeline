@@ -14,8 +14,19 @@ from ad_lit_pipeline.prompts.render import (
     render_tag_paper_prompt,
     render_tag_paper_with_review_prompt,
 )
-from ad_lit_pipeline.steps.full_text.evidence import read_text_evidence
 from ad_lit_pipeline.steps.review import extract_labels as review_extract
+from ad_lit_pipeline.steps.tagging.evidence_policy import (
+    EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT,
+    TAGGING_EVIDENCE_BASIS_COLUMN,
+    TAGGING_ERROR_COLUMN,
+    TAGGING_PROVENANCE_COLUMNS,
+    TAGGING_STATUS_COLUMN,
+    TAGGING_STATUS_FAILED,
+    TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE,
+    TAGGING_STATUS_TAGGED,
+    TaggingEvidenceAssessment,
+    assess_tagging_evidence,
+)
 from ad_lit_pipeline.topics.contract import (
     FALLBACK_TAG_VALUES,
     load_topic_contract,
@@ -192,8 +203,11 @@ def category_applies(
     return any(value in triggering_values for value in parent_values)
 
 
-def paper_text(paper: dict[str, str]) -> dict[str, str]:
-    full_text_evidence = read_text_evidence(paper.get("full_text_text_path", ""))
+def paper_text(
+    paper: dict[str, str],
+    evidence: TaggingEvidenceAssessment | None = None,
+) -> dict[str, str]:
+    assessment = evidence or assess_tagging_evidence(paper)
     return {
         "paper_id": paper.get("paper_id", ""),
         "title": paper.get("title", ""),
@@ -205,11 +219,21 @@ def paper_text(paper: dict[str, str]) -> dict[str, str]:
         "source": paper.get("source", ""),
         "full_text_path": paper.get("full_text_path", ""),
         "full_text_status": paper.get("full_text_status", ""),
-        "full_text_source": paper.get("full_text_source", ""),
-        "full_text_url": paper.get("full_text_url", ""),
+        "full_text_source": (
+            paper.get("full_text_resolved_source")
+            or paper.get("full_text_source", "")
+        ),
+        "full_text_url": (
+            paper.get("full_text_resolved_url")
+            or paper.get("full_text_url", "")
+        ),
+        "full_text_availability_url": paper.get("full_text_url", ""),
         "full_text_text_path": paper.get("full_text_text_path", ""),
-        "full_text_available_for_tagging": "yes" if full_text_evidence else "no",
-        "full_text_evidence": full_text_evidence,
+        "full_text_available_for_tagging": (
+            "yes" if assessment.full_text_evidence else "no"
+        ),
+        "tagging_evidence_basis": assessment.basis,
+        "full_text_evidence": assessment.full_text_evidence,
     }
 
 
@@ -222,8 +246,9 @@ def call_llm(
     topic_contract: dict[str, object] | None = None,
     trace_writer: LLMTraceWriter | None = None,
     review_config: dict[str, object] | None = None,
+    evidence: TaggingEvidenceAssessment | None = None,
 ) -> tuple[dict[str, object], list[Path]]:
-    tagging_paper = paper_text(paper)
+    tagging_paper = paper_text(paper, evidence)
     schema_name = "paper_tags"
     schema = paper_tags_schema(config)
     if review_config is None:
@@ -319,6 +344,9 @@ def output_columns(
     config: dict[str, object],
 ) -> list[str]:
     columns = list(input_columns)
+    for column in TAGGING_PROVENANCE_COLUMNS:
+        if column not in columns:
+            columns.append(column)
     if "main_knowledge_claim" not in columns:
         columns.append("main_knowledge_claim")
 
@@ -334,8 +362,12 @@ def flatten_tagged_row(
     paper: dict[str, str],
     tagged: dict[str, object],
     config: dict[str, object],
+    evidence: TaggingEvidenceAssessment,
 ) -> dict[str, str]:
     row = dict(paper)
+    row[TAGGING_STATUS_COLUMN] = TAGGING_STATUS_TAGGED
+    row[TAGGING_EVIDENCE_BASIS_COLUMN] = evidence.basis
+    row[TAGGING_ERROR_COLUMN] = ""
     row["main_knowledge_claim"] = str(tagged.get("main_knowledge_claim", ""))
 
     for category in categories_from_config(config):
@@ -343,6 +375,79 @@ def flatten_tagged_row(
         row[str(category_id)] = "; ".join(tagged[category_id])
 
     return row
+
+
+def insufficient_evidence_row(
+    paper: dict[str, str],
+    config: dict[str, object],
+    evidence: TaggingEvidenceAssessment,
+) -> dict[str, str]:
+    row = dict(paper)
+    row[TAGGING_STATUS_COLUMN] = TAGGING_STATUS_SKIPPED_INSUFFICIENT_EVIDENCE
+    row[TAGGING_EVIDENCE_BASIS_COLUMN] = evidence.basis
+    row[TAGGING_ERROR_COLUMN] = evidence.reason
+    row["main_knowledge_claim"] = ""
+    for category in categories_from_config(config):
+        row[str(category["category_id"])] = ""
+    return row
+
+
+def failed_tagging_row(
+    paper: dict[str, str],
+    config: dict[str, object],
+    evidence: TaggingEvidenceAssessment,
+    error: str,
+) -> dict[str, str]:
+    row = dict(paper)
+    row[TAGGING_STATUS_COLUMN] = TAGGING_STATUS_FAILED
+    row[TAGGING_EVIDENCE_BASIS_COLUMN] = evidence.basis
+    row[TAGGING_ERROR_COLUMN] = error
+    row["main_knowledge_claim"] = ""
+    for category in categories_from_config(config):
+        row[str(category["category_id"])] = ""
+    return row
+
+
+def validate_category_output_columns(
+    input_columns: list[str],
+    config: dict[str, object],
+) -> None:
+    category_ids = {
+        str(category["category_id"])
+        for category in categories_from_config(config)
+    }
+    reserved = {
+        TAGGING_STATUS_COLUMN,
+        TAGGING_EVIDENCE_BASIS_COLUMN,
+        TAGGING_ERROR_COLUMN,
+        "main_knowledge_claim",
+    }
+    reserved_collisions = sorted(category_ids.intersection(reserved))
+    if reserved_collisions:
+        raise ValueError(
+            "Tagging category id(s) use reserved output columns: "
+            + ", ".join(reserved_collisions)
+        )
+
+    input_collisions = sorted(category_ids.intersection(input_columns))
+    if input_collisions:
+        raise ValueError(
+            "Tagging category id(s) collide with preserved input columns: "
+            + ", ".join(input_collisions)
+        )
+
+
+def tagging_evidence_policy(
+    topic_contract: dict[str, object] | None,
+) -> str:
+    if not isinstance(topic_contract, dict):
+        return EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT
+    tagging = topic_contract.get("tagging")
+    if not isinstance(tagging, dict):
+        return EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT
+    return str(
+        tagging.get("evidence_policy") or EVIDENCE_POLICY_ABSTRACT_OR_FULL_TEXT
+    )
 
 
 def write_rows(
@@ -380,7 +485,9 @@ def run(
     ]
     config = load_json(config_path)
     rules = load_json(rules_path)
+    validate_category_output_columns(input_columns, config)
     topic_contract = load_topic_contract(topic_contract_path) if topic_contract_path else None
+    evidence_policy = tagging_evidence_policy(topic_contract)
     review_config = load_json(review_config_path) if review_config_path else None
     if review_config is not None and review_output_path is None:
         raise ValueError(
@@ -403,9 +510,26 @@ def run(
     all_trace_paths: list[Path] = []
     warnings = []
     review_skipped_reviews = 0
+    skipped_insufficient_evidence = 0
+    failed_tagging_papers = 0
+    tagged_papers = 0
 
     for index, paper in enumerate(papers, start=1):
         paper_id = paper.get("paper_id") or f"row_{index}"
+        evidence = assess_tagging_evidence(paper, evidence_policy=evidence_policy)
+        if evidence.warning:
+            warnings.append(
+                f"Paper '{paper_id}' evidence warning: {evidence.warning}."
+            )
+        if not evidence.eligible:
+            warning = f"Skipped paper '{paper_id}': {evidence.reason}."
+            warnings.append(warning)
+            rows.append(insufficient_evidence_row(paper, config, evidence))
+            skipped_insufficient_evidence += 1
+            print(f"Skipping tagging {index}/{len(papers)}: {paper_id}")
+            print(f"  Warning: {warning}")
+            continue
+
         print(f"Tagging paper {index}/{len(papers)}: {paper_id}")
         skip_review_extraction = (
             review_config is not None
@@ -433,6 +557,7 @@ def run(
                 topic_contract,
                 trace_writer,
                 None if skip_review_extraction else review_config,
+                evidence,
             )
             review_parsed = None
             if review_config is not None and not skip_review_extraction:
@@ -443,7 +568,8 @@ def run(
                         "Combined response missing knowledge_tags object."
                     )
             validate_tagged_row(tagged, config, rules)
-            rows.append(flatten_tagged_row(paper, tagged, config))
+            rows.append(flatten_tagged_row(paper, tagged, config, evidence))
+            tagged_papers += 1
             if review_config is not None and not skip_review_extraction:
                 try:
                     if not isinstance(review_parsed, dict):
@@ -472,16 +598,30 @@ def run(
         except ValueError as error:
             error_msg = str(error)
             warning = (
-                f"Failed to tag paper '{paper_id}' after retry (skipped): "
+                f"Failed to tag paper '{paper_id}'; retained failed row: "
                 f"{error_msg}"
             )
             warnings.append(warning)
+            rows.append(
+                failed_tagging_row(
+                    paper,
+                    config,
+                    evidence,
+                    error_msg,
+                )
+            )
+            failed_tagging_papers += 1
             print(f"  Warning: {warning}")
-            # Paper is skipped, not added to rows
 
     write_rows(output_path, rows, config, output_columns(input_columns, config))
     outputs = {"extraction_filled_csv": output_path}
-    row_counts = {"tagged_papers": len(rows)}
+    row_counts = {
+        "tagging_candidate_papers": len(papers),
+        "tagged_papers": tagged_papers,
+        "skipped_insufficient_evidence": skipped_insufficient_evidence,
+        "failed_tagging_papers": failed_tagging_papers,
+        "tagging_output_rows": len(rows),
+    }
     inputs = {
         "scope_screened_full_text_csv": papers_path,
         "tagging_config_json": config_path,
@@ -514,6 +654,7 @@ def run(
         row_counts=row_counts,
         trace_paths=all_trace_paths,
         warnings=warnings,
+        metadata={"tagging_evidence_policy": evidence_policy},
     )
 
 

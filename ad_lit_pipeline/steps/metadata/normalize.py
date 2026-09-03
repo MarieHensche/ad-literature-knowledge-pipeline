@@ -48,6 +48,12 @@ OUTPUT_COLUMNS = [
     "metadata_notes",
 ]
 
+DERIVED_COLUMNS = [
+    "abstract_available",
+    "full_text_available",
+    "metadata_notes",
+]
+
 
 def clean_whitespace(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
@@ -86,7 +92,11 @@ def validate_columns(fieldnames: list[str] | None) -> None:
         raise ValueError(f"Input CSV missing required column(s): {', '.join(missing)}")
 
 
-def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
+def normalize_row(
+    row: dict[str, str],
+    row_number: int,
+    preserved_columns: list[str] | None = None,
+) -> dict[str, str]:
     title = clean_whitespace(row.get("title", ""))
     year = normalize_year(row.get("year", ""))
     doi = normalize_doi(row.get("doi", ""))
@@ -116,36 +126,66 @@ def normalize_row(row: dict[str, str], row_number: int) -> dict[str, str]:
         "doi": doi,
         "abstract": abstract,
         **optional_fields,
+        **{
+            column: str(row.get(column) or "")
+            for column in preserved_columns or []
+        },
         "abstract_available": "yes" if abstract else "no",
         "full_text_available": "yes" if full_text_locator else "no",
         "metadata_notes": "; ".join(notes),
     }
 
 
-def read_and_normalize(input_path: Path) -> list[dict[str, str]]:
+def preserved_input_columns(fieldnames: list[str]) -> list[str]:
+    canonical_columns = set(REQUIRED_COLUMNS + OPTIONAL_COLUMNS + DERIVED_COLUMNS)
+    return [column for column in fieldnames if column not in canonical_columns]
+
+
+def output_columns(preserved_columns: list[str]) -> list[str]:
+    return [
+        *REQUIRED_COLUMNS,
+        *OPTIONAL_COLUMNS,
+        *preserved_columns,
+        *DERIVED_COLUMNS,
+    ]
+
+
+def read_and_normalize(
+    input_path: Path,
+) -> tuple[list[dict[str, str]], list[str]]:
     with input_path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         validate_columns(reader.fieldnames)
-        return [normalize_row(row, index) for index, row in enumerate(reader, start=1)]
+        extra_columns = preserved_input_columns(list(reader.fieldnames or []))
+        rows = [
+            normalize_row(row, index, extra_columns)
+            for index, row in enumerate(reader, start=1)
+        ]
+        return rows, extra_columns
 
 
-def write_rows(output_path: Path, rows: list[dict[str, str]]) -> None:
+def write_rows(
+    output_path: Path,
+    rows: list[dict[str, str]],
+    fieldnames: list[str] | None = None,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames or OUTPUT_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
 
 
 def run(input_path: Path, output_path: Path) -> StepResult:
-    rows = read_and_normalize(input_path)
-    write_rows(output_path, rows)
+    rows, preserved_columns = read_and_normalize(input_path)
+    write_rows(output_path, rows, output_columns(preserved_columns))
     return StepResult(
         step_name=STEP.name,
         inputs={"raw_papers_csv": input_path},
         outputs={"normalized_papers_csv": output_path},
         row_counts={"papers": len(rows)},
+        metadata={"preserved_input_columns": preserved_columns},
     )
 
 

@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ad_lit_pipeline.corpus.source_types import classify_source_type
 from ad_lit_pipeline.core.errors import ValidationError
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.csv_io import read_csv_rows
@@ -41,22 +42,8 @@ def normalize_label(value: str) -> str:
 
 
 def infer_source_type(row: dict[str, str]) -> str:
-    explicit = first_non_empty(
-        row,
-        ("source_type", "publication_type", "work_type", "type"),
-    )
-    if explicit:
-        return normalize_label(explicit)
-
-    title = clean_text(row.get("title", "")).lower()
-    if "systematic review" in title:
-        return "systematic_review"
-    if "meta-analysis" in title or "meta analysis" in title:
-        return "meta_analysis"
-    if "review" in title:
-        return "review"
-
-    return "primary_study"
+    """Return the compatibility label from the shared source-type classifier."""
+    return classify_source_type(row).source_type
 
 
 def full_text_status_from_row(row: dict[str, str]) -> str:

@@ -39,6 +39,7 @@ from ad_lit_pipeline.steps.tagging.calibrate_topic_contract import (
 )
 from ad_lit_pipeline.steps.tagging.generate_rules import run as run_generate_rules
 from ad_lit_pipeline.steps.tagging.tag_papers import (
+    paper_text,
     run as run_tag_papers,
     validate_tagged_row,
 )
@@ -690,6 +691,11 @@ def test_generate_topic_contract_uses_fake_client_and_validates(
     ] == {"category_id": "adaptation_strategy", "values": ["heat_action_plan"]}
     assert contract["candidate_screening"]["borderline_policy"] == "include"
     assert "climate_change" in contract["topic_structure"]["secondary_topics"]
+    assert contract["topic_policy"]["policy_id"] == "topic_structure"
+    assert contract["topic_policy"]["policy_version"] == "1.0.0"
+    assert len(contract["topic_policy"]["policy_sha256"]) == 64
+    assert contract["topic_policy"]["profile_ids"] == []
+    assert result.metadata["topic_policy"] == contract["topic_policy"]
     assert result.row_counts["search_queries"] == 3
     assert result.trace_paths
 
@@ -2339,6 +2345,11 @@ def test_refine_topic_contract_adds_review_seeded_categories(
     assert result.row_counts["review_full_texts_topic_eligible"] == 1
     assert result.row_counts["review_full_texts_selected"] == 1
     assert result.row_counts["tagging_categories"] == 6
+    assert refined["topic_policy"]["profile_ids"] == [
+        "computational_methods",
+        "alzheimer_disease",
+    ]
+    assert result.metadata["topic_policy"] == refined["topic_policy"]
     assert result.warnings == [
         (
             "Ignored review/overview seed papers without extracted full text; "
@@ -2706,6 +2717,77 @@ def test_full_text_requirement_does_not_prefilter_provider_search() -> None:
     assert warnings == [
         "Set filters.has_abstract=true because topic contract excludes missing abstracts.",
         "Added provider_specific_plan has_abstract filter for screening policy.",
+    ]
+
+
+def test_publication_window_overrides_planner_dates_exactly() -> None:
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["collection"]["exclude_openalex_review_type"] = False
+    contract["collection"]["publication_window"] = {
+        "start": "2020-01-01",
+        "end": "2026-06-19",
+    }
+    contract["candidate_screening"]["missing_abstract_policy"] = "include"
+    plan = {
+        "recommended_provider": "openalex",
+        "filters": {
+            "year_from": 2019,
+            "year_to": 2027,
+        },
+        "provider_specific_plan": {
+            "provider": "openalex",
+            "filters": [
+                {
+                    "name": "from_publication_date",
+                    "value": "2019-01-01",
+                    "reason": "Planner guess.",
+                },
+                {
+                    "name": "publication_year",
+                    "value": "2024",
+                    "reason": "Conflicting planner guess.",
+                },
+                {"name": "language", "value": "en", "reason": "Keep this."},
+            ],
+        },
+        "corpus_constraints": {"future_constraint": {"enabled": True}},
+    }
+
+    warnings = enforce_topic_plan_constraints(plan, contract)
+
+    assert plan["filters"]["year_from"] == 2020
+    assert plan["filters"]["year_to"] == 2026
+    assert plan["provider_specific_plan"]["filters"] == [
+        {"name": "language", "value": "en", "reason": "Keep this."},
+        {
+            "name": "from_publication_date",
+            "value": "2020-01-01",
+            "reason": (
+                "Exact inclusive lower publication-date boundary from the "
+                "topic contract."
+            ),
+        },
+        {
+            "name": "to_publication_date",
+            "value": "2026-06-19",
+            "reason": (
+                "Exact inclusive upper publication-date boundary from the "
+                "topic contract."
+            ),
+        },
+    ]
+    assert plan["corpus_constraints"] == {
+        "future_constraint": {"enabled": True},
+        "publication_window": {
+            "start": "2020-01-01",
+            "end": "2026-06-19",
+            "inclusive": True,
+            "source": "topic_contract",
+        },
+    }
+    assert warnings == [
+        "Applied exact inclusive topic-contract publication window: "
+        "2020-01-01 through 2026-06-19."
     ]
 
 
@@ -4867,6 +4949,395 @@ def test_tag_papers_uses_fake_client_and_writes_flat_csv(tmp_path: Path) -> None
     assert "model improved early detection" in client.requests[0][
         "prompt"
     ]
+
+
+def test_tag_papers_requires_abstract_or_extracted_full_text(
+    tmp_path: Path,
+) -> None:
+    papers_path = tmp_path / "scope.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "filled.csv"
+    full_text_path = tmp_path / "p3_full_text.txt"
+    full_text_path.write_text(
+        (
+            "Methods\nThe study used imaging and cognitive tests.\n\n"
+            "Results\nThe model identified Alzheimer's disease.\n\n"
+        )
+        * 20,
+        encoding="utf-8",
+    )
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Title-only survey",
+                "abstract": "",
+                "full_text_status": "extraction_failed",
+                "full_text_text_path": "",
+                "scope_decision": "include",
+            },
+            {
+                "paper_id": "p2",
+                "title": "Abstract-only study",
+                "abstract": "The abstract reports an AI diagnostic model.",
+                "full_text_status": "extraction_failed",
+                "full_text_text_path": "",
+                "scope_decision": "include",
+            },
+            {
+                "paper_id": "p3",
+                "title": "Full-text study",
+                "abstract": "",
+                "full_text_status": "local_text_extracted",
+                "full_text_text_path": str(full_text_path),
+                "scope_decision": "include",
+            },
+        ],
+        [
+            "paper_id",
+            "title",
+            "abstract",
+            "full_text_status",
+            "full_text_text_path",
+            "scope_decision",
+        ],
+    )
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "review_status",
+                "required": True,
+                "allowed_values": [{"value": "ai_tagged"}],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "review_status",
+                "selection": "single",
+                "required": True,
+                "fallback_value": "ai_tagged",
+            }
+        ]
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    rules_path.write_text(json.dumps(rules), encoding="utf-8")
+    client = StaticJSONClient(
+        [
+            {
+                "paper_id": "p2",
+                "main_knowledge_claim": "The abstract reports a diagnostic model.",
+                "review_status": ["ai_tagged"],
+            },
+            {
+                "paper_id": "p3",
+                "main_knowledge_claim": "The full text reports a diagnostic model.",
+                "review_status": ["ai_tagged"],
+            },
+        ]
+    )
+
+    result = run_tag_papers(
+        papers_path,
+        config_path,
+        rules_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+    )
+
+    with output_path.open(newline="", encoding="utf-8") as handle:
+        rows = {row["paper_id"]: row for row in csv.DictReader(handle)}
+
+    assert result.row_counts == {
+        "tagging_candidate_papers": 3,
+        "tagged_papers": 2,
+        "skipped_insufficient_evidence": 1,
+        "failed_tagging_papers": 0,
+        "tagging_output_rows": 3,
+    }
+    assert rows["p1"]["tagging_status"] == "skipped_insufficient_evidence"
+    assert rows["p1"]["tagging_evidence_basis"] == "none"
+    assert rows["p1"]["main_knowledge_claim"] == ""
+    assert rows["p1"]["review_status"] == ""
+    assert "full_text_status=extraction_failed" in rows["p1"]["tagging_error"]
+    assert rows["p2"]["tagging_status"] == "tagged"
+    assert rows["p2"]["tagging_evidence_basis"] == "abstract"
+    assert rows["p3"]["tagging_status"] == "tagged"
+    assert rows["p3"]["tagging_evidence_basis"] == "full_text"
+    assert len(client.requests) == 2
+    assert '"paper_id": "p2"' in client.requests[0]["prompt"]
+    assert '"tagging_evidence_basis": "abstract"' in client.requests[0][
+        "prompt"
+    ]
+    assert '"paper_id": "p3"' in client.requests[1]["prompt"]
+    assert '"tagging_evidence_basis": "full_text"' in client.requests[1][
+        "prompt"
+    ]
+    assert result.warnings == [
+        "Skipped paper 'p1': no usable abstract or extracted full text is "
+        "available (full_text_status=extraction_failed)."
+    ]
+
+
+def test_tagging_payload_distinguishes_locator_from_resolved_document() -> None:
+    payload = paper_text(
+        {
+            "paper_id": "p1",
+            "title": "Evidence-backed study",
+            "abstract": "A substantive abstract reports diagnostic performance.",
+            "full_text_url": "https://example.org/original-locator",
+            "full_text_resolved_url": "https://example.org/resolved-document.pdf",
+            "full_text_source": "provider_metadata",
+            "full_text_resolved_source": "landing_pdf",
+        }
+    )
+
+    assert payload["full_text_availability_url"] == (
+        "https://example.org/original-locator"
+    )
+    assert payload["full_text_url"] == (
+        "https://example.org/resolved-document.pdf"
+    )
+    assert payload["full_text_source"] == "landing_pdf"
+
+
+def test_tag_papers_full_text_required_policy_preserves_abstract_only_row(
+    tmp_path: Path,
+) -> None:
+    papers_path = tmp_path / "scope.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    contract_path = tmp_path / "contract.yaml"
+    output_path = tmp_path / "filled.csv"
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Abstract-only study",
+                "abstract": "A substantive abstract reports a diagnostic model.",
+                "full_text_status": "extraction_failed",
+                "full_text_text_path": "",
+                "scope_decision": "include",
+            }
+        ],
+        [
+            "paper_id",
+            "title",
+            "abstract",
+            "full_text_status",
+            "full_text_text_path",
+            "scope_decision",
+        ],
+    )
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "review_status",
+                "required": True,
+                "allowed_values": [{"value": "ai_tagged"}],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "review_status",
+                "selection": "single",
+                "required": True,
+                "fallback_value": "ai_tagged",
+            }
+        ]
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    rules_path.write_text(json.dumps(rules), encoding="utf-8")
+    contract = load_topic_contract(TOPIC_CONTRACT)
+    contract["tagging"]["evidence_policy"] = "full_text_required"
+    write_yaml_object(contract_path, contract)
+    client = StaticJSONClient([])
+
+    result = run_tag_papers(
+        papers_path,
+        config_path,
+        rules_path,
+        output_path,
+        "test-model",
+        contract_path,
+        client,
+        tmp_path / "traces",
+    )
+
+    row = next(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert row["tagging_status"] == "skipped_insufficient_evidence"
+    assert row["tagging_evidence_basis"] == "none"
+    assert "identity-verified remote extracted full text" in row["tagging_error"]
+    assert result.row_counts["tagged_papers"] == 0
+    assert result.row_counts["skipped_insufficient_evidence"] == 1
+    assert result.metadata["tagging_evidence_policy"] == "full_text_required"
+    assert client.requests == []
+
+
+def test_tag_papers_preserves_failed_llm_row_with_error_state(
+    tmp_path: Path,
+) -> None:
+    papers_path = tmp_path / "scope.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "filled.csv"
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Evidence-backed study",
+                "abstract": "A substantive abstract reports diagnostic performance.",
+                "scope_decision": "include",
+            }
+        ],
+        ["paper_id", "title", "abstract", "scope_decision"],
+    )
+    config = {
+        "research_topic": {"title": "Topic", "description": "Description"},
+        "categories": [
+            {
+                "category_id": "review_status",
+                "required": True,
+                "allowed_values": [{"value": "ai_tagged"}],
+            }
+        ],
+    }
+    rules = {
+        "rules": [
+            {
+                "category_id": "review_status",
+                "selection": "single",
+                "required": True,
+            }
+        ]
+    }
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    rules_path.write_text(json.dumps(rules), encoding="utf-8")
+    client = RaisingJSONClient(ValueError("model response unavailable"))
+
+    result = run_tag_papers(
+        papers_path,
+        config_path,
+        rules_path,
+        output_path,
+        "test-model",
+        TOPIC_CONTRACT,
+        client,
+        tmp_path / "traces",
+    )
+
+    row = next(csv.DictReader(output_path.open(newline="", encoding="utf-8")))
+    assert row["paper_id"] == "p1"
+    assert row["tagging_status"] == "failed"
+    assert row["tagging_evidence_basis"] == "abstract"
+    assert row["tagging_error"] == "model response unavailable"
+    assert row["main_knowledge_claim"] == ""
+    assert row["review_status"] == ""
+    assert result.row_counts["failed_tagging_papers"] == 1
+    assert result.row_counts["tagging_output_rows"] == 1
+
+
+def test_tag_papers_rejects_category_collision_with_input_provenance(
+    tmp_path: Path,
+) -> None:
+    papers_path = tmp_path / "scope.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "filled.csv"
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Evidence-backed study",
+                "abstract": "A substantive abstract reports diagnostic performance.",
+                "review_status": "provider_supplied_value",
+            }
+        ],
+        ["paper_id", "title", "abstract", "review_status"],
+    )
+    config_path.write_text(
+        json.dumps(
+            {
+                "categories": [
+                    {
+                        "category_id": "review_status",
+                        "allowed_values": [{"value": "ai_tagged"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    rules_path.write_text(json.dumps({"rules": []}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="collide with preserved input columns"):
+        run_tag_papers(
+            papers_path,
+            config_path,
+            rules_path,
+            output_path,
+            "test-model",
+            TOPIC_CONTRACT,
+            StaticJSONClient([]),
+            tmp_path / "traces",
+        )
+
+
+def test_tag_papers_rejects_reserved_state_category_id(tmp_path: Path) -> None:
+    papers_path = tmp_path / "scope.csv"
+    config_path = tmp_path / "config.json"
+    rules_path = tmp_path / "rules.json"
+    output_path = tmp_path / "filled.csv"
+    write_csv(
+        papers_path,
+        [
+            {
+                "paper_id": "p1",
+                "title": "Evidence-backed study",
+                "abstract": "A substantive abstract reports diagnostic performance.",
+            }
+        ],
+        ["paper_id", "title", "abstract"],
+    )
+    config_path.write_text(
+        json.dumps(
+            {
+                "categories": [
+                    {
+                        "category_id": "tagging_status",
+                        "allowed_values": [{"value": "model_label"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    rules_path.write_text(json.dumps({"rules": []}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="use reserved output columns"):
+        run_tag_papers(
+            papers_path,
+            config_path,
+            rules_path,
+            output_path,
+            "test-model",
+            TOPIC_CONTRACT,
+            StaticJSONClient([]),
+            tmp_path / "traces",
+        )
 
 
 def test_tag_papers_can_write_review_labels_in_same_llm_call(

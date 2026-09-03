@@ -33,8 +33,8 @@ Rules:
   `secondary_topic_id` from "Configured secondary replacement groups".
 - The returned secondary terms must come from that configured secondary group.
 - Do not let secondary-topic terms replace the anchor topic.
-- Do not mix secondary groups across parents. A higher-education secondary group
-  for a school-setting topic cannot replace an outcome topic, for example.
+- Do not mix secondary groups across parents. A secondary configured for one
+  main-topic component cannot replace a different component.
 - Tier 0 means the allowed fields contain the anchor and all main topics.
 - Tier 1 means the allowed fields contain the anchor, all but one main topic,
   and a secondary replacement for the missing non-anchor main topic.

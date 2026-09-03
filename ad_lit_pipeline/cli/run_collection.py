@@ -2,17 +2,30 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from ad_lit_pipeline.core.artifacts import collection_artifacts
 from ad_lit_pipeline.core.env import load_dotenv
-from ad_lit_pipeline.core.manifest import ManifestRecorder, resume_step_from_manifest
+from ad_lit_pipeline.core.manifest import (
+    ManifestRecorder,
+    recorded_selected_steps,
+    resume_step_from_manifest,
+    resume_steps_from_manifest,
+)
+from ad_lit_pipeline.core.provenance import build_run_provenance
 from ad_lit_pipeline.core.registry import (
     COLLECTION_PIPELINE,
-    COLLECTION_WITH_CONTRACT_PIPELINE,
+    CollectionPipelineOptions,
     CONTRACT_BOOTSTRAP_PIPELINE,
+    assemble_collection_pipeline,
 )
-from ad_lit_pipeline.core.runner import default_trace_dir, run_selected_steps, select_steps
+from ad_lit_pipeline.core.runner import (
+    attempt_trace_dir,
+    default_trace_dir,
+    run_selected_steps,
+    select_steps,
+)
 from ad_lit_pipeline.core.step import StepResult
 from ad_lit_pipeline.steps.full_text import prepare as prepare_full_text
 from ad_lit_pipeline.topics.contract import load_topic_contract
@@ -68,14 +81,17 @@ def resolve_topic_contract_path(args: argparse.Namespace) -> Path:
 
 
 def selected_collection_pipeline(args: argparse.Namespace) -> list[str]:
-    if args.contract_bootstrap_only:
-        return CONTRACT_BOOTSTRAP_PIPELINE
-    if args.generate_topic_contract or not args.topic_contract:
-        return COLLECTION_WITH_CONTRACT_PIPELINE
     requested_step = args.only_step or args.from_step
-    if requested_step in CONTRACT_BOOTSTRAP_PIPELINE:
-        return COLLECTION_WITH_CONTRACT_PIPELINE
-    return COLLECTION_PIPELINE
+    return list(
+        assemble_collection_pipeline(
+            CollectionPipelineOptions(
+                generate_topic_contract=args.generate_topic_contract,
+                topic_contract_supplied=bool(args.topic_contract),
+                contract_bootstrap_only=args.contract_bootstrap_only,
+                requested_step=requested_step,
+            )
+        )
+    )
 
 
 def topic_description_from_contract(topic_contract_path: Path) -> str:
@@ -107,8 +123,14 @@ def build_step_functions(
     trace_dir: Path,
     topic_contract_path: Path,
     topic_description: str,
+    producing_run_id: str,
 ) -> dict[str, object]:
-    artifacts = collection_artifacts(args.collection)
+    artifacts = collection_artifacts(
+        args.collection,
+        prefer_existing_legacy=bool(
+            args.resume or args.only_step or args.from_step
+        ),
+    )
 
     def full_text_availability_required() -> bool:
         from ad_lit_pipeline.steps.collection import verify_full_text_availability
@@ -140,6 +162,12 @@ def build_step_functions(
             artifacts.review_overviews_jsonl,
             args.max_review_overviews,
             mailto=args.mailto,
+            provider_evidence_index_path=(
+                artifacts.review_provider_evidence_index_jsonl
+            ),
+            provider_response_pages_dir=(
+                artifacts.review_provider_response_pages_dir
+            ),
         )
 
     def run_prepare_review_full_text() -> object:
@@ -192,6 +220,12 @@ def build_step_functions(
             artifacts.candidates_jsonl,
             args.max_results,
             mailto=args.mailto,
+            provider_evidence_index_path=(
+                artifacts.provider_evidence_index_jsonl
+            ),
+            provider_response_pages_dir=(
+                artifacts.provider_response_pages_dir
+            ),
         )
 
     def run_deduplicate_candidates() -> object:
@@ -249,6 +283,12 @@ def build_step_functions(
             full_text_availability_workers=args.full_text_availability_workers,
             unpaywall_email=args.full_text_email,
             core_api_key=args.core_api_key,
+            provider_evidence_index_path=(
+                artifacts.provider_evidence_index_jsonl
+            ),
+            provider_response_pages_dir=(
+                artifacts.provider_response_pages_dir
+            ),
         )
 
     def run_select_calibration_papers() -> object:
@@ -354,6 +394,22 @@ def build_step_functions(
             fail_below_export_ratio=args.fail_below_export_ratio,
         )
 
+    def run_materialize_corpus_snapshot() -> object:
+        from ad_lit_pipeline.steps.collection import materialize_snapshot
+
+        return materialize_snapshot.run(
+            artifacts.deduped_candidates_jsonl,
+            artifacts.papers_csv,
+            artifacts.provider_evidence_index_jsonl,
+            artifacts.provider_response_pages_dir,
+            artifacts.plan_json,
+            topic_contract_path,
+            artifacts.corpus_records_jsonl,
+            artifacts.corpus_snapshot_integrity_json,
+            producing_run_id,
+            artifact_root=Path.cwd(),
+        )
+
     return {
         "generate_topic_contract": run_generate_topic_contract,
         "fetch_review_overviews": run_fetch_review_overviews,
@@ -369,6 +425,7 @@ def build_step_functions(
         "prepare_calibration_full_text": run_prepare_calibration_full_text,
         "calibrate_topic_contract": run_calibrate_topic_contract,
         "export_included_candidates": run_export_included_candidates,
+        "materialize_corpus_snapshot": run_materialize_corpus_snapshot,
     }
 
 
@@ -376,33 +433,67 @@ def run_collection(args: argparse.Namespace) -> None:
     load_dotenv()
     topic_contract_path = resolve_topic_contract_path(args)
 
+    resume_manifest_path: Path | None = None
     if args.resume:
         if not args.run_id:
             raise ValueError("--resume requires --run-id")
-        resume_from = resume_step_from_manifest(
-            Path("runs") / args.run_id / "manifest.json"
-        )
-        if resume_from is None:
-            print("Nothing to resume; previous manifest has no failed step.")
+        if args.dry_run:
+            raise ValueError("--resume cannot be combined with --dry-run")
+        if args.only_step or args.from_step:
+            raise ValueError(
+                "--resume uses the original selected steps and cannot be combined "
+                "with --only-step or --from-step"
+            )
+        resume_manifest_path = Path("runs") / args.run_id / "manifest.json"
+        resume_payload = ManifestRecorder.load(resume_manifest_path)
+        resume_from = resume_step_from_manifest(resume_manifest_path)
+        if resume_from is None and (
+            resume_payload.get("status") in {"succeeded", "dry_run"}
+            or recorded_selected_steps(resume_payload) is None
+        ):
+            print("Nothing to resume; the original selection has no incomplete step.")
             return
-        args.from_step = resume_from
+        if resume_from is not None:
+            args.from_step = resume_from
 
     pipeline = selected_collection_pipeline(args)
+    selected = select_steps(pipeline, args.only_step, args.from_step)
+    if resume_manifest_path is not None:
+        selected = resume_steps_from_manifest(
+            resume_manifest_path,
+            fallback_steps=selected,
+        )
+    topic_description = resolve_topic_description(args, topic_contract_path, selected)
+    provenance = build_run_provenance(
+        project_root=Path.cwd(),
+        argv=sys.argv,
+        options=vars(args),
+        selected_steps=selected,
+        pipeline_steps=pipeline,
+        topic_contract_path=topic_contract_path,
+        model=args.model,
+        configured_provider_names=("openalex",),
+    )
     manifest = ManifestRecorder.create(
         collection=args.collection,
         pipeline_name="collection",
         run_id=args.run_id,
         topic_contract_path=topic_contract_path,
         model=args.model,
+        provenance=provenance,
+        resume=args.resume,
     )
-    trace_dir = Path(args.trace_dir) if args.trace_dir else default_trace_dir(manifest)
-    selected = select_steps(pipeline, args.only_step, args.from_step)
-    topic_description = resolve_topic_description(args, topic_contract_path, selected)
+    trace_dir = (
+        attempt_trace_dir(manifest, Path(args.trace_dir))
+        if args.trace_dir
+        else default_trace_dir(manifest)
+    )
     step_functions = build_step_functions(
         args,
         trace_dir,
         topic_contract_path,
         topic_description,
+        manifest.run_id,
     )
 
     if args.dry_run:
@@ -411,7 +502,12 @@ def run_collection(args: argparse.Namespace) -> None:
 
     run_selected_steps(selected, step_functions, manifest, args.dry_run)
 
-    artifacts = collection_artifacts(args.collection)
+    artifacts = collection_artifacts(
+        args.collection,
+        prefer_existing_legacy=bool(
+            args.resume or args.only_step or args.from_step
+        ),
+    )
     print()
     print("Collection complete.")
     print(f"Run id: {manifest.run_id}")
@@ -419,6 +515,13 @@ def run_collection(args: argparse.Namespace) -> None:
     print(f"Topic contract: {topic_contract_path}")
     print(f"Plan: {artifacts.plan_json}")
     print(f"Candidate papers CSV: {artifacts.papers_csv}")
+    if artifacts.corpus_records_jsonl.exists():
+        print(f"Corpus records: {artifacts.corpus_records_jsonl}")
+    if artifacts.corpus_snapshot_integrity_json.exists():
+        print(
+            "Corpus snapshot integrity: "
+            f"{artifacts.corpus_snapshot_integrity_json}"
+        )
     print()
     print("Next run:")
     print(
@@ -463,8 +566,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_MAX_CALIBRATION_PAPERS,
         help=(
-            "Maximum non-review included papers to read with full text for "
-            "collection-time contract calibration."
+            "Compatibility parameter for registered collection-calibration "
+            "components. The default assembled collection workflow does not "
+            "run those components."
         ),
     )
     run_parser.add_argument(

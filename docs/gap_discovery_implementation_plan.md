@@ -1,15 +1,16 @@
 # Gap-Discovery System: Living Implementation Plan
 
 Status: active planning document  
-Last reviewed: 2026-08-26  
+Last reviewed: 2026-09-02
 Review cadence: review at the start and end of every implementation phase, and
 whenever a schema, provider, scientific-validity rule, or pipeline order changes.
 
 This is the canonical plan for extending the existing literature knowledge
 pipeline into a domain-adaptable, provenance-preserving, scientifically
 defensible gap-discovery system. Its required terminal delivery artifacts are
-versioned Mantis projections of the paper/evidence landscape and verified gap
-dossiers. Update progress in this file rather than creating disconnected plans.
+versioned Mantis projections of the paper, verified-claim, and verified-gap
+landscapes. Update progress in this file rather than creating disconnected
+plans.
 
 ## How To Use This Plan
 
@@ -46,32 +47,650 @@ versioned, and independently auditable.
 
 ## Stage 1: Foundation — First Ten Sub-Steps
 
-- [ ] 1. Freeze the clean Git baseline, a fresh non-network test result, a new
+- [x] 1. Freeze the clean Git baseline, a fresh non-network test result, a new
   small copyright-safe synthetic corpus independent of historical demo
   artifacts, and expected outputs including the current Mantis CSV.
-- [ ] 2. Define precise scientific terminology, especially `gap candidate`,
+- [x] 2. Define precise scientific terminology, especially `gap candidate`,
   `corpus-sparse`, `as of`, `supported`, `refuted`, and `uncertain`.
-- [ ] 3. Define versioned contracts for every durable corpus, evidence, graph,
-  gap, scoring, judgment, Mantis export-profile, and Mantis publication-receipt
-  record.
-- [ ] 4. Add cross-artifact referential validation and a documented schema
+- [x] 3. Define versioned contracts for every durable corpus, evidence, graph,
+  gap, scoring, judgment, Mantis export-profile, Mantis interpretation, and
+  Mantis publication-receipt record.
+- [x] 4. Add cross-artifact referential validation and a documented schema
   migration policy.
-- [ ] 5. Extend run provenance with code, environment, command, prompt, schema,
+- [x] 5. Extend run provenance with code, environment, command, prompt, schema,
   model, contract, provider, and snapshot information.
-- [ ] 6. Make pipeline assembly and step dependencies a single source of truth
+- [x] 6. Make pipeline assembly and step dependencies a single source of truth
   shared by the CLI and UI.
-- [ ] 7. Preserve compatibility for collection, tagging, review, and the legacy
-  Mantis CSV through regression tests; add explicit versioned Mantis paper and
-  gap profiles plus a feature-gated publication adapter.
-- [ ] 8. Move domain-specific research vocabulary and heuristics from Python into
+- [x] 7. Preserve compatibility for collection, tagging, review, and the legacy
+  Mantis CSV through regression tests; add explicit versioned Mantis paper,
+  verified-claim, and verified-gap profiles plus a feature-gated publication
+  adapter.
+- [x] 8. Move domain-specific research vocabulary and heuristics from Python into
   topic contracts or portable policy files.
-- [ ] 9. Reconcile documentation and retire stale scaffolding that contradicts
+- [x] 9. Reconcile documentation and retire stale scaffolding that contradicts
   the implemented system.
-- [ ] 10. Add continuous integration and require the baseline and new contract
+- [x] 10. Add continuous integration and require the baseline and new contract
   tests to pass before later stages proceed.
 
 Stage 1 is complete only when its exit gates in the roadmap pass. Completing the
 ten tasks syntactically is not sufficient.
+
+### Step 1.1 Completion Record
+
+- Baseline source: detached clean code commit `dd1fbc3`; the approved living-plan
+  edit was the only pre-existing working-tree change.
+- Pre-Step result: 295 tests passed in 5.07 seconds with no network access.
+- Fixture: eight copyright-safe fictional records under
+  `tests/fixtures/synthetic_baseline/v1/`, independent of historical demo data.
+- Frozen boundary: canonical paper input, post-tagging extraction input, and the
+  current five-row Mantis CSV with file hashes and case expectations.
+- Regression coverage: stable IDs and ordering, exact fields, scope filtering,
+  claim trimming, title fallback, missing metadata, multivalue preservation,
+  current metadata loss, and repeat-run determinism.
+- Post-Step result: 297 tests passed in 4.12 seconds with no network access.
+- Machine-readable record:
+  `tests/fixtures/synthetic_baseline/v1/manifest.json`.
+
+This completes only Step 1.1. The exporter defects recorded in the manifest are
+intentionally unchanged and belong to later Foundation work.
+
+### Step 1.2 Completion Record
+
+- Normative policy:
+  `configs/policies/scientific_validity_v1.yaml`, version `1.0.0`, with a
+  `cross_domain` scope and semantic validation in
+  `ad_lit_pipeline/validity/`.
+- Defined terms: gap candidate, verified-open gap, refuted gap, resolved gap,
+  corpus-sparse, inclusive `as_of`, supported, contradicted, insufficient, and
+  reason-coded uncertain.
+- Claim outcomes: `supported`, `contradicted`, `insufficient`, and `uncertain`.
+  Mandatory human review is orthogonal to those outcomes.
+- Gap lifecycle: append-only state history from `proposed` through
+  `verification_in_progress`; no direct verified promotion; terminal candidate
+  versions, including corrected artifact or duplicate decisions, can be
+  reassessed only through a new candidate version with recorded lineage.
+- Open-world rule: missing representation, zero results, graph absence, or
+  adequate-for-rule coverage never imply global absence or completeness.
+  Unqualified absence language is rejected, and required corpus/snapshot/cutoff
+  qualifiers are machine checked.
+- Scientific boundary: extraction and verification confidence, reporting and
+  study quality, explained evidence quality, scientific confidence, coverage,
+  uncertainty, novelty, importance, and feasibility remain separately typed.
+  Human acceptance is not a gap state.
+- Mantis boundary: map geometry and interpretations are not evidence; a Mantis
+  interpretation remains a pre-candidate with no gap status. Only an independent
+  deterministic signal can create a `proposed` candidate, which then passes the
+  standard counter-retrieval and verification gates.
+- Behavior preservation: no existing pipeline step, durable knowledge schema,
+  CLI, or legacy Mantis CSV contract changed in Step 1.2. Those records begin in
+  Step 1.3.
+- Verification: 79 focused policy tests pass; the complete offline suite passes
+  376 tests in 5.13 seconds.
+- Human-readable reference: `docs/scientific_validity.md`.
+
+This completes only Step 1.2. Step 1.3 must make future durable records carry
+the applicable schema and policy versions; it must not retrofit these meanings
+onto the current preliminary `Gap` or legacy `evidence_strength` fields.
+
+### Step 1.3 Completion Record
+
+- Record schema: `1.0.0` in `ad_lit_pipeline/records/`, implemented as strict,
+  frozen Python dataclasses with exact JSON and streaming JSONL codecs.
+- Complete inventory: 20 registered record types covering corpus snapshots,
+  works and source versions, provider/access/document/passage provenance,
+  entities, claims and claim evidence, graph relationships, gap signals and
+  candidates, verification attempts, scores, judgments, outcomes, and the three
+  Mantis contract records.
+- Common envelope: deterministic typed ID, UTC creation time, snapshot, run and
+  step, parent/source references, structured provenance, administrative status,
+  structured warnings, explicit policy versions, and controlled namespaced
+  extensions. Credentials and secret-like request material are rejected.
+- Stable identity: Unicode-NFC canonical JSON, exact schema/version registry,
+  typed SHA-256 prefixes, registered identity projections, and ID recomputation
+  during validation. Administrative metadata, warnings, and extensions do not
+  silently change scientific identity.
+- Temporal semantics: RFC3339 UTC instants canonicalize to `Z`; `as_of` is an
+  inclusive full date; partial dates retain precision and certainty; unknown
+  source availability cannot be assumed temporally eligible.
+- Operational ontology: `configs/policies/gap_ontology_v1.yaml` defines 12
+  portable gap classes with deterministic generating signal types, minimum
+  support, refuting and resolving evidence, coverage assumptions, open-world
+  limitations, and human annotation questions. Mantis, LLM, model-intuition,
+  and map-interpretation outputs are prohibited as generating signals.
+- Scientific enforcement: exact claim-outcome requirements, typed relationship
+  evidence, append-only gap transitions, versioned reassessment, independent
+  signal requirements, novelty/importance/feasibility separation, explicit
+  composite-score rules, coverage dimensions, and mandatory review triggers.
+- Mantis enforcement: versioned ordered field/type profiles, required Title and
+  Semantic fields, gated Connection output, immutable publication receipts, and
+  interpretations that remain `is_evidence: false` and cannot create candidates
+  without an independent deterministic signal.
+- Fixture: one coherent, copyright-safe record of every type plus a manifest at
+  `tests/fixtures/record_contracts/v1/`. Invalid regressions cover strictness,
+  stale IDs, time, evidence, lifecycle, score, secret, and Mantis failures.
+- Deliberate Step 1.4 boundary: local validators check typed-reference syntax and
+  within-record facts only. Cross-record existence, ownership, snapshot closure,
+  lineage continuity/cycles, corpus-wide chronology, artifact hashes, exact
+  passage occurrence, uniqueness, and migrations remain unimplemented.
+- Behavior preservation: the new layer coexists with preliminary
+  `ad_lit_pipeline/knowledge/` records. No production step, CLI, current output,
+  or legacy Mantis CSV was changed.
+- Verification: 210 focused record/ID/ontology/validity tests pass; the complete
+  offline suite passes 507 tests in 5.34 seconds; `git diff --check` is clean.
+- Human-readable reference: `docs/record_contracts_v1.md`.
+
+This completes only Step 1.3. Step 1.4 must validate collections and migrations
+without weakening the strict record-local or scientific-validity rules.
+
+### Step 1.4 Completion Record
+
+- Integrity API: `ad_lit_pipeline/records/integrity.py` validates complete
+  in-memory collections or multiple JSONL artifacts as one reference domain and
+  returns stable, machine-readable errors and warnings with record, field,
+  artifact, and line context. Strict callers retain the complete report through
+  `RecordIntegrityError`.
+- Referential enforcement: orphan IDs, invalid local types, duplicate IDs,
+  competing payloads, snapshot membership omissions, wrong target types, and
+  unauthorized cross-snapshot references are hard errors. Cross-snapshot links
+  are limited to explicit version, canonical-entity, candidate reassessment,
+  judgment replacement, prospective outcome/correction, and Mantis receipt/retry
+  lineage.
+- Provenance and ownership: collection checks cover work/version/provider/access/
+  document/passage chains, exact claim-evidence source ownership, required parent
+  and source records, gap candidate/attempt reciprocity, score status, Mantis
+  interpretation/signal/candidate reciprocity, and profile/receipt/map identity.
+- Temporal and lineage integrity: source availability is evaluated against the
+  inclusive snapshot cutoff; snapshot retrieval, document extraction, evidence,
+  graph assertion, gap reassessment, Mantis retry/publication/interpretation,
+  judgment replacement, and prospective outcome ordering are checked. Parent,
+  entity, claim, source-version, gap, judgment, outcome, and Mantis retry cycles
+  are rejected.
+- Artifact integrity: local provider, document, text-representation, and Mantis
+  artifacts are resolved inside an optional declared root and hashed in streaming
+  chunks; size, path escape, missing file, decode, representation hash, evidence
+  span, and exact passage-offset mismatches are errors. Remote artifacts are not
+  fetched and produce explicit `remote_artifact_not_checked` warnings instead.
+- Regression boundary: the v1 fixture now includes a frozen offline integrity
+  report. Programmatic adversarial cases cover orphans, collisions, snapshot
+  closure, ownership, cross-snapshot rules, span hashes, cutoff eligibility,
+  dependency chronology, cycles, local artifact tampering, passage occurrence,
+  malformed JSON, report serialization, and strict failure behavior.
+- Migration policy: `ad_lit_pipeline/records/migrations.py` provides an
+  instance-owned, deterministic explicit-path registry with no implicit
+  downgrade or major-version edge. The production registry is deliberately
+  empty because `1.0.0` is the only real schema. The documented release gate
+  requires a future migration to operate atomically over a closed collection,
+  rewrite schema-dependent IDs and every reference, retain immutable source and
+  audit artifacts, and pass collection integrity before publication.
+- Legacy and Mantis safety: preliminary `ad_lit_pipeline/knowledge/` records are
+  not auto-migrated, no live provider/OpenAI/Mantis operation is performed, and
+  no production step, CLI, current output, or legacy Mantis CSV changes in this
+  Foundation step.
+- Verification: 237 focused record/ID/ontology/validity/integrity/migration tests
+  pass; the complete offline suite passes 534 tests; `git diff --check` is clean.
+- Human-readable references: `docs/record_contracts_v1.md` and
+  `docs/schema_migration_policy.md`.
+
+This completes only Step 1.4. Step 1.5 must extend run provenance and may consume
+integrity reports, but it must not wire the new records into production or claim
+that an empty migration registry performs migrations.
+
+### Step 1.5 Completion Record
+
+- Versioned envelopes: manifest, run-provenance, and LLM-trace schemas are each
+  `1.0.0`. Existing run and step fields remain available, while manifest writes
+  now use same-directory temporary files and atomic replacement.
+- Code state: every attempt records the exact commit and commit time,
+  branch/detached state, dirty state, content hashes for Git status and tracked,
+  staged, and relevant untracked changes, and an aggregate source-state hash.
+  Dirty research runs remain permitted; raw diffs, status filenames, and source
+  content are not copied into the manifest.
+- Environment and invocation: Python, platform, sorted installed distributions,
+  `requirements.txt`, the allowlisted OpenAI runtime settings, selected steps,
+  resolved model, working directory, command, and parsed options are recorded.
+  `.env` and the general process environment are not copied; credentials,
+  contact addresses, sensitive URL components, and local root prefixes are
+  redacted or normalized.
+- Contract boundary: the effective topic contract, available scientific-validity
+  and gap-ontology policies, durable-record schema, prompt-template inventory,
+  response-schema sources, and configured provider implementations are hashed.
+  Statuses explicitly distinguish contracts applied by the legacy pipeline from
+  future contracts that are merely available.
+- Provider timing: candidate-fetch, review-overview, and backfill results record
+  the earliest/latest retained retrieval dates and provider update timestamps.
+- Corpus truthfulness: because the legacy pipeline does not yet emit canonical
+  `CorpusSnapshot` records, provenance explicitly records `not_emitted` with a
+  null ID/cutoff and reason. No snapshot is fabricated and no unsupported claim
+  of temporal reproducibility is made.
+- LLM locality: each exact system message, rendered prompt, schema, raw response,
+  and parsed response now has a trace hash. Trace metadata also records the
+  model, schema name, safe effective request parameters, selected response
+  metadata, and validation data.
+- Resume integrity: attempts and step results are append-only. Resume retains
+  prior history and is rejected when the collection, pipeline, model, or
+  recorded topic-contract boundary is incompatible or unavailable. Legacy
+  manifests upgrade under an explicit legacy attempt without discarding steps.
+- Behavior and safety boundary: no live provider, OpenAI, or Mantis call was
+  introduced; no production scientific-record emission, migration execution, or
+  snapshot creation was implied; existing CLI step order and legacy Mantis CSV
+  behavior remain unchanged.
+- Verification: 15 direct provenance/manifest/trace tests and 76 focused
+  integration tests pass offline; the complete suite passes 548 tests;
+  `git diff --check` is clean.
+- Human-readable reference: `docs/run_provenance.md`.
+
+This completes only Step 1.5. Step 1.6 must make pipeline definitions and
+dependencies authoritative across the CLI and UI; the Corpus stage must later
+replace the explicit missing-snapshot marker with real immutable snapshot IDs
+and cutoffs.
+
+### Step 1.6 Completion Record
+
+- Authoritative registry: `ad_lit_pipeline/core/registry.py` now owns one
+  immutable catalog of 41 effective step specifications and nine immutable named
+  pipeline specifications. Existing module-level `STEP` definitions remain with
+  their implementations, and historical pipeline constants remain tuple-based
+  compatibility views.
+- Dependency model: `StepSpec` now carries dependencies and capabilities.
+  Dependencies are conditional ordering constraints: when two related steps are
+  scheduled together, the dependency must come first; an isolated `--only-step`
+  or suffix `--from-step` may still consume compatible existing artifacts.
+- Catalog validation: startup rejects duplicate registrations, undeclared or
+  unknown dependencies, unknown capabilities, missing LLM capability, and
+  dependency cycles. Pipeline validation rejects unknown, duplicate, and
+  reversed steps before execution.
+- Runtime boundary: the runner checks that every selected step has a bound
+  implementation before executing the first step, preventing late partial-run
+  failures caused by an incomplete runtime mapping.
+- Shared assembly: typed main and collection option records feed pure assembly
+  functions for calibration, human review, knowledge exports/findings,
+  literature-review generation, contract bootstrap, and collection. Both CLIs
+  translate their existing arguments into these records.
+- UI parity: the server's pipeline dropdown/configuration data now comes from
+  those same assembly functions and exposes the authoritative dependency and
+  capability metadata. The UI still launches the existing CLIs, and no controls
+  or feature meanings changed.
+- Compatibility: all existing CLI order, optional-step activation, pause,
+  artifact, and legacy Mantis CSV behavior is preserved. Mantis remains the
+  terminal local export in the main pipeline and is explicitly marked with the
+  `mantis_export` capability; authenticated publishing remains later work.
+- Stale scaffold boundary: `ad_lit_pipeline/steps/review/scaffold.py` is
+  deliberately excluded from the catalog but not deleted. Its superseded
+  definitions remain scheduled for explicit reconciliation in Step 1.9.
+- Regression coverage: all 128 combinations of the seven main pipeline options,
+  every UI-supported review combination, collection modes, optional-step branch
+  activation, immutability, invalid dependencies/order, capability declarations,
+  and missing runtime functions are tested offline.
+- Verification: 72 focused registry/CLI/UI/provenance tests pass; the complete
+  offline suite passes 565 tests; `git diff --check` is clean.
+- Human-readable reference: `docs/pipeline_registry.md`.
+
+This completes only Step 1.6. Step 1.7 must freeze compatibility across the
+existing workflows and introduce explicit versioned Mantis projection adapters
+without placing unverified claims or gaps into the verified Mantis views.
+
+### Step 1.7 Completion Record
+
+- Compatibility boundary: the legacy `export_mantis` implementation, default
+  main order, collection, tagging, and review workflows remain unchanged. A
+  frozen matrix at `tests/fixtures/compatibility/v1/manifest.json` protects the
+  parsed legacy CSV contract, 43-step catalog, ten named pipelines, and optional
+  two-step Mantis delivery order.
+- Profile contracts: strict `paper`, `verified_claim`, and `verified_gap`
+  templates under `configs/mantis/` compile to validated, snapshot-bound
+  `MantisExportProfile` records at profile/compatibility version `1.0.0`.
+  Ordered fields, exact Mantis types, semantic construction, null/multivalue
+  policy, point identity, sort order, and exact `mantisai-cli==3.7.0` support are
+  explicit. Template hashes are frozen.
+- Scientific eligibility: papers require an active, temporally eligible
+  snapshot source and active/corrected lifecycle; claims require active
+  `supported` or `contradicted` evidence in an eligible source; gaps require
+  `verified_open`, a completed decisive verification with no unresolved checks,
+  and a matching separate novelty/importance/feasibility score. All other gap
+  states and insufficient/uncertain claim evidence are excluded and counted by
+  reason.
+- Deterministic artifacts: `export_mantis_views` writes one CSV, compiled
+  profile, and audit report per view. Reports preserve snapshot/profile/source/
+  CSV hashes, field types, eligibility counts, exclusions, and limitations. A
+  new copyright-safe verified-open fixture freezes all three CSV hashes without
+  altering the Step 1.1 or Step 1.3 fixtures.
+- Compatibility limit: Mantis `Connection` is disabled in v1. Stable record IDs
+  remain categoric columns until authenticated serializer/UI behavior is proven.
+  Paper-level scope is explicitly marked unavailable in record contract v1; the
+  corpus snapshot remains authoritative.
+- Publication adapter: `publish_mantis_views` is absent from the default
+  pipeline and refuses to run without the explicit `--publish` gate. It invokes
+  the external pinned CLI with no credential arguments, private visibility, and
+  no activation. It uses create/reject semantics and makes no refresh/upsert
+  idempotency claim.
+- Failure behavior: source CSVs survive every failure. Exact version mismatch,
+  empty view, CLI failure, malformed response, or local exception produces a
+  validated, sanitized failed `MantisPublicationReceipt`. Optional
+  `--require-publication` raises only after durable receipts are written.
+- Interpretation boundary: the Step 1.3 `MantisInterpretation` contract remains
+  non-evidentiary. Automatic interpretation capture and tested expert writeback
+  are not claimed by this step.
+- Regression boundary: normal tests use fake command runners and require no
+  network, Mantis account, OpenAI call, or provider. No live publication was
+  performed; a disposable private-space smoke test remains explicitly opt-in.
+- Verification: 37 focused Mantis/registry/legacy tests pass; the complete
+  offline suite passes 583 tests in 11.86 seconds; compilation and
+  `git diff --check` are clean.
+- Human-readable reference: `docs/mantis_integration.md`.
+
+This completes only Step 1.7. Step 1.8 completion is recorded below.
+
+### Step 1.8 Completion Record
+
+- Policy boundary: `configs/policies/topic_structure_v1.yaml` is the strict,
+  versioned `topic-structure-policy` `1.0.0`. Its semantic SHA-256 identifies
+  the effective policy independently of YAML formatting. Unknown fields,
+  missing sections, invalid profile references, malformed terms, and policy
+  hash drift fail before collection or LLM work begins.
+- Portable separation: universal structural guidance and quality rules are
+  separate from named concept profiles. Alzheimer and computational-method
+  vocabulary, aliases, family relations, exclusions, fallback groups, anchor
+  precedence, screening abbreviations, review stopwords, and cross-domain
+  quality-term sets now live in policy data rather than Python constants or
+  prompt examples.
+- Runtime selection: generated contracts deterministically select applicable
+  profiles from the research question and generated topics. A contract may
+  explicitly set `topic_policy.profile_ids`, including an empty list, to
+  override automatic selection. Generic contracts require no named profile.
+- Single-source behavior: topic generation, repair, refinement, rule-based
+  screening, review-overview filtering, semantic contract validation, and
+  prompt rendering consume the same loaded policy. Python implements generic
+  matching and structural rules; prompts receive rendered policy guidance
+  instead of maintaining a second research vocabulary.
+- Provenance: generated and refined topic contracts carry the policy ID,
+  semantic version, semantic hash, and selected profile IDs. The same reference
+  is returned in step metadata and therefore enters the Step 1.5 run manifest.
+  Existing hand-written contracts without a policy reference remain valid for
+  backward compatibility and use the checked-in default policy at runtime.
+- Transfer proof: an isolated test adds a synthetic migraine profile to a
+  temporary policy file and obtains its family completion, exclusions, fallback
+  group, anchor precedence, and validated provenance without editing Python or
+  prompt templates. An explicit empty-profile test protects genuinely generic
+  topics from accidental domain activation.
+- Compatibility boundary: no CLI order, provider, record schema, scientific
+  validity rule, Mantis profile, projection, publication behavior, or legacy
+  Mantis CSV contract changed. Existing Alzheimer topic behavior remains
+  covered by the full regression suite.
+- Verification: 128 focused topic-policy, prompt, LLM-step, non-LLM-step, and
+  CLI tests pass; the complete offline suite passes 588 tests in 8.56 seconds;
+  compilation and `git diff --check` are clean. Tests use temporary policies and
+  fake LLM clients, with no provider, OpenAI, or Mantis network call.
+- Human-readable reference: `docs/topic_structure_policy.md`.
+
+This completes Step 1.8. Step 1.9 must reconcile user-facing documentation and
+retire or explicitly quarantine stale scaffolding without changing established
+pipeline behavior accidentally.
+
+### Step 1.9 Completion Record
+
+- Documentation hierarchy: `README.md` is the operator quick-start,
+  `docs/technical_summary.md` is the implemented architecture and boundary
+  reference, focused technical documents own their individual contracts, and
+  this living plan remains the only active dependency-ordered roadmap.
+- Workflow reconciliation: the operator and technical documentation now cover
+  all 43 registered steps and ten named pipelines, the default and optional
+  main branches, contract bootstrap, supplied-contract collection, narrative
+  review generation, preliminary knowledge exports, strict v1 records, legacy
+  Mantis export, and versioned Mantis delivery.
+- Scientific boundary: preliminary `Source`, `EvidenceExcerpt`, and `Finding`
+  JSONL are explicitly distinguished from strict v1 records. They are not
+  verified claims and do not imply a corpus snapshot, evidence graph, gap,
+  counterretrieval result, or calibrated ranking. The current main pipeline
+  cannot yet feed the versioned Mantis projector directly.
+- CLI truthfulness: `--export-knowledge`, `--extract-knowledge-findings`,
+  `--generate-review`, both human review gates, artifact paths, and current
+  limitations are documented. Help no longer claims that public collection
+  runs perform primary-paper calibration: `collection_calibration` and
+  `--max-calibration-papers` are retained compatibility surfaces but are not
+  assembled by the current collection workflow.
+- Scaffold retirement: the unreferenced
+  `ad_lit_pipeline/steps/review/scaffold.py` duplicate was removed. Its step
+  names now have only their implemented owning modules. No registered step,
+  import, CLI, output, or compatibility fixture depended on the deleted file.
+- Plan retirement: `docs/topic_contract_bootstrap_refinement_plan.md` keeps its
+  stable path but is now a concise, visibly superseded record linking to current
+  sources. Its obsolete agent instructions and conflicting fallback behavior
+  were removed; Git history retains them for archaeology.
+- Drift protection: `tests/test_documentation_contract.py` verifies registry
+  counts and all named pipelines, optional public workflow flags and scientific
+  boundaries, truthful calibration help, scaffold retirement, superseded-plan
+  status, and every local Markdown link in `README.md` and `docs/`.
+- Determinism correction: full verification exposed that replacement-target
+  extraction iterated a set containing configured word equivalents. Depending
+  on Python's hash seed it could report an equivalent instead of the user's
+  literal target. Extraction now preserves lexical order; the regression passes
+  under ten explicit hash seeds without changing the intended quality rule.
+- Compatibility boundary: generated data and historical literature reviews were
+  untouched. No pipeline order, default option, provider, prompt, record schema,
+  scientific-validity rule, Mantis projection, publication action, or legacy
+  Mantis CSV behavior changed. Only inaccurate CLI help text was corrected.
+- Verification: five focused documentation-contract tests pass; 102 focused
+  documentation/registry/CLI/UI/review tests pass; the documentation, registry,
+  CLI, and topic-contract boundary passes 98 tests; the complete offline suite
+  passes 594 tests in 8.42 seconds. Compilation and `git diff --check` are clean,
+  with no OpenAI, provider, full-text-service, or Mantis network call.
+
+This completes Step 1.9. Step 1.10 must add continuous integration for the
+offline suite and make the Foundation contracts required checks before later
+stages proceed.
+
+### Step 1.10 Completion Record
+
+- Workflow: `.github/workflows/foundation-ci.yml` runs on every push, pull
+  request, and manual dispatch. Concurrency cancels superseded runs for the same
+  workflow and reference.
+- Matrix: the complete suite is declared on `ubuntu-latest` for Python 3.11 with
+  `PYTHONHASHSEED=101` and Python 3.12 with `PYTHONHASHSEED=1201`. Fixed distinct
+  seeds make ordering failures reproducible while exercising more than one
+  iteration layout.
+- Supply-chain boundary: workflow permissions are `contents: read`, checkout
+  credentials are not persisted, and official `actions/checkout` 7.0.1 and
+  `actions/setup-python` 7.0.0 are pinned to their full release commit hashes.
+  The pins were resolved from the official GitHub repositories on 2026-08-28.
+- Dependency boundary: CI installs the existing `requirements.txt` plus
+  CI-only `pytest>=8,<10`. It adds no runtime dependency, lockfile,
+  `pyproject.toml`, packaging workflow, or generated artifact.
+- Offline enforcement: the test phase sets `AD_LIT_TEST_OFFLINE=1` and prepends
+  `tests/offline/` to `PYTHONPATH`. Its `sitecustomize.py` blocks outbound TCP
+  connects in the suite and inherited Python subprocesses while permitting
+  Unix-domain sockets. Dependency installation occurs before this guarded test
+  phase.
+- Required check: `foundation-gate` has a stable name and succeeds only if every
+  Python matrix entry succeeds. GitHub branch protection must require that name
+  separately after the workflow exists remotely; no repository setting is
+  changed by this implementation.
+- Contract protection: `tests/test_ci_contract.py` declares checks for triggers,
+  permissions, concurrency, matrix versions and seeds, exact action pins,
+  credential persistence, install/compile/test commands, absence of secret
+  references, and an inherited-process socket-blocking probe.
+- Documentation: `docs/continuous_integration.md` is the CI security and
+  operating contract. `README.md`, `docs/technical_summary.md`, and `AGENTS.md`
+  link the workflow, local equivalents, stable gate, and live-service exclusion.
+- Deliberate boundary: live OpenAI, provider, full-text-service, and Mantis
+  checks; lint/type gates; release automation; deployment; branch-protection
+  mutation; and artifact upload remain outside Step 1.10.
+- Local verification: the focused CI/documentation contract passes eight tests.
+  The complete guarded suite passes 597 tests on Python 3.11.9 with
+  `PYTHONHASHSEED=101` and Python 3.12.2 with `PYTHONHASHSEED=1201`.
+  Compilation and `git diff --check` are clean.
+- Hosted verification passed on 2026-08-31. The branch was pushed at `f062f11`,
+  then reconciled with `dev061602` in merge commit `ceede85`. Pull request
+  [#2](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/pull/2)
+  is open against `dev061602` and is mergeable. Its
+  [latest pre-completion-record Foundation CI run](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/actions/runs/33373623958)
+  passed the Python 3.11 and 3.12 jobs and the stable `foundation-gate`.
+- Required-check enforcement: after the owner deliberately made the repository
+  public, active repository
+  [ruleset 21912442](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/rules/21912442)
+  was created for `refs/heads/dev061602`. It requires `foundation-gate` from the
+  GitHub Actions integration, requires the branch to be up to date, and has no
+  bypass actors. GitHub's branch-rules API confirms that the rule applies to
+  `dev061602`.
+
+This completes Step 1.10 and the Foundation stage. Later implementation phases
+must retain the stable `foundation-gate` or deliberately record and review any
+replacement before changing the required rule.
+
+### Foundation Corrective Hardening Record
+
+The post-implementation audit identified six verification gaps. They were
+resolved before the hosted gate and required-check configuration above:
+
+- Run identity is immutable: a pre-existing run directory is rejected unless
+  `--resume` is explicit, and the previous manifest remains byte-identical.
+- LLM traces are attempt-scoped and a duplicate call ID is rejected before any
+  existing trace artifact is changed.
+- Resume closes abandoned running attempts as `interrupted`, continues the
+  originally selected step suffix after abrupt termination, preserves legacy
+  suffix behavior, and rejects changed assembled pipelines, effective options,
+  topic contracts, models, or topic-policy semantic hashes. A crash after the
+  last recorded step can be finalized safely; resume cannot redefine the
+  original selection or clear a failure through a dry run.
+- The effective topic-structure policy is now recorded in run provenance and
+  all generic quality/normalization helpers consume the supplied policy rather
+  than falling back to default module globals.
+- Mantis profile/destination validation is an all-or-nothing preflight. After
+  preflight, missing inputs, local exceptions, CLI failures, and new-space
+  dependency skips all produce durable sanitized receipts for all three views.
+- A hermetic orchestrated end-to-end test now runs the complete eight-step main
+  pipeline through the real runner, local full-text extraction, fake LLM
+  clients, audit, legacy Mantis export, manifests, artifact hashes, and
+  attempt-scoped trace hashes.
+
+Corrective verification passes 613 offline tests on Python 3.11.9 with
+`PYTHONHASHSEED=101` and Python 3.12.2 with `PYTHONHASHSEED=1201`. Compilation
+and `git diff --check` are clean. Hosted Step 1.10 verification now passes on
+the pushed branch and pull request, and the required `foundation-gate` rule is
+active on `dev061602`.
+
+### Post-Foundation Live Pipeline Audit — 2026-09-01
+
+A five-paper OpenAlex smoke run for artificial intelligence in Alzheimer
+disease research exposed issues that the hermetic Foundation suite was not
+designed to prove. The historical generated artifacts are retained as audit
+evidence, but they must not be treated as corrected outputs:
+
+- All five provider records had publication dates inside 2020-01-01 through
+  2026-06-19. The exact dates had been inserted into the generated search plan
+  after `plan_search`, however, so the plan no longer matched its manifest hash.
+  The topic contract itself did not carry the boundary.
+- Collection reached the target after one tier-0 query. The plan contained
+  other query text, but those variants were not executed. This proves a live
+  integration smoke only, not search coverage or corpus completeness.
+- Five full-text locators were reachable. Three produced text that matches the
+  requested paper, one paper had neither usable extracted text nor a usable
+  abstract, and one landing page linked to a different ADNI acknowledgements
+  PDF. The old run nevertheless tagged all five and exported all five to the
+  legacy Mantis CSV.
+- The 31 extraction-audit entries were small-sample distribution warnings. They
+  do not validate the tags or the scientific adequacy of the corpus.
+- A repeated live LLM run preserved exact request/response traces but changed
+  claim wording and 17 tag cells. Trace reproducibility is implemented;
+  semantic determinism of a remote generative model is not.
+
+Corrective implementation now makes the temporal and evidence boundaries
+machine-enforced:
+
+- `collection.publication_window` is an optional exact inclusive contract
+  field. Planning overwrites conflicting date filters, provider responses and
+  backfill are checked again, the effective window is carried with each
+  candidate, and main-pipeline scope screening rejects outside, missing,
+  invalid, boundary-ambiguous, or contract/corpus-mismatched dates.
+- Canonical collection CSVs retain structured provider/query/tier/rank/time,
+  duplicate-observation, publication/update/type/language/retraction/citation,
+  full-text-location, raw-record hash/location, source-file hash, and candidate
+  observation fields. Metadata normalization preserves unknown columns.
+- Full-text availability remains discovery metadata. Preparation keeps the
+  original locator separate from the resolved document, preserves section
+  boundaries, records hashes and extraction-engine metadata, and accepts remote
+  text for tagging only after front-matter DOI or compact ordered-title identity
+  verification.
+- Tagging has explicit `tagged`, `skipped_insufficient_evidence`, and `failed`
+  states plus `abstract`, `full_text`, or `none` evidence basis. The topic
+  contract can require full text. Non-tagged rows and errors are retained for
+  audit, their claim/tag fields are cleared, and the legacy Mantis exporter
+  excludes them or fails if none are eligible.
+- Recorded scope-match explanations now require the complete meaningful phrase
+  rather than reporting configured qualifiers that were absent from the paper.
+
+These changes are corrective hardening of the current paper pipeline, not
+completion of Phase 2. There is still no canonical immutable `CorpusSnapshot`,
+work/version lineage, complete content-addressed provider-page archive,
+production v1 record emission, or `as_of` query semantics. Old manifests and
+artifacts are not rewritten. The corrected implementation and its fresh live
+verification are recorded below. The implementation was committed and pushed
+as `7285aec`; hosted
+[Foundation CI run 33512451821](https://github.com/MarieHensche/ad-literature-knowledge-pipeline/actions/runs/33512451821)
+then passed Python 3.11, Python 3.12, and the stable `foundation-gate`.
+
+### P2.0 Stabilization Completion Record — Local And Live
+
+P2.0 closes the compatibility-pipeline defects exposed by the first live smoke
+without beginning Phase 2 production record emission. The correction set is
+locally implemented and verified:
+
+- Static verification passes: package, UI, scripts, and tests compile, and
+  `git diff --check` reports no whitespace errors.
+- The complete socket-blocked offline suite passes all 641 tests on Python
+  3.12.2 with both fixed CI hash seeds: `PYTHONHASHSEED=101` in 10.23 seconds
+  and `PYTHONHASHSEED=1201` in 10.14 seconds.
+- Both collection and main-pipeline dry runs selected only the intended steps
+  before any provider or OpenAI call.
+- Fresh live collection run
+  `p20-stabilization-collection-live-20260901` succeeded from an unedited plan.
+  Its topic contract supplied the exact inclusive 2020-01-01 through
+  2026-06-19 window. The plan hash is
+  `9948497f8b5d8b7136ae1ec82c42a3edb977a4b69860866d35e5a51c5adc662b`;
+  all five retained OpenAlex records have exact in-window dates, structured
+  provider/query provenance, and verified full-text locators; and no record was
+  rejected by the publication-window checks.
+- Retrieval stopped correctly when five unique tier-0 candidates were found.
+  The manifest explicitly reports one of two planned execution queries run and
+  warns `executed=1 planned=2`. The result is therefore an integration smoke,
+  not evidence of search coverage or corpus completeness.
+- Fresh live main run `p20-stabilization-main-live-20260901` succeeded for all
+  eight steps. Scope retained five in-window papers. Full-text preparation
+  produced four usable identity-verified documents and one extraction failure.
+  Tagging processed only those four documents, retained the fifth row as
+  `skipped_insufficient_evidence`, and recorded no tagging failure. The audit
+  retained all five rows with the expected single skip issue. The legacy Mantis
+  projection contains four evidence-eligible rows and excludes the skipped row.
+- Manual front-matter inspection confirmed that all four accepted documents
+  match their intended titles, authors, and DOI context. Their recorded text
+  hashes match the extracted files. The failed paper had neither usable
+  extracted text nor an abstract and did not reach tagging or Mantis.
+- The historical wrong-document artifact was rechecked against the production
+  verifier. The real cached ADNI acknowledgements text previously associated
+  with `10.1002/advs.202204717` now returns `matched=false`, status `mismatch`,
+  with only three of ten significant title tokens present. The guarded offline
+  suite also exercises the complete remote-document rejection path.
+- Principal live output hashes are:
+  `124640fac36d71f38d2152b2d3036875d559fdf6a81a5d34d49ef2ca9573367c`
+  for the canonical five-paper CSV,
+  `04eb86214e5503a53c6058c0dda3ad45828c7184758e8e8da9136156264701f6`
+  for prepared full text,
+  `1110c1b2f6801fc3f7595c4d17f5f8b33cc1be348dfddae376472f21c867d442`
+  for tagging output,
+  `f2dfee9f9bd94dfc3039398dfc84d412397be6222876420220628e7eb53b55e4`
+  for the extraction audit, and
+  `4c1d483e0107a4b08e9613959dbfa14183f5c9ce70cd576c620e13273b0d5681`
+  for the four-row Mantis CSV. The run manifests independently record step
+  inputs, outputs, row counts, warnings, contract state, and artifact hashes.
+- P2.0 live artifacts use a dedicated `p20_stabilization_` prefix and are
+  ignored as generated audit data, keeping them out of the source correction
+  set. They remain available locally for inspection.
+
+P2.0's implementation, local/live verification, push, and hosted verification
+are complete. Commit `7285aec` contains the 31-file correction set; its hosted
+Python 3.11/3.12 matrix and aggregate `foundation-gate` passed. This does not
+implement Phase 2. Phase 2 starts with the live collection-to-record bridge for
+`ScholarlyWork`, `SourceVersion`, `ProviderRecord`, and immutable
+`CorpusSnapshot` records.
 
 ---
 
@@ -108,9 +727,9 @@ researchers make better decisions is an external, longitudinal research effort.
 
 The initial audit included the knowledge implementation under
 `ad_lit_pipeline/knowledge/` and `ad_lit_pipeline/steps/knowledge/`. The new
-implementation baseline starts from clean commit `dd1fbc3`; Step 1.1 must
-re-establish the test total after the recent cleanup rather than carrying the
-historical count of 295 forward. Historical demo measurements below are
+implementation baseline starts from clean commit `dd1fbc3`. Step 1.1
+re-established 295 passing pre-Step tests and 297 passing post-Step tests after
+adding two baseline regressions. Historical demo measurements below are
 diagnostic observations only, not the Step 1.1 fixture or acceptance baseline.
 
 ## Current Implemented System
@@ -136,10 +755,14 @@ Research question / topic contract
                         +-- Finding records
                         +-- Not currently delivered to Mantis
 
-Future verified and ranked gap dossiers
-        +-- Versioned paper/evidence and gap Mantis projections
+Future verified knowledge and ranked gap dossiers
+        +-- One Mantis space with three versioned projections
+                +-- Paper landscape
+                +-- Verified-claim landscape
+                +-- Verified-gap landscape
                 +-- Deterministic CSV fallback
                 +-- Optional authenticated map publication
+                +-- Controlled interpretation writeback
 ```
 
 The final vision stages—relationship construction, gap generation,
@@ -180,31 +803,35 @@ records and provides an interactive research landscape.
 - `export_mantis` runs at the end of the current tagging branch and produces a
   paper CSV with `title`, `categoric`, `semantic`, `paper_id`, `year`, `doi`, and
   inferred extra fields.
-- It does not publish a space or map. The UI only downloads the file and opens
-  the signed-in Mantis import page.
+- The default path does not publish a space or map. The UI only downloads the
+  legacy file and opens the signed-in Mantis import page.
 - Extra fields are inferred from CSV column order, and `categoric` can fall back
   to the first arbitrary non-empty inferred field.
-- No explicit Mantis field/type profile, profile version, publication receipt,
-  idempotency rule, SDK/CLI adapter, or live import test exists.
-- Knowledge findings, evidence passages, relationships, verification results,
-  counterevidence, gap candidates, and the three scores are not exported.
+- A separate Step 1.7 path now provides versioned paper, verified-claim, and
+  verified-open-gap profiles, deterministic CSVs, audit reports, an external CLI
+  adapter, and immutable success/failure receipts. It is not wired into the
+  default main pipeline because that pipeline does not yet emit complete v1
+  scientific records.
+- No live import test, refresh/upsert contract, interpretation capture, expert
+  writeback, or automated production record feed exists yet.
 
-The public integration surface audited on 2026-08-26 has two important
-constraints. `mantisai-cli` 3.7.0 uses a developer API key and can upload a CSV
-as a map, but does not expose completion polling or a demonstrated stable
-refresh/upsert contract. `Mantis_SDK` source version 0.13.0 supports typed space
-creation and stable map IDs, but requires `pandas` even for CSV paths and its
-public package/release story is ambiguous. Do not add either as an unpinned core
-runtime dependency.
+The public integration surface was re-audited on 2026-08-27. Official Mantis
+documentation describes `mantisai-cli` 3.7, developer-key setup, CSV map
+creation, explicit column-type flags, new/existing spaces, visibility, and
+activation. Despite an XLSX help reference, its current local parser is CSV.
+No stable refresh/upsert behavior has been demonstrated for this pipeline.
+Step 1.7 therefore pins exact CLI 3.7.0 as an external tool, uses only CSV
+create/reject behavior, and adds no Mantis or `pandas` runtime dependency.
 
 ### Required Projection Contracts
 
-Use two separate projections—preferably two maps in one project space—because a
-paper/evidence record and a gap dossier are different semantic units:
+Use three separate projections—preferably three maps in one project space—because
+papers, verified claims, and verified gap dossiers are different semantic units:
 
 | Projection | One Mantis point represents | Required content |
 | --- | --- | --- |
-| Paper/evidence | One stable scholarly work or verified claim view | Stable work/version IDs, title, semantic evidence text, snapshot/cutoff, source type, study metadata, topic categories, verification state, and resolvable provenance links |
+| Paper | One stable scholarly work/version | Stable work/version IDs, title/abstract, snapshot/cutoff, source type, study metadata, topic categories, scope state, and resolvable provenance links |
+| Verified claim | One verified claim version | Claim text, exact evidence passage links, population, method, outcome, direction, design, source/version IDs, verifier state, and uncertainty |
 | Gap dossier | One deduplicated, counterverified gap candidate version | Gap title and rationale, gap class, status, snapshot/cutoff, support and counterevidence links, countersearch status, coverage, uncertainty, and separate novelty/importance/feasibility scores |
 
 Every profile must explicitly declare record kind, source schema version,
@@ -246,18 +873,27 @@ Preferred Mantis type mapping:
    tested Mantis writeback adapter can capture the same immutable events.
 8. Do not let live Mantis availability block the scientific pipeline; preserve
    validated local outputs and record publication failure visibly.
+9. Treat Mantis interpretations as pre-candidate hypotheses. Capture the
+   map/profile version, immutable map-input hash, selected point IDs, actor,
+   prompt/action, timestamp, and output in a structured `MantisInterpretation`
+   record. Create a `proposed` gap candidate only after an independent
+   deterministic signal exists, then route it through the normal counterretrieval
+   and verification pipeline.
 
-Access to the main Mantis repository or a signed-in developer account is useful
-before implementing publication and writeback, but is not required for Step 1.1.
+Access to a signed-in developer account is useful for the opt-in live smoke,
+completion-state inspection, native Connection testing, interpretation capture,
+and writeback. The private repository is not required for the implemented CLI
+adapter.
 
-Public references frozen for this planning decision:
+Current primary references for this planning decision:
 
-- [Mantis platform overview](https://home.withmantis.com/)
-- [Mantis SDK at audited commit `850d4d40`](https://github.com/KellisLab/Mantis_SDK/tree/850d4d40e8cedb85ef93dad1c8b2a97ec0caeace)
-- [Mantis CLI at audited commit `cca630e7`](https://github.com/KellisLab/mantis-cli/tree/cca630e7fa869fecf6f55ce0361efa93031f18f9)
+- [Mantis documentation](https://mantis.csail.mit.edu/docs/)
+- [Mantis CLI 3.7](https://mantis.csail.mit.edu/docs/mantis-cli/)
+- [CLI installation and CSV map creation](https://mantis.csail.mit.edu/docs/mantis-cli/install.html)
+- [Space creation and field types](https://mantis.csail.mit.edu/docs/start/create-a-space.html)
 
-Re-audit the public API and pinned tool versions before implementing live
-publication because both repositories are active.
+Re-audit the public API and pinned tool version before a live publication smoke
+or any refresh, native relation, interpretation, or writeback work.
 
 ---
 
@@ -281,27 +917,34 @@ publication because both repositories are active.
 - Raw OpenAlex records retain publication/update dates, type, identifiers,
   locations, versions, retraction status, concepts, references, and citation
   counts.
+- The canonical CSV now carries provider identity, exact publication date,
+  effective publication window, retrieval and duplicate-observation
+  provenance, selected provider fields, raw-record/observation/source-file
+  hashes, and raw JSONL path/line. Unknown columns survive metadata
+  normalization.
 - Full-text lookup through local files, provider locations, DOI pages,
   Unpaywall, Europe PMC, and CORE.
-- Caching of extracted text.
+- Caching of extracted text with locator/resolved-document separation, document
+  identity state, text hash, extraction engine/version, and preserved section
+  boundaries.
 - Topic-specific include/exclude policies and retrieval vocabulary.
 - Paper and candidate deduplication.
 - Finding enums that permit negative, null, mixed, and inconclusive results.
 
 ### Current Limitations
 
-- The raw corpus is richer than the canonical corpus.
-- Candidate export narrows records to a small CSV and serializes provider ID,
-  retrieval date, query, rank, and screening evidence into a semicolon-delimited
-  `notes` field.
-- Exact publication date, version, citation provenance, retraction state, and
-  provider update dates are discarded downstream.
-- Knowledge Source export therefore receives a transformed source label instead
-  of the true provider identity and can fall back to DOI as `provider_id`.
-- Metadata normalization uses a fixed output column set and can discard useful
-  extra columns from user-provided inputs.
+- The raw OpenAlex object is still richer than the canonical CSV, although its
+  canonical hash and resolvable JSONL location are now retained.
+- Compatibility `notes` and transformed `source` fields remain, but essential
+  retrieval provenance is no longer stored only in that text.
+- Provider source-version identity, corrections, citation-edge provenance, and
+  work-versus-version lineage are not yet normalized as production records.
+- Preliminary Knowledge Source export has not yet been rewired to the strict v1
+  provider/work/version record model.
 - Artifact names remain OpenAlex-specific even though a provider interface exists.
-- Date constraints are not first-class corpus fields in the topic template.
+- Publication windows are first-class; `as_of`, snapshot cutoff, source-type,
+  language, access, version, and negative/null-result policies are not yet a
+  complete corpus-specification contract.
 - Scholarly work identity is not separated from preprint, manuscript, published
   version, correction, or update identities.
 - A `null` finding enum does not mean negative-result repositories or unpublished
@@ -508,7 +1151,7 @@ self-evaluation bias. It is not calibrated scientific validation.
 5. Verify quoted text against the document snapshot.
 6. Hash documents and passages.
 7. Run an independent verifier returning supported, contradicted, insufficient,
-   or needs human review.
+   or uncertain, and record mandatory human-review triggers independently.
 8. Validate numeric details, sample sizes, direction, and study design.
 9. Preserve failed extractions as retry/review records.
 10. Run countersearches using normalized entities, aliases, synonyms, acronyms,
@@ -657,8 +1300,8 @@ The software can prepare this contribution but cannot establish it on its own.
 - Tests cover importers, providers, screening, prompts, LLM schemas, review
   steps, UI behavior, and the first knowledge records.
 - LLM tests use reproducible fake clients.
-- A historical audited suite passed 295 tests; Step 1.1 must record the fresh
-  clean-HEAD total after recent repository cleanup.
+- Step 1.1 records 295 passing tests before its regression additions and 297
+  passing tests afterward on clean code commit `dd1fbc3`.
 
 This is engineering validation, not a scientific benchmark.
 
@@ -755,8 +1398,9 @@ is incomplete until the controlled expert study actually runs.
 
 ## Priority 0: Scientific-Validity Blockers
 
-- [ ] Preserve structured provenance across the canonical handoff instead of
-  packing it into `notes`.
+- [x] Preserve structured provider/retrieval provenance across the current
+  canonical paper handoff instead of packing it only into `notes`. Strict v1
+  work/version/snapshot emission remains Phase 2 work.
 - [ ] Replace large pseudo-section excerpts with resolvable, claim-local passages.
 - [ ] Exclude or explicitly mark out-of-scope rows in knowledge exports.
 - [ ] Add semantic claim support checks, not only valid IDs.
@@ -765,25 +1409,28 @@ is incomplete until the controlled expert study actually runs.
   not functionality.
 - [ ] Use one shared source-type classifier.
 - [ ] Unify overlapping review-label and knowledge-finding extraction.
-- [ ] Prevent proposed or unverified gaps from being presented in Mantis without
+- [x] Prevent proposed or unverified gaps from being presented in Mantis without
   an explicit verification state, coverage, and uncertainty.
 
 ## Priority 1: Architecture And Reproducibility
 
 - [ ] Add `schema_version` and migrations to durable records.
 - [ ] Add corpus snapshot IDs and first-class date/cutoff fields.
-- [ ] Extend manifests with git state, environment, command/config, prompt/schema
+- [x] Extend manifests with git state, environment, command/config, prompt/schema
   hashes, provider dates, and model parameters.
-- [ ] Use one central pipeline/dependency registry for CLI and UI.
+- [x] Use one central pipeline/dependency registry for CLI and UI.
 - [ ] Generate planner provider choices from executable adapters.
 - [ ] Rename provider-specific artifact paths before multi-provider collection.
-- [ ] Move domain-specific heuristics from Python into contracts/policies.
-- [ ] Reconcile or retire obsolete review scaffolding.
-- [ ] Document optional knowledge-layer CLI behavior.
-- [ ] Replace column-order-derived Mantis fields and arbitrary category fallback
-  with versioned paper/evidence and gap-dossier export profiles.
-- [ ] Add Mantis publication receipts and explicit terminal-step dependencies.
-- [ ] Keep Mantis credentials out of manifests, traces, logs, and artifacts.
+- [x] Move domain-specific heuristics from Python into contracts/policies.
+- [x] Reconcile or retire obsolete review scaffolding.
+- [x] Document optional knowledge-layer CLI behavior.
+- [x] Add parallel versioned paper, verified-claim, and gap-dossier export
+  profiles; retain the column-order-derived legacy path only for compatibility.
+- [x] Add Mantis publication receipts and explicit terminal-step dependencies.
+- [ ] Add structured Mantis interpretation records and route hypotheses back
+  through counterretrieval and verification.
+- [x] Keep Mantis credentials out of commands, manifests, traces, logs, and
+  artifacts in the versioned adapter and receipts.
 
 ## Priority 2: Scalability And Maintainability
 
@@ -792,9 +1439,10 @@ is incomplete until the controlled expert study actually runs.
 - [ ] Reuse LLM clients.
 - [ ] Add bounded concurrency, caching, rate handling, and cost accounting.
 - [ ] Separate checked-in example artifacts from live generated artifacts.
-- [ ] Add CI.
-- [ ] Add mocked Mantis publisher tests, an opt-in live round-trip smoke test, and
-  incremental/idempotent publication support.
+- [x] Add CI with local/hosted matrix verification and a required stable gate.
+- [x] Add mocked Mantis publisher tests.
+- [ ] Add an opt-in live round-trip smoke test and incremental/idempotent
+  publication support.
 
 ---
 
@@ -853,6 +1501,7 @@ Implement versioned contracts for:
 - `ExpertJudgment`
 - `OutcomeEvent`
 - `MantisExportProfile`
+- `MantisInterpretation`
 - `MantisPublicationReceipt`
 
 Required common fields:
@@ -874,6 +1523,11 @@ version. `MantisPublicationReceipt` must record the source hash, profile/tool
 version, non-secret host, space/map identifiers, publication time and status,
 and retry/error details without credentials.
 
+`MantisInterpretation` must record the source space/map and profile versions,
+immutable map-input hash, selected stable point IDs, actor, prompt or action,
+timestamp, generated hypothesis, and downstream verification state. It is never
+evidence or a gap candidate by itself.
+
 Define operational rules for every gap class: generating evidence, minimum
 support, refuting evidence, coverage assumptions, open-world limitations, and
 human annotation questions.
@@ -887,30 +1541,295 @@ Exit gate:
 
 ## Phase 2 — Repair Corpus And Provenance Handoffs
 
-Goal: prevent critical metadata loss.
+Goal: produce one immutable, cutoff-bound corpus whose provider bytes, work and
+version identities, documents, passages, and Mantis paper points are connected
+by strict v1 records without breaking the compatibility CSV workflow.
 
-Instructions:
+P2.0 prerequisite: **complete**. The compatibility paper CSV now preserves
+structured provider and retrieval provenance, unknown columns survive
+normalization, exact publication windows are enforced, remote document identity
+is verified, and tagging/Mantis eligibility is evidence-gated. Implementation
+commit `7285aec` is pushed, and hosted run 33512451821 passed Python 3.11,
+Python 3.12, and `foundation-gate`. Phase 2.1 is committed and pushed as
+`edf47e9`; Phase 2.2 is committed and pushed as `7a902fa`; Phase 2.3 is
+committed and pushed as `5d00b8c`; Phase 2.4 is implemented and locally
+verified. Phase 2.5 may begin only after explicit approval.
 
-1. Preserve provider, provider ID, exact publication date, type, version, query,
-   tier, rank, timestamp, raw-record hash/location, license, access, retraction,
-   correction, and citation data.
-2. Preserve unknown input columns unless an explicitly narrow output is required.
-3. Separate work, version, and provider-record identities.
-4. Replace free-form provenance notes with structured records.
-5. Add contract fields for publication window, `as_of`, source types, providers,
-   languages, access, versions, and negative/null-result policy.
-6. Filter knowledge exports by scope or carry explicit scope state.
-7. Consolidate source-type classification.
-8. Make snapshot artifacts immutable or content-addressed.
-9. Require each Mantis projection to retain stable record/work/version IDs,
-   snapshot, cutoff, scope/status, and resolvable provenance instead of
-   flattening essential context into free-form notes.
+### Phase 2.1 — Freeze Corpus And Identity Semantics — Complete
+
+- Add the complete corpus specification: inclusive `as_of`, publication and
+  availability rules, allowed source types, providers, languages, versions,
+  access policy, and negative/null-result policy.
+- Implement one shared source-type classifier and deterministic identity order:
+  DOI, stable provider identifier, then an explicitly uncertain metadata
+  fingerprint. Define version, correction, retraction, duplicate, missing-date,
+  and ambiguous-identity behavior without silently guessing.
+- Keep OpenAlex as the first implementation while making the mapping policy
+  provider-neutral.
+
+Exit gate: identical source facts produce identical work/version identity
+projections, and every ambiguous case is retained with an explicit status or
+review route.
+
+#### Phase 2.1 Completion Record
+
+- Added strict, versioned corpus specification `1.0.0` under
+  `ad_lit_pipeline/corpus/`, including inclusive cutoff resolution, earliest
+  defensible public availability, source/language/access/version retention,
+  identity, unknown-date, and explicitly identified negative/null-result rules.
+- Updated the checked-in topic contracts and generated-contract schema/prompt.
+  Legacy contracts without the new section resolve to the identical documented
+  compatibility default rather than acquiring an implicit alternative policy.
+- Added one shared provider-neutral source classifier. It preserves provider
+  labels and decision evidence while distinguishing `resolved`, `provisional`,
+  and `needs_review` classifications. OpenAlex candidate and compatibility CSV
+  exports now carry its additive audit fields.
+- Implemented deterministic identity assessment in the fixed order DOI, stable
+  provider identifier, then normalized metadata fingerprint. Fingerprints are
+  always `needs_review`; conflicts and insufficient facts take explicit review
+  routes rather than being merged.
+- Implemented distinct version and lifecycle assessment for preprints, accepted
+  manuscripts, versions of record, corrections, retractions, protocols,
+  datasets, and patents. Cross-version lineage requires explicit evidence.
+- Implemented cutoff assessment for exact and partial availability dates.
+  Missing, estimated, or cutoff-straddling dates are retained as audit decisions
+  but excluded pending review; publication date is never used as an undeclared
+  substitute for public availability.
+- Run provenance now records the resolved semantic corpus specification and its
+  SHA-256, including whether it was declared or supplied by the compatibility
+  default.
+- Verification: 31 focused corpus-semantics tests pass, 220 affected pipeline
+  tests pass, and the complete deterministic offline suite passes 672 tests.
+- Deliberate boundary: this step freezes and tests decisions; it does not yet
+  archive immutable provider response pages or emit production
+  `ProviderRecord`, `ScholarlyWork`, `SourceVersion`, or `CorpusSnapshot`
+  records. Those are Phase 2.2 and Phase 2.3 responsibilities.
+
+### Phase 2.2 — Capture Immutable Provider Evidence — Complete
+
+- Store content-addressed raw provider response pages, canonical redacted
+  request hashes, query/group/tier, page or cursor, result order, provider
+  update time, retrieval time, media type, and raw byte hash/URI.
+- Generalize provider-specific artifact filenames and emit the information
+  required by production `ProviderRecord` records without storing credentials.
+
+Exit gate: every retained OpenAlex candidate resolves to the exact archived
+provider bytes and request that produced it, and hash tampering is detected.
+
+#### Phase 2.2 Completion Record
+
+- Added provider-evidence schema `1.0.0` and the provider-neutral implementation
+  in `ad_lit_pipeline/providers/evidence.py`. The transport captures the exact
+  successful HTTP response-body bytes before JSON interpretation, including
+  supported content-encoding handling.
+- Canonical request identity retains only the HTTP method, normalized endpoint,
+  sorted scientific query parameters, and allowlisted non-secret headers.
+  API keys, tokens, signatures, cookies, embedded credentials, `mailto`, and
+  email values are removed rather than hashed or stored.
+- Raw pages use atomic, content-addressed paths by provider and response SHA-256.
+  The atomic JSONL index records request hash, query/logical query/group/tier,
+  iteration, retrieval phase, backfill round, page or cursor, per-page value,
+  response status/media type/encoding/hash/URI/byte count, retrieval time,
+  provider-update range, and exact provider result order plus ordered raw-item
+  hashes.
+- Every newly fetched candidate links to its page evidence ID, request and
+  response hashes, response URI, page/cursor, exact one-based result position,
+  JSON pointer, page result count, and canonical raw-item hash. The candidate
+  retrieval timestamp is the page observation timestamp.
+- Initial candidate fetch, review/overview seed fetch, and iterative backfill
+  use the same archive/verification rules. Review-seed pages have a separate
+  index and store so contract-bootstrap evidence cannot be confused with the
+  final candidate corpus. Backfill verifies the existing archive before adding
+  observations.
+- Deduplication preserves the representative page link and page links for
+  duplicate observations. The compatibility paper CSV exposes additive flat
+  fields plus the complete canonical provider-evidence JSON.
+- Generalized new candidate paths from `openalex_candidates` to
+  `provider_candidates`. Historical OpenAlex-named artifacts remain readable
+  for resume, `--from-step`, `--only-step`, and main-pipeline handoff when the
+  provider-neutral artifact is absent; they receive an explicit `unavailable`
+  evidence marker rather than fabricated provenance.
+- Verification recomputes request hashes and page IDs, constrains artifact
+  paths, checks content-addressed location, exact byte hash/size, JSON decoding,
+  result count/order, provider-update summaries, candidate position/provider
+  identity, JSON pointer, and raw-item hash against both the candidate and the
+  archived page item. Tampering or missing links stop the step.
+- Run provenance records the provider-evidence schema and implementation hash;
+  step manifests record index/file hashes and page, file, byte, and link counts.
+- Verification: 195 affected provider/collection/orchestration/provenance tests
+  pass; the complete deterministic offline suite passes 684 tests; compilation
+  and diff validation pass. No live provider request was needed for this step.
+- Human-readable contract: `docs/provider_evidence.md`.
+- Deliberate boundary: successful provider pages are immutable evidence inputs,
+  not yet v1 `ProviderRecord` objects or a `CorpusSnapshot`. Failed HTTP attempts
+  without a successful response body, work/version emission, snapshot freezing,
+  documents, and passages remain outside Phase 2.2.
+
+### Phase 2.3 — Materialize The Canonical Corpus Snapshot — Complete
+
+- Add a registered production step after candidate export that emits
+  `ScholarlyWork`, `SourceVersion`, `ProviderRecord`, `AccessLocation`, and one
+  `CorpusSnapshot` into canonical JSONL plus an integrity report.
+- Record actual rather than planned query coverage, cutoff, contract and plan
+  hashes, included versions, provider records, scope, and open-world
+  limitations. Freeze the snapshot only through atomic write plus strict
+  collection-integrity success.
+
+Exit gate: unchanged inputs produce stable record and snapshot IDs; missing
+references, cutoff violations, competing identities, or artifact mismatches
+prevent freezing.
+
+#### Phase 2.3 Completion Record
+
+- Added the registered `materialize_corpus_snapshot` production step after
+  `export_included_candidates`. The shared registry now contains 44 steps and
+  the generated-contract collection path receives the same terminal step.
+- Added conventional canonical outputs
+  `data/processed/<collection>_corpus_records.jsonl` and
+  `data/processed/<collection>_corpus_snapshot_integrity.json`, CLI runtime
+  binding, completion output, ignore rules, and manifest-visible `StepResult`
+  inputs, outputs, counts, status, hashes, coverage, and snapshot ID.
+- Selected paper rows must resolve uniquely to deduplicated candidates and then
+  to exact archived provider pages/items through evidence ID, request and
+  response hashes, content-addressed URI, result position, JSON pointer,
+  provider identity, and canonical item hash. Copied metadata cannot replace
+  archived bytes.
+- Materialization applies the shared Phase 2.1 source-type, deterministic work
+  identity, source-version, lifecycle, retention, access, and inclusive-cutoff
+  policies. It emits strict v1 `ScholarlyWork`, `SourceVersion`,
+  `ProviderRecord`, `AccessLocation`, and one frozen `CorpusSnapshot` with
+  deterministic typed IDs.
+- The snapshot identity includes resolved corpus semantics and cutoff, plan and
+  contract hashes, selected input hashes, actual provider observations, and
+  membership. Operational timestamps and producing run IDs do not affect
+  record identities, so unchanged scientific inputs retain identical IDs
+  across repeated runs.
+- Coverage is computed from observed evidence pages, not every query written in
+  the plan. The snapshot records planned/observed/missing logical queries,
+  providers, retrieval phases, page/result counts, execution status, source and
+  access summaries, and explicit open-world limitations.
+- Strict pre-freeze checks deny unresolved or competing identities,
+  inconsistent plan/contract windows, missing or altered evidence, provider
+  item mismatch, disallowed or after-cutoff versions, and impossible retrieval
+  chronology. Full v1 record-local, collection-reference, ownership,
+  membership, chronology, and local-artifact validation runs before publish.
+- Records are serialized to a temporary artifact and atomically replace the
+  canonical JSONL only after every gate passes. Failure writes an atomic
+  integrity report without replacing records; an older JSONL is preserved but
+  explicitly marked stale so it cannot be attributed to the failed attempt.
+- Run provenance now fingerprints the snapshot-materializer implementation and
+  policy versions and distinguishes a selected, not-yet-run final materializer
+  from workflows that cannot emit a snapshot.
+- Verification: seven focused snapshot tests and 82 affected structural,
+  orchestration, provenance, compatibility, and documentation tests pass. The
+  complete offline suite passes 692 tests normally and with CI hash seeds 101
+  and 1201; compilation and diff validation pass. No provider, OpenAI,
+  full-text, or Mantis request was required.
+- Human-readable contract: `docs/corpus_snapshot.md`.
+- Deliberate boundary: `Document` and `Passage` emission, snapshot-native main
+  pipeline handoff/resume, and production Mantis paper projection remain Phase
+  2.4 and Phase 2.5 work. The legacy paper and Mantis CSV paths are unchanged.
+
+### Phase 2.4 — Materialize Documents And Resolvable Passages — Complete
+
+- Make main-pipeline full-text preparation consume snapshot-backed source and
+  access identities. Emit `Document` only for trusted-local or identity-verified
+  content, with content hash, byte size, license, media type, retrieval time,
+  artifact URI, extraction engine, and status.
+- Convert section-aware text into bounded `Passage` records with stable order,
+  section paths, exact character/page locators, extractor identity, and hashes.
+  Preserve failures as audit data without inventing documents or passages.
+
+Exit gate: every future claim can cite an exact passage whose source version,
+document bytes, text, locator, and hashes validate independently.
+
+#### Phase 2.4 Completion Record
+
+- Upgraded full-text extraction contract `2.0.0` to `3.0.0`. Preparation now
+  retains exact downloaded PDF/HTML bytes or explicitly trusted local bytes in
+  a content-addressed external cache, independently of the normalized UTF-8
+  text used for tagging and passage coordinates.
+- Added source-byte path/hash/size/media type, retrieval time, encryption/page
+  metadata, and a content-addressed text-structure path/hash to the additive
+  full-text manifest. Existing compatibility columns and tagging behavior are
+  preserved.
+- Historical remote text that lacks exact source bytes is refetched and passes
+  the existing DOI/title identity gate again. Trusted local text can become an
+  exact `text/plain` source. Existing content-addressed cache entries are
+  hash-checked and repaired from bytes supplied by the same preparation call.
+- Added deterministic structure-first segmentation `1.0.0`: document-order
+  paragraphs and recognized scientific headings, including single-newline
+  boundaries, are preserved; only units over 4,000 characters are split.
+  Every passage stores exact Unicode-code-point offsets, section path, stable
+  sequence/paragraph indices, representation/text hashes, extractor identity,
+  configuration hash, and independently derived PDF page range when available.
+- Added the direct `materialize_document_passages` Phase 2.4 bridge. It consumes
+  one integrity-valid frozen corpus plus its full-text manifest, resolves each
+  `SourceVersion` through the Phase 2.3 paper identity, reuses or creates a
+  credential-free `AccessLocation`, and emits strict v1 `Document` and `Passage`
+  records.
+- Documents are eligible only for `trusted_local`, `verified_doi`, or
+  `verified_title` identities with usable, unencrypted, hash-valid artifacts.
+  PDF emission additionally requires independently resolvable page spans and a
+  positive page count; no page coordinates are guessed.
+- Exact source bytes, text, and structure are copied to content-addressed,
+  Git-ignored `runs/<run_id>/artifacts/documents/` paths. Output receives full
+  record and artifact validation before atomic replacement. Per-source failures
+  remain structured audit data and emit neither documents, passages, nor stray
+  access records.
+- Extended general v1 artifact validation to verify source byte hash/size,
+  normalized representation, structure hash/schema/media/page bounds, exact
+  passage occurrence, and page-coordinate agreement independently of the
+  materializer.
+- Verification: 14 focused exact-byte, identity, historical-cache, corruption,
+  stable-ID, structure, page, section, query-redaction, and failure tests were
+  added. The complete deterministic offline suite passes 706 tests normally and
+  with CI hash seeds 101 and 1201; compilation and diff validation pass. No
+  provider, OpenAI, full-text, or Mantis request was required.
+- Human-readable contract: `docs/document_passages.md`.
+- Deliberate Phase 2.5 boundary: the materializer has a direct package CLI and
+  `StepSpec` but is not registered in the default collection/main pipeline.
+  Snapshot handoff/resume, artifact naming, registry/UI assembly, and strict
+  Mantis paper projection remain Phase 2.5 work; the legacy CSV is unchanged.
+
+### Phase 2.5 — Integrate Snapshot Handoffs And Mantis Papers
+
+- Register the new steps, dependencies, artifacts, CLI/UI assembly, manifest
+  fields, and resume compatibility. Make the main workflow consume the snapshot
+  rather than reconstructing scientific identity from CSV rows.
+- Produce the strict Mantis paper view from production v1 records with stable
+  point/work/version IDs, snapshot and cutoff, included scope/status, and
+  resolvable provenance. Keep verified-claim and verified-gap views empty until
+  later phases genuinely create eligible records, and preserve the legacy CSV
+  path unchanged.
+
+Exit gate: one paper traces without metadata loss from archived OpenAlex bytes
+through provider/work/version/access/document/passage records and the frozen
+snapshot into its deterministic Mantis paper point.
+
+### Phase 2.6 — Regression, Live Acceptance, And Release
+
+- Add a copyright-safe golden snapshot plus adversarial orphan, hash-tamper,
+  cutoff, duplicate, ambiguous-identity, wrong-version, and extraction-failure
+  cases. Compare stable IDs across repeated runs.
+- Run both fixed-seed offline suites, a fresh small OpenAlex collection-to-main
+  smoke, strict integrity validation, and the versioned Mantis paper export.
+  Inspect outputs, update documentation and this plan, then require the hosted
+  Python 3.11/3.12 `foundation-gate` on the committed result.
+
+Exit gate: the live run produces a frozen, integrity-valid corpus snapshot with
+stable identities, no critical provenance loss, and a deterministic Mantis
+paper view. Phase 3 may start only after the committed hosted gate passes.
 
 Exit gate:
 
-- An OpenAlex candidate traces losslessly into Source/SourceVersion.
-- Provider ID, query, publication date, version, and snapshot are structured.
-- Unchanged snapshots produce stable identities.
+- An OpenAlex candidate traces losslessly into `ProviderRecord`,
+  `ScholarlyWork`, `SourceVersion`, `AccessLocation`, `Document`, and `Passage`.
+- Provider ID, executed query, exact dates, version, raw bytes, snapshot,
+  cutoff, scope, access, and limitations remain structured and resolvable.
+- Unchanged snapshots produce stable identities and pass strict integrity.
+- The compatibility CSV remains available, while the production Mantis paper
+  projection consumes strict snapshot-backed records.
 
 ## Phase 3 — Strengthen Reproducibility And Orchestration
 
@@ -1023,7 +1942,8 @@ Instructions:
 
 1. Verify exact spans, IDs, numbers, direction, and source version.
 2. Use a verifier separate from extraction.
-3. Return supported, contradicted, insufficient, or needs review.
+3. Return supported, contradicted, insufficient, or uncertain; record mandatory
+   human-review triggers independently of that outcome.
 4. Store verifier rationale and spans.
 5. Separate extraction confidence, reporting quality, study quality, and
    verifier outcome.
@@ -1099,8 +2019,9 @@ Instructions:
 4. Record queries, results, zero results, failures, and provider limitations.
 5. Run counterresults through the same screening/evidence/claim verifier.
 6. Test terminology and indexing artifacts.
-7. Assign proposed, partially supported, refuted, resolved, artifact, duplicate,
-   or uncertain states.
+7. Move candidates through the declared `proposed`,
+   `verification_in_progress`, `verified_open`, `refuted`, `resolved`,
+   `uncertain`, `terminology_artifact`, or `duplicate` states.
 8. Never treat zero results as strong evidence under poor coverage.
 
 Exit gate:
@@ -1128,9 +2049,9 @@ Instructions:
 10. Emit a versioned gap-dossier Mantis projection with separate gap class,
     verification state, coverage, uncertainty, novelty, importance,
     feasibility, support, counterevidence, countersearch, and provenance fields.
-11. Prefer one project space with separate paper/evidence and gap-dossier maps;
-    keep the two profiles independently versioned because their semantic units
-    differ.
+11. Prefer one project space with separate paper, verified-claim, and
+    gap-dossier maps; keep all three profiles independently versioned because
+    their semantic units differ.
 
 Exit gate:
 
@@ -1159,6 +2080,8 @@ Instructions:
     downloadable CSV fallback and immutable publication receipt.
 12. Do not count Mantis interactions as expert judgments unless tested writeback
     captures the required append-only protocol events.
+13. Capture map-grounded interpretations as hypotheses with stable selections
+    and route them back through counterretrieval and claim/gap verification.
 
 Exit gate:
 
@@ -1248,9 +2171,9 @@ The first release should implement:
 8. A gap-dossier UI with expert accept/reject/already-known judgments.
 9. An Alzheimer-focused benchmark.
 10. One second-domain demonstration using only a new topic contract.
-11. One Mantis project space with independently versioned paper/evidence and
-    verified gap-dossier maps, deterministic CSV fallbacks, and immutable
-    publication receipts.
+11. One Mantis project space with independently versioned paper, verified-claim,
+    and verified-gap maps, deterministic CSV fallbacks, controlled
+    interpretation writeback, and immutable publication receipts.
 
 This release is useful and defensible without attempting exhaustive providers,
 patent normalization, a universal ontology, or a completed prospective study.
@@ -1277,8 +2200,8 @@ At every plan review, answer and record:
 - [ ] Did domain logic enter Python that belongs in a topic contract?
 - [ ] Do CLI, UI, documentation, and registry describe the same pipeline?
 - [ ] Is the project claiming more scientific validation than the evidence permits?
-- [ ] Does every terminal paper/gap artifact have a deterministic, versioned
-  Mantis projection?
+- [ ] Does every terminal paper, verified-claim, and verified-gap artifact have
+  a deterministic, versioned Mantis projection?
 - [ ] Does each projection match its declared Mantis field/type profile without
   relying on column order?
 - [ ] Are input hashes and space/map IDs recorded without credentials?
@@ -1286,6 +2209,8 @@ At every plan review, answer and record:
   opt-in live check?
 - [ ] Is Mantis presented as an exploration layer rather than scientific
   validation?
+- [ ] Is every Mantis-generated interpretation visibly a hypothesis and routed
+  through the same counterretrieval and verification gates as other candidates?
 
 # Decision Log
 
@@ -1293,6 +2218,23 @@ Add entries in reverse chronological order.
 
 | Date | Decision or deviation | Reason | Consequence / follow-up |
 | --- | --- | --- | --- |
-| 2026-08-26 | Make Mantis a required terminal consumer while keeping deterministic local CSVs and canonical evidence artifacts authoritative; authenticated publication remains feature-gated. | Mantis is a strong semantic exploration and delivery layer, but availability or map generation cannot determine scientific validity. | Add explicit paper/evidence and gap-dossier profiles, publication receipts, mocked publisher tests, and an opt-in live round-trip test. |
+| 2026-09-02 | Complete Phase 2.4 with exact source-byte retention, a separately hashed normalized representation/structure, identity-gated strict `Document` emission, deterministic resolvable `Passage` records, and independent artifact/locator validation. | Future claims must cite evidence-local text while preserving the exact source bytes and enough structure to reproduce and audit the locator. Historical remote text alone cannot prove which document bytes were used. | Extraction contract `3.0.0` refetches historical remote caches without source bytes; old live manifests need reprocessing. The direct bridge remains outside default orchestration until Phase 2.5 wires snapshot handoff, registry/UI/resume, and the strict Mantis paper view. The complete offline suite passes 706 tests without live services. |
+| 2026-09-01 | Complete Phase 2.3 with exact selected-candidate-to-provider-byte resolution, strict five-record v1 materialization, observed query coverage, deterministic snapshot identity, full collection validation, and atomic freeze/failure reports. | Archived provider pages were necessary but not yet a stable scientific corpus boundary. Later document, claim, gap, and Mantis work require explicit work/version/provider/access ownership and an immutable inclusive-cutoff membership set. | Phase 2.4 may attach verified documents and resolvable passages to these source versions. Snapshot-native main-pipeline and Mantis handoffs remain Phase 2.5. The complete offline suite passes 692 tests under the normal environment and both CI hash seeds; no live service was required. |
+| 2026-09-01 | Complete Phase 2.2 with exact OpenAlex response-byte capture, credential-free canonical request hashes, provider-neutral evidence indexes, candidate result-position and raw-item links, isolated review-seed evidence, backfill append/verification, compatibility fallbacks, and tamper detection. | Copied candidate metadata and display URLs cannot prove which mutable provider page produced an observation or preserve exact result order and item content. Production provider records and temporal snapshots require immutable input bytes first. | Phase 2.3 may materialize v1 provider/work/version/access records and freeze the first corpus snapshot from these verified inputs. Historical OpenAlex-named artifacts remain usable but explicitly lack archived page evidence. The complete offline suite passes 684 tests; no live service was required. |
+| 2026-09-01 | Complete Phase 2.1 with corpus specification `1.0.0`, one provider-neutral source classifier, deterministic DOI/provider/fingerprint identity assessment, evidence-linked version/lifecycle rules, inclusive earliest-availability cutoff assessment, and explicit review routes for uncertainty. | Immutable provider evidence and production records need fixed semantics before their identities and snapshot membership can be trustworthy. Silent publication-date substitution, metadata-only duplicate merging, or inferred version lineage would make later temporal gap claims irreproducible. | Phase 2.2 may archive exact provider request/response evidence against these rules. The production record bridge remains intentionally unimplemented until Phase 2.3. Complete offline verification passes 672 tests; no live service was required for this semantic step. |
+| 2026-09-01 | Complete P2.0 stabilization after two 641-test deterministic offline runs, a fresh live five-paper collection-to-Mantis smoke from an unedited exact-window plan, implementation commit `7285aec`, and successful hosted Foundation CI run 33512451821. | Phase 2 must not begin on top of the invalid historical smoke or an unverified correction set. The rerun proves temporal enforcement, structured provenance carriage, evidence gating, and correct-document handling while accurately exposing partial query execution. | Keep the result scoped as a smoke, retain the generated audit artifacts locally, and do not claim Phase 2 record emission or search completeness. The Python 3.11/3.12 matrix and stable `foundation-gate` passed; Phase 2.1 may begin only after explicit approval. |
+| 2026-09-01 | Harden the compatibility pipeline after the first live five-paper smoke: exact publication-window enforcement and carriage, structured canonical provenance, remote-document identity verification, explicit tagging evidence/state policy, and evidence-gated legacy Mantis export. | The live run met its requested provider date range but used a post-plan manual edit, retrieved one wrong PDF, tagged one title-only row, and stopped after one tiered query; the old success statuses therefore overstated end-to-end validity. | Retain old artifacts as invalidating audit evidence and perform a fresh run. Treat it only as a smoke, report executed-query coverage, and do not mark Phase 2 complete until immutable snapshots and work/version/provider-record identities exist. |
+| 2026-08-31 | Complete Step 1.10 and Foundation after the Python 3.11/3.12 hosted matrix and stable `foundation-gate` passed on the pushed branch and PR, then require that check on `dev061602` through active repository ruleset 21912442 with no bypass actors. | Local-only verification cannot establish that the committed workflow runs correctly on GitHub or prevent later unverified branch updates. | PR #2 is mergeable and green. Later phases must keep the stable gate required or record and review a deliberate replacement. |
+| 2026-08-28 | Complete Step 1.9 with one truthful documentation hierarchy, removal of the obsolete review scaffold, a visibly superseded bootstrap plan, explicit preliminary-versus-v1 scientific boundaries, truthful collection-calibration help, local-link and registry documentation tests, and deterministic literal replacement-target extraction. | Contradictory scaffolding and milestone-era documentation could make implemented review steps look unavailable, preliminary knowledge look verified, or compatibility-only calibration look active. Full verification also exposed a hash-seed-dependent equivalent-word choice. | Step 1.10 can add CI against a documented 43-step, ten-pipeline boundary and the complete offline suite. Collection calibration activation, production v1 record emission, and later scientific pipeline behavior remain separate decisions. |
+| 2026-08-27 | Complete Step 1.8 with strict topic-structure policy `1.0.0`, semantic policy identity, generic structural code, profile-driven research vocabulary, automatic or explicit profile selection, shared prompt/runtime guidance, and generated-contract provenance. | Domain adaptability is not credible while named research concepts and parallel prompt heuristics remain embedded in Python. A strict external policy makes the boundary reviewable, portable, testable, and reproducible without weakening legacy behavior. | Step 1.9 reconciles documentation and stale scaffolding. Future domains add or version profiles in policy data rather than changing Python; material policy semantics require a new version and hash. |
+| 2026-08-27 | Complete Step 1.7 with three compatibility-v1 Mantis profiles, deterministic audited projections, a separate optional delivery pipeline, exact external CLI 3.7.0 gating, private/non-activating create semantics, and immutable sanitized receipts. | Mantis is valuable for semantic interpretation, but only verified scientific units may enter verified views and remote availability must not control the local pipeline. | The default and legacy exporter remain unchanged. Step 1.8 moves topic logic into contracts. A live disposable-space smoke, native Connection, refresh/upsert, interpretation capture, and expert writeback require later explicit authorization and compatibility evidence. |
+| 2026-08-27 | Complete Step 1.6 with one immutable 41-step catalog, nine named pipeline specifications, conditional ordering dependencies, capability metadata, shared typed main/collection assembly, CLI/UI parity, and pre-execution implementation checks. | Duplicated branch insertion in the CLI and UI could silently diverge, while strict same-run predecessor requirements would break legitimate artifact-based `--only-step` and `--from-step` workflows. | Step 1.7 can add versioned Mantis projections and adapters against one authoritative order. Artifact compatibility/idempotency remains later work; superseded review scaffolding is excluded but retained until Step 1.9. |
+| 2026-08-27 | Complete Step 1.5 with versioned, atomic manifests; sanitized content-addressed code/environment/invocation/contract/provider provenance; hashed exact LLM traces; provider timing; append-only resume attempts; and an explicit missing-snapshot record. | Reconstructability requires effective inputs and history to be recorded without leaking credentials or overstating capabilities the legacy pipeline does not have. | Step 1.6 centralizes pipeline/dependency assembly. The Corpus stage must emit canonical snapshot IDs/cutoffs before resume can enforce snapshot compatibility; production scientific records and Mantis publication remain unwired. |
+| 2026-08-27 | Complete Step 1.4 with offline collection-wide referential, ownership, closure, chronology, lineage, artifact, and passage validation plus an explicit but empty migration-path registry and atomic migration policy. | Record-local validity cannot establish that cited records or bytes exist, and inventing a migration without a target schema would create false compatibility. | Step 1.5 may record integrity artifacts in run provenance. Production wiring, a real migration executor, remote artifact fetching, legacy-knowledge conversion, and live Mantis publication remain later explicit steps. |
+| 2026-08-27 | Complete Step 1.3 with schema `1.0.0`, 20 strict durable record contracts, 12 operational gap classes, deterministic typed IDs, record-local scientific validation, and explicit Mantis profile/interpretation/receipt boundaries. | Later corpus, evidence, gap, scoring, evaluation, and Mantis stages need one immutable versioned language before they emit artifacts. | Step 1.4 must add cross-artifact integrity and migration policy; no Step 1.3 local success may be represented as proof that referenced records or files exist. |
+| 2026-08-27 | Complete Step 1.2 with cross-domain scientific-validity policy `1.0.0`, append-only gap-state history, qualified open-world language, separately typed assessment dimensions, orthogonal claim outcomes and human-review triggers, and Mantis pre-candidate semantics. | Gap statements need enforceable scientific semantics before durable records or generation steps are added. | Step 1.3 records cite schema and policy versions and enforce record-local lineage/evidence declarations; Step 1.4 verifies them across artifacts. No current `Gap`, `evidence_strength`, pipeline, or legacy Mantis meaning is silently upgraded. |
+| 2026-08-26 | Use Mantis as a controlled interpretation workspace as well as the final exploration layer, with separate paper, verified-claim, and verified-gap maps in one space. | Map-grounded comparison, clustering, and agent interaction can generate useful hypotheses if they retain selections and provenance. | Add `MantisInterpretation` pre-candidate records; require an independent deterministic signal before creating a `proposed` gap, then apply normal counterretrieval and verification. |
+| 2026-08-26 | Complete Step 1.1 at clean code commit `dd1fbc3` with a new eight-record synthetic fixture and frozen legacy Mantis contract. | Later exporter and knowledge-contract changes need a reproducible comparison point independent of historical demo artifacts. | Preserve the fixture and its hashes; 295 pre-Step and 297 post-Step tests pass. |
+| 2026-08-26 | Make Mantis a required terminal consumer while keeping deterministic local CSVs and canonical evidence artifacts authoritative; authenticated publication remains feature-gated. | Mantis is a strong semantic exploration and delivery layer, but availability or map generation cannot determine scientific validity. | Add explicit paper, verified-claim, and gap-dossier profiles, publication receipts, mocked publisher tests, and an opt-in live round-trip test. |
 | 2026-08-26 | Use a new synthetic, copyright-safe fixture for Step 1.1 instead of historical demo artifacts. | The historical demo test was removed and the new clean baseline must be small, deterministic, and purpose-built for current and Mantis contracts. | Re-measure the clean-HEAD suite and freeze new expected artifacts before feature work. |
 | 2026-08-26 | Use the portable gap ontology as the primary contribution, temporal provenance as supporting infrastructure, and prospective validation as a later study. | Best fit with the implemented pipeline and achievable scientific novelty. | Complete Foundation, Corpus, and Evidence stages before sophisticated gap ranking. |

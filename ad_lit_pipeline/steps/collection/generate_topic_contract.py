@@ -8,6 +8,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ad_lit_pipeline.corpus.specification import (
+    corpus_specification_from_contract,
+    default_corpus_specification_mapping,
+)
 from ad_lit_pipeline.core.env import load_dotenv
 from ad_lit_pipeline.core.step import StepResult, StepSpec
 from ad_lit_pipeline.io.yaml_io import read_yaml_object, write_yaml_object
@@ -19,27 +23,30 @@ from ad_lit_pipeline.prompts.render import (
     render_repair_topic_structure_prompt,
 )
 from ad_lit_pipeline.topics.contract import (
-    BROAD_UMBRELLA_TOPIC_STRUCTURE_TERMS,
-    COMMON_SURFACE_FORM_GROUPS,
-    METHOD_TOPIC_BARE_DOMAIN_TERMS,
-    alzheimer_disease_non_family_term_matches,
-    disease_family_variant_matches,
-    experimental_methods_non_family_term_matches,
+    concept_excluded_term_matches,
+    concept_family_variant_matches,
     generated_topic_structure_crucial_issue_records,
     generic_secondary_topic_bucket_matches,
     generic_secondary_topic_term_matches,
-    is_alzheimer_disease_topic,
     is_retired_tagging_category_id,
     is_crucial_topic_structure_issue,
     is_method_topic,
     is_title_or_abstract_exception_topic,
     method_internal_subtype_matches,
     normalize_tagging_label,
-    parkinsons_disease_non_family_term_matches,
     validate_generated_topic_structure_quality,
     validate_topic_contract,
 )
 from ad_lit_pipeline.topics.matching import RETRIEVAL_TERMS_LIMIT
+from ad_lit_pipeline.topics.policy import (
+    TopicConceptProfile,
+    TopicStructurePolicy,
+    attach_topic_policy_reference,
+    default_topic_structure_policy,
+    render_topic_policy_guidance,
+    selected_profile_ids,
+    topic_profile,
+)
 
 
 STEP = StepSpec(
@@ -67,6 +74,7 @@ def prompt_with_validation_feedback(
     prompt: str,
     error: ValueError,
     best_contract: dict[str, Any] | None = None,
+    policy_guidance: str = "",
 ) -> str:
     """Append validation feedback for one LLM correction attempt."""
     feedback = (
@@ -91,29 +99,20 @@ def prompt_with_validation_feedback(
         "- Do not generate retired root categories. Use concrete, "
         "topic-specific categories directly instead of a single primary-focus "
         "selector.\n"
-        "- If the failure names `topic_structure`, split any merged main topic "
-        "into one concept area per main topic. For example, use separate "
-        "`ai`, `school`, and `student_performance` topics instead of "
-        "`ai_in_school` or `ai_and_student_performance`.\n"
+        "- If the failure names `topic_structure`, split merged main topics "
+        "into one concept area per main topic.\n"
         "- For questions like `Could X be used to...` or `Use of X in/for...`, "
         "choose X as the anchor when X is the proposed source, tool, "
         "intervention, material, disease, exposure, or core phenomenon. Do "
         "not anchor on the application, outcome, or replacement/comparator "
         "goal if papers about that goal without X would be off-topic.\n"
-        "- Keep each main topic's terms inside that same concept area. Do not "
-        "put phrases such as `AI in schools` inside the `ai` term list when "
-        "`school` is a separate main topic.\n"
+        "- Keep every main topic's terms inside that same concept area.\n"
         "- Include commonly used surface forms explicitly when they matter, "
-        "such as abbreviations plus full forms (`AI` and artificial "
-        "intelligence), common punctuation variants such as `A.I.`, and common "
-        "synonyms. Do not add rare, invented, or merely capitalization-only "
-        "variants.\n"
+        "such as abbreviations plus full forms, common punctuation variants, "
+        "and common synonyms. Do not add rare, invented, or merely "
+        "capitalization-only variants.\n"
         "- Set the anchor topic's `field` to `title`.\n"
-        "- Replace generic topic terms such as `education`, `learning "
-        "environment`, `educational settings`, `performance metrics`, "
-        "`technology`, `educational technology`, `digital technology`, "
-        "`tools`, `outcomes`, or `students` with specific component "
-        "vocabulary.\n"
+        "- Replace generic topic terms with specific component vocabulary.\n"
         "- Do not use `abstract` for generated main topics; use "
         "`title` for relevance-defining components and `title_or_abstract` "
         "only for detail or explanatory dimensions such as mechanisms, "
@@ -123,107 +122,56 @@ def prompt_with_validation_feedback(
         "required for relevance, use richer terms rather than weakening it to "
         "`title_or_abstract`.\n"
         "- Set setting, context, or population components to `title`.\n"
-        "- Keep `retrieval_terms` component-pure; remove phrases that mix this "
-        "topic with another main topic, such as `educational AI`.\n"
+        "- Keep `retrieval_terms` component-pure; remove phrases that mix one "
+        "main topic with another.\n"
         "- Remove secondary-topic groups that simply duplicate a parent "
         "main-topic term.\n"
-        "- Every main topic, including the anchor, needs useful adjacent "
-        "sibling secondary-topic groups. For disease parents, adjacent "
-        "disease/application directions such as Parkinson's disease, cancer, "
-        "or named non-parent diseases may be appropriate when relevant.\n"
-        "- For disease-specific method/tool topics such as computational "
-        "biology methods for Alzheimer's disease research, choose the disease "
-        "as the anchor. The disease is non-replaceable; method components can "
-        "have adjacent method secondaries.\n"
-        "- For computational-method parents, use adjacent non-computational "
-        "method families such as experimental methods, laboratory methods, or "
-        "clinical methods as secondary topics when a secondary is missing. Do "
-        "not use AI, ML, deep learning, supervised learning, unsupervised "
-        "learning, statistical modeling, network analysis, or systems biology "
-        "as secondary topics for computational methods; those belong in the "
-        "parent terms.\n"
+        "- Every main topic, including the anchor, needs a useful adjacent "
+        "sibling secondary-topic group when a clean one exists.\n"
         "- Secondary topics must go in a different adjacent direction from the "
         "parent; they are not versions, aliases, variants, types, "
         "subcategories, synonyms, spelling variants, examples, or narrower "
-        "subtypes. For example, Parkinson's disease or cancer may be adjacent "
-        "sibling disease directions for Alzheimer's disease, while dementia, "
-        "cognitive decline, MCI, mild cognitive impairment, prodromal disease, "
-        "and preclinical disease belong in the Alzheimer's disease parent "
-        "terms. Likewise, machine learning and deep learning are internal "
-        "parts of computational methods and belong in the parent terms.\n"
+        "subtypes. Move in-family variants and internal subtypes into the "
+        "parent terms.\n"
         "- Each secondary topic must name exactly one adjacent concept, and "
         "its terms, retrieval_terms, and matching_terms must be aliases, "
         "variants, types, abbreviations, or surface forms of that one "
-        "secondary concept. Do not create vague secondary buckets such as "
-        "`related_diseases`, `other_diseases`, or `dementia_types`. For "
-        "example, use a `parkinsons_disease` group with terms such as "
-        "Parkinson's disease, Parkinson disease, and PD, and a separate "
-        "`cancer` group with terms such as cancer, neoplasm, and tumor. Do "
-        "not put generic descriptors such as dementia types, "
-        "neurodegenerative diseases, or cognitive impairments in secondary "
-        "term lists.\n"
+        "secondary concept. Do not create vague related/other buckets or put "
+        "generic neighborhood descriptors in secondary term lists.\n"
         "- Parent and secondary term groups must be disjoint across terms, "
         "retrieval_terms, and matching_terms.\n"
         "- Main-topic terms should include common in-family subtopics, "
-        "methods, concepts, components, and properties. For method topics, "
-        "include common computational submethods in the parent terms and avoid "
-        "bare domain/object terms such as genomics, biomarkers, amyloid "
-        "plaques, tau tangles, or patient cohorts.\n"
-        "- For disease or condition main topics, include common in-family "
-        "types, variants, versions, stages, subtypes, other names, "
-        "abbreviations, and related impairment states in the parent terms "
-        "when relevant, such as dementia, cognitive decline, MCI, mild "
-        "cognitive impairment, prodromal disease, preclinical disease, or "
-        "dementia-related impairment for Alzheimer's disease. Do not put "
-        "those parent-family variants into secondary topics.\n"
-        "- For disease or condition main topics, do not put pathology, "
-        "mechanism, biomarker, symptom, or process terms in the topic term "
-        "lists. For Alzheimer's disease, terms such as tau pathology, amyloid "
-        "plaques, neurodegeneration, or memory loss are not disease-family "
-        "names; keep them for scope, screening, or later tagging categories.\n"
-        "- If the user asks about replacing or substituting a concrete thing "
-        "or applying something in a concrete use case, do not use broad "
-        "criteria such as sustainability or environmental impact as required "
-        "main topics. Use the concrete replacement/comparator/application "
-        "concept instead.\n"
+        "methods, concepts, components, and properties, while profile-specific "
+        "exclusions remain outside the topic term lists.\n"
+        + ("\n" + policy_guidance if policy_guidance else "")
+        +
+        "- If the user asks about replacing or substituting a named thing or "
+        "applying something in a named use case, do not use a broad criterion "
+        "or motivation as a required main topic. Use the explicit "
+        "replacement/comparator/application concept instead.\n"
         "- If the user asks about replacing, substituting, or using an "
         "alternative to a concrete target, make that target or replacement "
         "relation a main topic id/label. Do not leave the target only as a "
         "term under a broader application topic.\n"
         "- Keep replacement/comparator topics component-pure: use target and "
-        "substitution terms only, such as concrete replacement, concrete "
-        "alternative, cement replacement, or cement substitute. Remove "
-        "application/domain terms and broad criterion words such as "
-        "sustainable, green, eco-friendly, or renewable, plus broad "
-        "material-family terms such as bare biomaterials or biodegradable "
-        "materials, from replacement topics and their secondary groups.\n"
+        "substitution terms only. Remove application/domain terms, broad "
+        "criterion words, and unrelated material-family terms.\n"
         "- If the replacement question also names an application or domain, "
         "keep that application/domain as a separate main topic. Do not let "
         "the replacement/comparator topic absorb it into mixed terms.\n"
         "- If the user explicitly names a valid component phrase, preserve "
         "that wording in the main topic id/label and put inferred nearby "
-        "wording in secondary topics. For example, use `building_materials` "
-        "as the main topic when the user says building materials; use "
-        "`construction_products` or `building_products` as secondary groups.\n"
-        "- Keep application/domain topics concrete. Replace generic terms such "
-        "as innovative materials, materials science, construction technology, "
-        "advanced materials, or broad sustainability criteria with concrete "
-        "domain synonyms or product/application names.\n"
+        "wording in secondary topics.\n"
+        "- Keep application/domain topics concrete. Replace generic wording "
+        "with concrete domain synonyms or product/application names.\n"
         "- For application/domain topic terms, replace process, property, or "
-        "evaluation wording such as structural integrity, construction "
-        "innovations, building techniques, effective products, or responsible "
-        "practices with terms that name the use area, product family, setting, "
-        "or domain itself.\n"
+        "evaluation wording with terms that name the use area, product family, "
+        "setting, or domain itself.\n"
         "- For application/domain secondary groups, replace criterion groups "
-        "such as eco-friendly materials, green alternatives, renewable "
-        "materials, or sustainability criteria with adjacent application "
-        "groups such as construction products, building products, structural "
-        "materials, or insulation materials when appropriate.\n"
+        "based on broad criteria with clean adjacent application groups.\n"
         "- If you add secondary groups for an application/domain topic, use "
-        "clean adjacent application/domain fallbacks. For building-material "
-        "topics, use construction products, building products, structural "
-        "materials, or insulation materials, not green, eco-friendly, "
-        "renewable, or sustainability wording.\n"
+        "clean adjacent application/domain fallbacks rather than criterion "
+        "wording.\n"
         "- If a broad source/application component has too few terms, add "
         "focused synonyms, variants, abbreviations, named subtypes, or "
         "concrete indicators for that same component. Do not pad with broad "
@@ -261,10 +209,25 @@ def read_topic(args: argparse.Namespace) -> str:
     raise ValueError("Provide either --topic or --topic-file.")
 
 
-def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def contract_from_model_payload(
+    payload: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
     """Convert the model-friendly categories list into contract YAML shape."""
     contract = deepcopy(payload)
-    normalize_topic_structure(contract)
+    collection = contract.get("collection")
+    if isinstance(collection, dict):
+        collection.setdefault(
+            "corpus_specification",
+            default_corpus_specification_mapping(),
+        )
+    active_policy = policy or default_topic_structure_policy()
+    normalize_topic_structure(
+        contract,
+        policy=active_policy,
+        profile_ids=profile_ids,
+    )
     tagging = contract.get("tagging")
     if not isinstance(tagging, dict):
         raise ValueError("Generated topic contract must contain tagging.")
@@ -272,6 +235,7 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
     categories = tagging.get("categories")
     if isinstance(categories, dict):
         tagging["categories"] = active_generated_categories(categories)
+        attach_topic_policy_reference(contract, active_policy, profile_ids)
         return contract
 
     if not isinstance(categories, list):
@@ -324,6 +288,7 @@ def contract_from_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         category_map[category_id] = category_payload
 
     tagging["categories"] = active_generated_categories(category_map)
+    attach_topic_policy_reference(contract, active_policy, profile_ids)
     return contract
 
 
@@ -356,24 +321,8 @@ def normalize_secondary_term(value: object) -> str:
     return " ".join(str(value or "").casefold().replace("_", " ").split())
 
 
-SURFACE_FORM_DISPLAY = {
-    "a.i.": "A.I.",
-    "ad": "AD",
-    "ai": "AI",
-    "eeg": "EEG",
-    "ehr": "EHR",
-    "ehrs": "EHRs",
-    "llm": "LLM",
-    "llms": "LLMs",
-    "mci": "MCI",
-    "ml": "ML",
-    "mri": "MRI",
-    "pet": "PET",
-}
-
-
-def display_surface_form(term: str) -> str:
-    return SURFACE_FORM_DISPLAY.get(term, term)
+def display_surface_form(term: str, policy: TopicStructurePolicy) -> str:
+    return policy.surface_form_display.get(term, term)
 
 
 def append_unique_term(values: list[Any], term: str) -> None:
@@ -385,10 +334,14 @@ def append_unique_term(values: list[Any], term: str) -> None:
         values.append(term)
 
 
-def clean_topic_terms(topic: dict[str, Any], topic_id: str) -> None:
+def clean_topic_terms(
+    topic: dict[str, Any],
+    topic_id: str,
+    policy: TopicStructurePolicy,
+    profile: TopicConceptProfile | None,
+) -> None:
     """Apply deterministic term cleanup for generated topic structures."""
-    method_topic = is_method_topic(topic_id, topic)
-    alzheimer_topic = is_alzheimer_disease_topic(topic_id, topic)
+    method_topic = is_method_topic(topic_id, topic, policy)
     for key in ("terms", "retrieval_terms", "matching_terms"):
         values = topic.get(key)
         if not isinstance(values, list):
@@ -404,10 +357,23 @@ def clean_topic_terms(topic: dict[str, Any], topic_id: str) -> None:
                 method_topic
                 and key in {"terms", "retrieval_terms"}
                 and normalized
-                in (BROAD_UMBRELLA_TOPIC_STRUCTURE_TERMS | METHOD_TOPIC_BARE_DOMAIN_TERMS)
+                in (
+                    policy.quality_term_sets[
+                        "broad_umbrella_topic_structure_terms"
+                    ]
+                    | policy.method_topic_bare_domain_terms
+                )
             ):
                 continue
-            if alzheimer_topic and alzheimer_disease_non_family_term_matches(term):
+            if (
+                profile is not None
+                and concept_excluded_term_matches(
+                    topic_id,
+                    topic,
+                    term,
+                    policy,
+                )
+            ):
                 continue
             cleaned_values.append(term)
             seen.add(normalized)
@@ -415,143 +381,45 @@ def clean_topic_terms(topic: dict[str, Any], topic_id: str) -> None:
             topic[key] = cleaned_values
 
 
-COMPUTATIONAL_METHOD_SIGNAL_TERMS = {
-    "ai",
-    "algorithm",
-    "algorithms",
-    "artificial intelligence",
-    "bioinformatics",
-    "computational",
-    "computational biology",
-    "machine learning",
-    "ml",
-}
-COMPUTATIONAL_METHOD_CORE_TERMS = [
-    "machine learning",
-    "ML",
-    "artificial intelligence",
-    "AI",
-    "deep learning",
-    "supervised learning",
-    "unsupervised learning",
-    "statistical modeling",
-    "network analysis",
-    "systems biology",
-    "predictive modeling",
-]
-ALZHEIMER_DISEASE_CORE_TERMS = [
-    "Alzheimer's disease",
-    "Alzheimer disease",
-    "AD",
-    "dementia",
-    "cognitive decline",
-    "mild cognitive impairment",
-    "MCI",
-    "prodromal Alzheimer's disease",
-    "preclinical Alzheimer's disease",
-    "dementia-related cognitive impairment",
-]
-
-ALZHEIMER_ADJACENT_DISEASE_GROUPS = [
-    {
-        "secondary_topic_id": "parkinsons_disease",
-        "label": "Parkinson's disease",
-        "field": "title",
-        "terms": ["Parkinson's disease", "Parkinson disease", "PD"],
-        "retrieval_terms": ["Parkinson's disease", "Parkinson disease"],
-        "matching_terms": [
-            "Parkinson's disease",
-            "Parkinson disease",
-            "PD",
-            "parkinsonism",
-        ],
-    },
-    {
-        "secondary_topic_id": "cancer",
-        "label": "Cancer",
-        "field": "title",
-        "terms": ["cancer", "neoplasm", "tumor"],
-        "retrieval_terms": ["cancer", "neoplasm", "tumor"],
-        "matching_terms": ["cancer", "neoplasm", "tumor", "tumour"],
-    },
-]
+def configured_profile_for_topic(
+    topic: dict[str, Any],
+    topic_id: str,
+    policy: TopicStructurePolicy,
+    profile_ids: tuple[str, ...],
+) -> TopicConceptProfile | None:
+    return topic_profile(
+        policy,
+        topic_id,
+        topic,
+        is_method=is_method_topic(topic_id, topic, policy),
+        allowed_profile_ids=profile_ids,
+    )
 
 
-def topic_normalized_terms(topic: dict[str, Any], topic_id: str) -> set[str]:
-    values = [topic_id, str(topic.get("label") or "")]
-    for key in ("terms", "retrieval_terms", "matching_terms"):
-        raw_values = topic.get(key)
-        if isinstance(raw_values, list):
-            values.extend(str(value) for value in raw_values)
-    return {normalize_secondary_term(value) for value in values if str(value).strip()}
-
-
-def is_computational_method_topic(topic: dict[str, Any], topic_id: str) -> bool:
-    if not is_method_topic(topic_id, topic):
-        return False
-    normalized_terms = topic_normalized_terms(topic, topic_id)
-    return bool(normalized_terms.intersection(COMPUTATIONAL_METHOD_SIGNAL_TERMS))
-
-
-def complete_computational_method_terms(topic: dict[str, Any], topic_id: str) -> None:
-    """Keep broad computational-method topics rich in core method subtypes."""
-    if not is_computational_method_topic(topic, topic_id):
+def complete_profile_terms(
+    topic: dict[str, Any],
+    profile: TopicConceptProfile | None,
+) -> None:
+    """Complete a topic with terms declared by its matched policy profile."""
+    if profile is None:
         return
     for key in ("terms", "matching_terms"):
         values = topic.setdefault(key, [])
         if isinstance(values, list):
-            for term in COMPUTATIONAL_METHOD_CORE_TERMS:
+            for term in profile.completion_terms:
                 append_unique_term(values, term)
     retrieval_terms = topic.setdefault("retrieval_terms", [])
     if isinstance(retrieval_terms, list):
-        for term in COMPUTATIONAL_METHOD_CORE_TERMS:
+        for term in profile.completion_terms:
             if len(retrieval_terms) >= RETRIEVAL_TERMS_LIMIT:
                 break
             append_unique_term(retrieval_terms, term)
 
 
-def complete_alzheimer_disease_terms(topic: dict[str, Any], topic_id: str) -> None:
-    """Keep Alzheimer topics focused on disease-family surface forms."""
-    if not is_alzheimer_disease_topic(topic_id, topic):
-        return
-    for key in ("terms", "matching_terms"):
-        values = topic.setdefault(key, [])
-        if isinstance(values, list):
-            for term in ALZHEIMER_DISEASE_CORE_TERMS:
-                append_unique_term(values, term)
-    retrieval_terms = topic.setdefault("retrieval_terms", [])
-    if isinstance(retrieval_terms, list):
-        for term in ALZHEIMER_DISEASE_CORE_TERMS:
-            if len(retrieval_terms) >= RETRIEVAL_TERMS_LIMIT:
-                break
-            append_unique_term(retrieval_terms, term)
-
-
-def computational_method_secondary_group() -> dict[str, Any]:
-    return {
-        "secondary_topic_id": "experimental_methods",
-        "label": "Experimental methods",
-        "field": "title",
-        "terms": [
-            "experimental methods",
-            "laboratory methods",
-            "clinical methods",
-        ],
-        "retrieval_terms": [
-            "experimental methods",
-            "laboratory methods",
-            "clinical methods",
-        ],
-        "matching_terms": [
-            "experimental methods",
-            "laboratory methods",
-            "clinical methods",
-            "wet lab methods",
-        ],
-    }
-
-
-def complete_common_surface_forms(topic: dict[str, Any]) -> None:
+def complete_common_surface_forms(
+    topic: dict[str, Any],
+    policy: TopicStructurePolicy,
+) -> None:
     """Add common abbreviation/full-form companions already implied by terms."""
     all_terms = []
     for key in ("terms", "retrieval_terms", "matching_terms"):
@@ -560,19 +428,20 @@ def complete_common_surface_forms(topic: dict[str, Any]) -> None:
             all_terms.extend(values)
     normalized_terms = {normalize_secondary_term(value) for value in all_terms}
     additions = []
-    for group in COMMON_SURFACE_FORM_GROUPS:
-        abbreviations = group["abbreviations"]
-        full_forms = group["full_forms"]
+    for group in policy.surface_form_groups:
+        abbreviations = group.abbreviations
+        full_forms = group.full_forms
         has_abbreviation = bool(normalized_terms.intersection(abbreviations))
         has_full_form = bool(normalized_terms.intersection(full_forms))
         if has_abbreviation == has_full_form:
             continue
         if has_abbreviation:
-            additions.append(display_surface_form(sorted(full_forms)[0]))
+            additions.append(display_surface_form(sorted(full_forms)[0], policy))
         else:
             additions.append(
                 display_surface_form(
-                    min(abbreviations, key=lambda item: (len(item), item))
+                    min(abbreviations, key=lambda item: (len(item), item)),
+                    policy,
                 )
             )
     if not additions:
@@ -603,7 +472,10 @@ def update_parent_terms_index(
     parent_terms_by_topic_id[topic_id] = parent_terms
 
 
-def group_method_subtype_terms(group: dict[str, Any]) -> list[str]:
+def group_method_subtype_terms(
+    group: dict[str, Any],
+    policy: TopicStructurePolicy,
+) -> list[str]:
     subtype_terms = []
     seen = set()
     for key in ("terms", "retrieval_terms", "matching_terms"):
@@ -615,7 +487,7 @@ def group_method_subtype_terms(group: dict[str, Any]) -> list[str]:
             normalized = normalize_secondary_term(term)
             if (
                 term
-                and method_internal_subtype_matches(term)
+                and method_internal_subtype_matches(term, policy)
                 and normalized not in seen
             ):
                 subtype_terms.append(term)
@@ -623,25 +495,30 @@ def group_method_subtype_terms(group: dict[str, Any]) -> list[str]:
     return subtype_terms
 
 
-def group_has_method_subtype_signal(group: dict[str, Any]) -> bool:
+def group_has_method_subtype_signal(
+    group: dict[str, Any],
+    policy: TopicStructurePolicy,
+) -> bool:
     for key in ("secondary_topic_id", "topic_id", "id", "label"):
-        if method_internal_subtype_matches(group.get(key)):
+        if method_internal_subtype_matches(group.get(key), policy):
             return True
-    return bool(group_method_subtype_terms(group))
+    return bool(group_method_subtype_terms(group, policy))
 
 
-def group_disease_family_terms(
+def group_concept_family_terms(
     parent_topic_id: str,
     parent_topic: dict[str, Any],
     group: dict[str, Any],
+    policy: TopicStructurePolicy,
 ) -> list[str]:
     family_terms = []
     seen = set()
     for key in ("secondary_topic_id", "topic_id", "id", "label"):
-        for term in disease_family_variant_matches(
+        for term in concept_family_variant_matches(
             parent_topic_id,
             parent_topic,
             group.get(key),
+            policy,
         ):
             if term not in seen:
                 family_terms.append(term)
@@ -653,10 +530,11 @@ def group_disease_family_terms(
         for value in values:
             term = str(value).strip()
             normalized = normalize_secondary_term(term)
-            matches = disease_family_variant_matches(
+            matches = concept_family_variant_matches(
                 parent_topic_id,
                 parent_topic,
                 term,
+                policy,
             )
             if term and normalized in matches and normalized not in seen:
                 family_terms.append(term)
@@ -669,33 +547,53 @@ def group_disease_family_terms(
     return family_terms
 
 
-def group_has_disease_family_signal(
+def group_has_concept_family_signal(
     parent_topic_id: str,
     parent_topic: dict[str, Any],
     group: dict[str, Any],
+    policy: TopicStructurePolicy,
 ) -> bool:
-    return bool(group_disease_family_terms(parent_topic_id, parent_topic, group))
+    return bool(
+        group_concept_family_terms(
+            parent_topic_id,
+            parent_topic,
+            group,
+            policy,
+        )
+    )
 
 
-def group_has_disease_family_identity(
+def group_has_concept_family_identity(
     parent_topic_id: str,
     parent_topic: dict[str, Any],
     group: dict[str, Any],
+    policy: TopicStructurePolicy,
 ) -> bool:
     for key in ("secondary_topic_id", "topic_id", "id", "label"):
-        if disease_family_variant_matches(parent_topic_id, parent_topic, group.get(key)):
+        if concept_family_variant_matches(
+            parent_topic_id,
+            parent_topic,
+            group.get(key),
+            policy,
+        ):
             return True
     return False
 
 
-def group_has_generic_secondary_identity(group: dict[str, Any]) -> bool:
+def group_has_generic_secondary_identity(
+    group: dict[str, Any],
+    policy: TopicStructurePolicy,
+) -> bool:
     for key in ("secondary_topic_id", "topic_id", "id", "label"):
-        if generic_secondary_topic_bucket_matches(group.get(key)):
+        if generic_secondary_topic_bucket_matches(group.get(key), policy):
             return True
     return False
 
 
-def remove_generic_secondary_terms(group: dict[str, Any]) -> dict[str, Any] | None:
+def remove_generic_secondary_terms(
+    group: dict[str, Any],
+    policy: TopicStructurePolicy,
+) -> dict[str, Any] | None:
     cleaned_group = dict(group)
     for key in ("terms", "retrieval_terms", "matching_terms"):
         values = cleaned_group.get(key)
@@ -704,7 +602,8 @@ def remove_generic_secondary_terms(group: dict[str, Any]) -> dict[str, Any] | No
         cleaned_values = [
             str(value).strip()
             for value in values
-            if str(value).strip() and not generic_secondary_topic_term_matches(value)
+            if str(value).strip()
+            and not generic_secondary_topic_term_matches(value, policy)
         ]
         if cleaned_values:
             cleaned_group[key] = cleaned_values
@@ -720,24 +619,22 @@ def remove_generic_secondary_terms(group: dict[str, Any]) -> dict[str, Any] | No
     return cleaned_group
 
 
-def alzheimer_adjacent_disease_groups() -> list[dict[str, Any]]:
-    return [deepcopy(group) for group in ALZHEIMER_ADJACENT_DISEASE_GROUPS]
-
-
-def canonical_secondary_group(group: dict[str, Any]) -> dict[str, Any]:
+def canonical_secondary_group(
+    group: dict[str, Any],
+    policy: TopicStructurePolicy,
+) -> dict[str, Any]:
     group_id = normalize_tagging_label(str(group.get("secondary_topic_id") or ""))
-    if group_id == "experimental_methods":
-        return computational_method_secondary_group()
-    for candidate in ALZHEIMER_ADJACENT_DISEASE_GROUPS:
-        if group_id == candidate["secondary_topic_id"]:
-            return deepcopy(candidate)
+    configured_group = policy.secondary_groups.get(group_id)
+    if configured_group is not None:
+        return configured_group.as_topic_group()
     return group
 
 
-def remove_disease_family_terms(
+def remove_concept_family_terms(
     parent_topic_id: str,
     parent_topic: dict[str, Any],
     group: dict[str, Any],
+    policy: TopicStructurePolicy,
 ) -> dict[str, Any] | None:
     cleaned_group = dict(group)
     for key in ("terms", "retrieval_terms", "matching_terms"):
@@ -748,7 +645,12 @@ def remove_disease_family_terms(
             str(value).strip()
             for value in values
             if str(value).strip()
-            and not disease_family_variant_matches(parent_topic_id, parent_topic, value)
+            and not concept_family_variant_matches(
+                parent_topic_id,
+                parent_topic,
+                value,
+                policy,
+            )
         ]
         if cleaned_values:
             cleaned_group[key] = cleaned_values
@@ -769,6 +671,8 @@ def move_terms_to_parent_topic(
     parent_topic_id: str,
     terms: list[str],
     parent_terms_by_topic_id: dict[str, set[str]],
+    policy: TopicStructurePolicy,
+    profile: TopicConceptProfile | None,
 ) -> None:
     for key in ("terms", "matching_terms"):
         values = parent_topic.setdefault(key, [])
@@ -781,14 +685,23 @@ def move_terms_to_parent_topic(
             if len(retrieval_terms) >= RETRIEVAL_TERMS_LIMIT:
                 break
             append_unique_term(retrieval_terms, term)
-    clean_topic_terms(parent_topic, parent_topic_id)
-    complete_common_surface_forms(parent_topic)
-    complete_computational_method_terms(parent_topic, parent_topic_id)
-    complete_alzheimer_disease_terms(parent_topic, parent_topic_id)
+    clean_topic_terms(parent_topic, parent_topic_id, policy, profile)
+    complete_common_surface_forms(parent_topic, policy)
+    complete_profile_terms(parent_topic, profile)
     update_parent_terms_index(parent_topic, parent_topic_id, parent_terms_by_topic_id)
 
 
-def normalize_topic_structure(contract: dict[str, Any]) -> None:
+def normalize_topic_structure(
+    contract: dict[str, Any],
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
+) -> None:
+    active_policy = policy or default_topic_structure_policy()
+    active_profile_ids = (
+        profile_ids
+        if profile_ids is not None
+        else selected_profile_ids(active_policy, contract)
+    )
     topic_structure = contract.get("topic_structure")
     if not isinstance(topic_structure, dict):
         return
@@ -798,6 +711,7 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
     field_by_topic_id: dict[str, str] = {}
     parent_terms_by_topic_id: dict[str, set[str]] = {}
     topic_by_id: dict[str, dict[str, Any]] = {}
+    profile_by_topic_id: dict[str, TopicConceptProfile | None] = {}
     main_topics = topic_structure.get("main_topics")
     if isinstance(main_topics, list):
         for topic in main_topics:
@@ -816,6 +730,7 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
                 and not is_title_or_abstract_exception_topic(
                     normalized_topic_id,
                     topic,
+                    active_policy,
                 )
             ):
                 field = "title"
@@ -823,11 +738,22 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
             field_by_topic_id[normalized_topic_id] = str(
                 field
             )
-            clean_topic_terms(topic, normalized_topic_id)
-            complete_common_surface_forms(topic)
-            complete_computational_method_terms(topic, normalized_topic_id)
-            complete_alzheimer_disease_terms(topic, normalized_topic_id)
+            profile = configured_profile_for_topic(
+                topic,
+                normalized_topic_id,
+                active_policy,
+                active_profile_ids,
+            )
+            clean_topic_terms(
+                topic,
+                normalized_topic_id,
+                active_policy,
+                profile,
+            )
+            complete_common_surface_forms(topic, active_policy)
+            complete_profile_terms(topic, profile)
             topic_by_id[normalized_topic_id] = topic
+            profile_by_topic_id[normalized_topic_id] = profile
             update_parent_terms_index(
                 topic,
                 normalized_topic_id,
@@ -839,17 +765,17 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
         normalize_tagging_label(raw_anchor_topic_id),
     )
     anchor_topic = topic_by_id.get(anchor_topic_id)
-    alzheimer_topic_ids = [
+    preferred_anchor_topic_ids = [
         topic_id
-        for topic_id, topic in topic_by_id.items()
-        if is_alzheimer_disease_topic(topic_id, topic)
+        for topic_id, profile in profile_by_topic_id.items()
+        if profile is not None and "method" in profile.anchor_over_kinds
     ]
     if (
-        alzheimer_topic_ids
+        preferred_anchor_topic_ids
         and anchor_topic is not None
-        and is_method_topic(anchor_topic_id, anchor_topic)
+        and is_method_topic(anchor_topic_id, anchor_topic, active_policy)
     ):
-        anchor_topic_id = alzheimer_topic_ids[0]
+        anchor_topic_id = preferred_anchor_topic_ids[0]
     if anchor_topic_id:
         topic_structure["anchor_topic_id"] = anchor_topic_id
 
@@ -992,57 +918,70 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
         for group in groups:
             if not isinstance(group, dict):
                 continue
-            group = canonical_secondary_group(group)
+            group = canonical_secondary_group(group, active_policy)
             parent_topic = topic_by_id.get(main_topic_id)
+            parent_profile = profile_by_topic_id.get(main_topic_id)
             if (
                 parent_topic is not None
-                and is_alzheimer_disease_topic(main_topic_id, parent_topic)
-                and group_has_generic_secondary_identity(group)
+                and parent_profile is not None
+                and parent_profile.family_terms
+                and group_has_generic_secondary_identity(group, active_policy)
             ):
                 continue
             if (
                 parent_topic is not None
-                and is_method_topic(main_topic_id, parent_topic)
+                and is_method_topic(main_topic_id, parent_topic, active_policy)
             ):
-                subtype_terms = group_method_subtype_terms(group)
-                if subtype_terms or group_has_method_subtype_signal(group):
+                subtype_terms = group_method_subtype_terms(group, active_policy)
+                if subtype_terms or group_has_method_subtype_signal(
+                    group,
+                    active_policy,
+                ):
                     move_terms_to_parent_topic(
                         parent_topic,
                         main_topic_id,
                         subtype_terms,
                         parent_terms_by_topic_id,
+                        active_policy,
+                        parent_profile,
                     )
                     continue
-            if parent_topic is not None and group_has_disease_family_signal(
+            if parent_topic is not None and group_has_concept_family_signal(
                 main_topic_id,
                 parent_topic,
                 group,
+                active_policy,
             ):
-                family_terms = group_disease_family_terms(
+                family_terms = group_concept_family_terms(
                     main_topic_id,
                     parent_topic,
                     group,
+                    active_policy,
                 )
                 move_terms_to_parent_topic(
                     parent_topic,
                     main_topic_id,
                     family_terms,
                     parent_terms_by_topic_id,
+                    active_policy,
+                    parent_profile,
                 )
-                if group_has_disease_family_identity(
+                if group_has_concept_family_identity(
                     main_topic_id,
                     parent_topic,
                     group,
+                    active_policy,
                 ):
                     continue
-                group = remove_disease_family_terms(
+                group = remove_concept_family_terms(
                     main_topic_id,
                     parent_topic,
                     group,
+                    active_policy,
                 )
                 if group is None:
                     continue
-            group = remove_generic_secondary_terms(group)
+            group = remove_generic_secondary_terms(group, active_policy)
             if group is None:
                 continue
             cleaned_group = remove_parent_duplicate_terms(main_topic_id, group)
@@ -1050,23 +989,19 @@ def normalize_topic_structure(contract: dict[str, Any]) -> None:
                 cleaned_groups.append(cleaned_group)
         if cleaned_groups:
             cleaned_normalized[main_topic_id] = cleaned_groups
-    for main_topic_id, topic in topic_by_id.items():
-        if (
-            main_topic_id not in cleaned_normalized
-            and is_alzheimer_disease_topic(main_topic_id, topic)
-        ):
-            cleaned_normalized[main_topic_id] = alzheimer_adjacent_disease_groups()
-    for main_topic_id, topic in topic_by_id.items():
-        if (
-            main_topic_id not in cleaned_normalized
-            and is_computational_method_topic(topic, main_topic_id)
-        ):
+    for main_topic_id, profile in profile_by_topic_id.items():
+        if main_topic_id in cleaned_normalized or profile is None:
+            continue
+        fallback_groups = []
+        for group_id in profile.fallback_secondary_group_ids:
             fallback_group = remove_parent_duplicate_terms(
                 main_topic_id,
-                computational_method_secondary_group(),
+                active_policy.secondary_groups[group_id].as_topic_group(),
             )
             if fallback_group is not None:
-                cleaned_normalized[main_topic_id] = [fallback_group]
+                fallback_groups.append(fallback_group)
+        if fallback_groups:
+            cleaned_normalized[main_topic_id] = fallback_groups
     normalized = cleaned_normalized
     topic_structure["secondary_topics"] = normalized
 
@@ -1081,6 +1016,12 @@ def call_topic_structure_repair(
     call_id: str,
 ) -> tuple[dict[str, Any], list[Path]]:
     """Ask the LLM to repair only topic_structure and validate the result."""
+    policy = default_topic_structure_policy()
+    profile_ids = selected_profile_ids(
+        policy,
+        failed_contract,
+        topic_description,
+    )
     prompt = render_repair_topic_structure_prompt(
         topic_description=topic_description,
         topic_structure=failed_contract.get("topic_structure", {}),
@@ -1088,6 +1029,7 @@ def call_topic_structure_repair(
             asdict(issue) if not isinstance(issue, dict) else issue
             for issue in issues
         ],
+        topic_policy=policy.reference(profile_ids),
     )
     result = client.create_json(
         model=model,
@@ -1102,11 +1044,17 @@ def call_topic_structure_repair(
     trace_paths = result.trace_paths.as_list() if result.trace_paths else []
     repaired_contract = deepcopy(failed_contract)
     repaired_contract["topic_structure"] = deepcopy(result.parsed)
-    normalize_topic_structure(repaired_contract)
-    validate_topic_contract(repaired_contract)
+    normalize_topic_structure(
+        repaired_contract,
+        policy=policy,
+        profile_ids=profile_ids,
+    )
+    attach_topic_policy_reference(repaired_contract, policy, profile_ids)
+    validate_topic_contract(repaired_contract, policy)
     validate_generated_topic_structure_quality(
         repaired_contract,
         topic_description=topic_description,
+        policy=policy,
     )
     return repaired_contract, trace_paths
 
@@ -1114,11 +1062,15 @@ def call_topic_structure_repair(
 def raw_topic_structure_crucial_issues(
     contract: dict[str, Any],
     topic_description: str,
+    policy: TopicStructurePolicy | None = None,
+    profile_ids: tuple[str, ...] | None = None,
 ) -> list[Any]:
     try:
         return generated_topic_structure_crucial_issue_records(
             contract,
             topic_description=topic_description,
+            policy=policy,
+            profile_ids=profile_ids,
         )
     except ValueError as error:
         return [
@@ -1193,6 +1145,13 @@ def call_llm(
     client: JSONLLMClient,
     trace_writer: LLMTraceWriter | None = None,
 ) -> tuple[dict[str, Any], list[Path], list[str]]:
+    policy = default_topic_structure_policy()
+    profile_ids = selected_profile_ids(
+        policy,
+        base_contract,
+        topic_description,
+    )
+    policy_guidance = render_topic_policy_guidance(policy, profile_ids)
     prompt = render_generate_topic_contract_prompt(topic_description, base_contract)
     trace_paths: list[Path] = []
     last_error: ValueError | None = None
@@ -1204,7 +1163,12 @@ def call_llm(
         attempt_prompt = (
             prompt
             if best_error is None
-            else prompt_with_validation_feedback(prompt, best_error, best_contract)
+            else prompt_with_validation_feedback(
+                prompt,
+                best_error,
+                best_contract,
+                policy_guidance,
+            )
         )
         call_id = "contract" if attempt == 1 else f"contract_retry_{attempt}"
         result = client.create_json(
@@ -1228,9 +1192,15 @@ def call_llm(
             raw_issues = raw_topic_structure_crucial_issues(
                 result.parsed,
                 topic_description,
+                policy,
+                profile_ids,
             )
-            contract = contract_from_model_payload(result.parsed)
-            validate_topic_contract(contract)
+            contract = contract_from_model_payload(
+                result.parsed,
+                policy=policy,
+                profile_ids=profile_ids,
+            )
+            validate_topic_contract(contract, policy)
             if raw_issues:
                 issue_messages = "\n- ".join(
                     str(getattr(issue, "message", "") or issue)
@@ -1243,6 +1213,7 @@ def call_llm(
             validate_generated_topic_structure_quality(
                 contract,
                 topic_description=topic_description,
+                policy=policy,
             )
             return contract, trace_paths, []
         except ValueError as error:
@@ -1259,6 +1230,7 @@ def call_llm(
                     issues = generated_topic_structure_crucial_issue_records(
                         contract,
                         topic_description=topic_description,
+                        policy=policy,
                     )
                     if not issues and "raw_issues" in locals():
                         issues = raw_issues
@@ -1320,6 +1292,7 @@ def run(
 
     categories = contract["tagging"]["categories"]
     collection = contract["collection"]
+    corpus_specification = corpus_specification_from_contract(contract)
     search_queries = collection.get("search_queries", [])
     return StepResult(
         step_name=STEP.name,
@@ -1336,6 +1309,8 @@ def run(
         metadata={
             "topic_id": contract["topic_id"],
             "title": contract["research_topic"]["title"],
+            "topic_policy": deepcopy(contract["topic_policy"]),
+            "corpus_specification": corpus_specification.semantic_mapping(),
         },
     )
 

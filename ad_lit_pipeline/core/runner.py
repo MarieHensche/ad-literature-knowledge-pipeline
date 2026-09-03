@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Callable
 
@@ -13,7 +14,7 @@ StepCallable = Callable[[], StepResult]
 
 
 def select_steps(
-    pipeline: list[str],
+    pipeline: Sequence[str],
     only_step: str | None = None,
     from_step: str | None = None,
 ) -> list[str]:
@@ -35,12 +36,20 @@ def select_steps(
 
 
 def run_selected_steps(
-    selected_steps: list[str],
+    selected_steps: Sequence[str],
     step_functions: dict[str, StepCallable],
     manifest: ManifestRecorder,
     dry_run: bool = False,
 ) -> str:
     """Run selected steps and record each result in a manifest."""
+    missing_functions = [
+        step_name for step_name in selected_steps if step_name not in step_functions
+    ]
+    if missing_functions:
+        raise ValueError(
+            "Selected steps have no runtime implementation: "
+            f"{', '.join(missing_functions)}."
+        )
     for step_name in selected_steps:
         if dry_run:
             print(f"Would run step: {step_name}")
@@ -90,8 +99,18 @@ def run_selected_steps(
     return "dry_run" if dry_run else "succeeded"
 
 
-def default_trace_dir(manifest: ManifestRecorder) -> Path:
-    """Return the default trace directory for a run."""
-    trace_dir = manifest.run_dir / "traces"
+def attempt_trace_dir(
+    manifest: ManifestRecorder,
+    base_dir: Path | None = None,
+) -> Path:
+    """Return an immutable trace namespace for the current run attempt."""
+    trace_dir = (base_dir or manifest.run_dir / "traces") / (
+        manifest.current_attempt_id
+    )
     trace_dir.mkdir(parents=True, exist_ok=True)
     return trace_dir
+
+
+def default_trace_dir(manifest: ManifestRecorder) -> Path:
+    """Return the default trace directory for the current run attempt."""
+    return attempt_trace_dir(manifest)
